@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.startup.expo.domain.attendance.repository.EntryOutboxRepository
+import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
@@ -27,6 +28,7 @@ import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 class ScanEntryApiTests : IntegrationTestSupport() {
     @Autowired
@@ -40,6 +42,9 @@ class ScanEntryApiTests : IntegrationTestSupport() {
 
     @Autowired
     lateinit var entryOutboxRepository: EntryOutboxRepository
+
+    @Autowired
+    lateinit var deletedExpoRepository: DeletedExpoRepository
 
     @Autowired
     lateinit var clock: Clock
@@ -132,6 +137,22 @@ class ScanEntryApiTests : IntegrationTestSupport() {
             .andExpect(status().isServiceUnavailable)
             .andExpect(jsonPath("$.message").value("입장 이벤트를 기록하지 못했습니다. 잠시 후 다시 시도해 주세요."))
         entryOutboxRepository.existsByExpoIdAndParticipantIdAndAttendanceDate("expo-recover-fail", 4300, today) shouldBe false
+    }
+
+    @Test
+    fun `삭제된 박람회에는 입장 이벤트를 다시 남기지 않는다`() {
+        deletedExpoRepository.insertIfAbsent("expo-deleted", LocalDateTime.now(clock))
+
+        // 입장 기록은 유저 서비스에 남지만 삭제된 박람회의 이벤트(전화번호 포함)는 만들지 않는다
+        entryReturns("expo-deleted", standardEntry(id = 4400))
+        mockMvc.perform(scan("expo-deleted", "ROLE_STANDARD", "01012345678")).andExpect(status().isOk)
+        entryOutboxRepository.existsByExpoIdAndParticipantIdAndAttendanceDate("expo-deleted", 4400, today) shouldBe false
+
+        // 이미 입장한 뒤의 복구 경로도 같은 저장 경로라 이벤트를 만들지 않는다
+        entryThrows("expo-deleted", 409)
+        resolveReturns("expo-deleted", ResolveParticipantResDto(4401, "STANDARD"))
+        mockMvc.perform(scan("expo-deleted", "ROLE_STANDARD", "01012345678")).andExpect(status().isBadRequest)
+        entryOutboxRepository.existsByExpoIdAndParticipantIdAndAttendanceDate("expo-deleted", 4401, today) shouldBe false
     }
 
     @Test

@@ -11,7 +11,7 @@ import team.startup.expo.domain.attendance.presentation.dto.request.EntryAuthori
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanEntryReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.BadgeResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ScanEntryResDto
-import team.startup.expo.domain.attendance.repository.EntryOutboxRepository
+import team.startup.expo.domain.attendance.service.RecordEntryEventService
 import team.startup.expo.domain.attendance.service.ScanEntryService
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.user.RecordEntryReqDto
@@ -23,7 +23,6 @@ import tools.jackson.databind.ObjectMapper
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.util.UUID
 
 /**
  * v1 `PreEnterScanQrCodeServiceImpl`의 입장 스캔. 입장 기록은 유저 서비스가 소유하고, 이 서비스는 박람회 기간을
@@ -38,7 +37,7 @@ class ScanEntryServiceImpl(
     private val expoClient: ExpoClient,
     @Qualifier("userCircuitBreaker") private val userCircuitBreaker: CircuitBreaker,
     @Qualifier("expoCircuitBreaker") private val expoCircuitBreaker: CircuitBreaker,
-    private val entryOutboxRepository: EntryOutboxRepository,
+    private val recordEntryEventService: RecordEntryEventService,
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
 ) : ScanEntryService {
@@ -134,14 +133,7 @@ class ScanEntryServiceImpl(
         phoneNumber: String,
         today: LocalDate,
     ) {
-        entryOutboxRepository.insertIfAbsent(
-            eventId = UUID.randomUUID(),
-            expoId = expoId,
-            participantId = participantId,
-            phoneNumber = phoneNumber,
-            attendanceDate = today,
-            createdAt = LocalDateTime.now(clock),
-        )
+        recordEntryEventService.record(expoId, participantId, phoneNumber, today)
     }
 
     private fun toResponse(entry: RecordEntryResDto): ScanEntryResDto {
