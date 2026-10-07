@@ -101,19 +101,29 @@ class ScanEntryServiceImpl(
         }
     }
 
+    /**
+     * 입장은 기록됐는데 이벤트가 빠진 상태에서 다시 스캔한 경우다. 복구가 끝났거나 이벤트가 이미 있을 때만 호출자가
+     * "이미 입장"(400)을 받는다. 조회나 저장이 실패하면 복구가 끝나지 않았으므로 재시도할 수 있게 503으로 알린다.
+     */
     private fun recoverEntryEvent(
         request: RecordEntryReqDto,
         today: LocalDate,
     ) {
-        try {
-            val participant =
+        val participant =
+            try {
                 userCircuitBreaker.executeSupplier {
                     userClient.resolveParticipant(ResolveParticipantReqDto(request.expoId, request.phoneNumber, request.participationType))
                 }
+            } catch (e: Exception) {
+                throw unavailable("유저", e)
+            }
+
+        try {
             saveEntryEvent(request.expoId, participant.participantId, request.phoneNumber, today)
         } catch (e: Exception) {
-            // 복구가 실패해도 응답은 "이미 입장"(400)으로 그대로 나간다. 전화번호는 로그에 남기지 않는다.
-            logger.warn("입장 이벤트 복구 실패: expoId={}, 원인={}", request.expoId, e.javaClass.simpleName)
+            // 전화번호가 들어 있는 값은 로그에 남기지 않는다
+            logger.warn("입장 이벤트 복구 저장 실패: expoId={}, 원인={}", request.expoId, e.javaClass.simpleName)
+            throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "입장 이벤트를 기록하지 못했습니다. 잠시 후 다시 시도해 주세요.")
         }
     }
 

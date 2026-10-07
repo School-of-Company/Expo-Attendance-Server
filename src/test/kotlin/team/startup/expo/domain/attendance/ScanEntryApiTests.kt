@@ -118,6 +118,23 @@ class ScanEntryApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `이벤트 복구에 실패하면 400이 아니라 재시도할 수 있는 503이다`() {
+        entryThrows("expo-recover-fail", 409)
+        resolveThrows("expo-recover-fail", 500)
+        mockMvc.perform(scan("expo-recover-fail", "ROLE_STANDARD", "01012345678")).andExpect(status().isServiceUnavailable)
+
+        // 저장이 실패하는 경우: 아웃박스 전화번호 컬럼(15자)을 넘는 번호
+        val longPhone = "0101234567890123456"
+        entryThrows("expo-recover-fail", 409, phone = longPhone)
+        resolveReturns("expo-recover-fail", ResolveParticipantResDto(4300, "STANDARD"), phone = longPhone)
+        mockMvc
+            .perform(scan("expo-recover-fail", "ROLE_STANDARD", longPhone))
+            .andExpect(status().isServiceUnavailable)
+            .andExpect(jsonPath("$.message").value("입장 이벤트를 기록하지 못했습니다. 잠시 후 다시 시도해 주세요."))
+        entryOutboxRepository.existsByExpoIdAndParticipantIdAndAttendanceDate("expo-recover-fail", 4300, today) shouldBe false
+    }
+
+    @Test
     fun `참가자가 없으면 404이다`() {
         entryThrows("expo-s3", 404, phone = "01000000000")
 
@@ -193,6 +210,15 @@ class ScanEntryApiTests : IntegrationTestSupport() {
         phone: String = "01012345678",
     ) {
         doThrow(feignException(status)).`when`(userClient).recordEntry(RecordEntryReqDto(expoId, type, phone))
+    }
+
+    private fun resolveThrows(
+        expoId: String,
+        status: Int,
+        type: String = "STANDARD",
+        phone: String = "01012345678",
+    ) {
+        doThrow(feignException(status)).`when`(userClient).resolveParticipant(ResolveParticipantReqDto(expoId, phone, type))
     }
 
     private fun resolveReturns(
