@@ -36,8 +36,4 @@ class StandardProgramAttendance(
     val entryTime: LocalTime,
     @field:Column(name = "leave_time")
     var leaveTime: LocalTime? = null,
-) {
-    fun addLeaveTime(leaveTime: LocalTime) {
-        this.leaveTime = leaveTime
-    }
-}
+)

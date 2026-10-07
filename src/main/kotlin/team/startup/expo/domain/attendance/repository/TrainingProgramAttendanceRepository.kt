@@ -35,22 +35,6 @@ interface TrainingProgramAttendanceRepository : JpaRepository<TrainingProgramAtt
         @Param("entryTime") entryTime: LocalTime,
     ): Int
 
-    /** 입실했고 아직 퇴실하지 않았으면 퇴실을 기록한다. 반환값 0이면 이미 퇴실했다. */
-    @Transactional
-    @Modifying
-    @Query(
-        nativeQuery = true,
-        value = """
-            UPDATE tb_training_program_attendance SET leave_time = :leaveTime
-            WHERE trainee_id = :traineeId AND training_program_id = :programId AND leave_time IS NULL
-        """,
-    )
-    fun markLeaveIfPresent(
-        @Param("programId") programId: Long,
-        @Param("traineeId") traineeId: Long,
-        @Param("leaveTime") leaveTime: LocalTime,
-    ): Int
-
     /** 프로그램의 출석 기록을 모두 지운다. */
     @Transactional
     @Modifying

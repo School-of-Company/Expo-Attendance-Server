@@ -78,7 +78,7 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `일반 프로그램은 첫 스캔에 입실하고 두 번째에 퇴실하며 세 번째는 400이다`() {
+    fun `일반 프로그램은 첫 스캔에 입실을 기록하고 다시 찍어도 퇴실을 기록하지 않는다`() {
         standardAllowed(expoId = "expo-a", programId = 1001, participantId = 501)
 
         mockMvc.perform(scanStandard(1001, "expo-a", 501)).andExpect(status().isOk)
@@ -86,26 +86,26 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
         entered.leaveTime shouldBe null
         entered.attendanceDate shouldBe today
 
-        mockMvc.perform(scanStandard(1001, "expo-a", 501)).andExpect(status().isOk)
-        (standardRepository.findByParticipantIdAndStandardProgramId(501, 1001)!!.leaveTime != null) shouldBe true
-
-        mockMvc
-            .perform(scanStandard(1001, "expo-a", 501))
-            .andExpect(status().isBadRequest)
-            .andExpect(jsonPath("$.message").value("이미 프로그램을 퇴실한 유저입니다."))
+        // 두 번 세 번 찍어도 에러 없이 성공하고 기록은 그대로다
+        repeat(2) { mockMvc.perform(scanStandard(1001, "expo-a", 501)).andExpect(status().isOk) }
+        val again = standardRepository.findByParticipantIdAndStandardProgramId(501, 1001)!!
+        again.leaveTime shouldBe null
+        again.entryTime shouldBe entered.entryTime
+        standardRepository.findAllByStandardProgramId(1001).size shouldBe 1
     }
 
     @Test
-    fun `연수 프로그램도 같은 순서로 입실과 퇴실을 기록한다`() {
+    fun `연수 프로그램도 입실만 기록하고 다시 찍어도 변하지 않는다`() {
         trainingAllowed(expoId = "expo-b", programId = 2001, traineeId = 601)
 
         mockMvc.perform(scanTraining(2001, "expo-b", 601)).andExpect(status().isOk)
-        trainingRepository.findByTraineeIdAndTrainingProgramId(601, 2001)!!.leaveTime shouldBe null
+        val entered = trainingRepository.findByTraineeIdAndTrainingProgramId(601, 2001)!!
+        entered.leaveTime shouldBe null
 
-        mockMvc.perform(scanTraining(2001, "expo-b", 601)).andExpect(status().isOk)
-        (trainingRepository.findByTraineeIdAndTrainingProgramId(601, 2001)!!.leaveTime != null) shouldBe true
-
-        mockMvc.perform(scanTraining(2001, "expo-b", 601)).andExpect(status().isBadRequest)
+        repeat(2) { mockMvc.perform(scanTraining(2001, "expo-b", 601)).andExpect(status().isOk) }
+        val again = trainingRepository.findByTraineeIdAndTrainingProgramId(601, 2001)!!
+        again.leaveTime shouldBe null
+        again.entryTime shouldBe entered.entryTime
     }
 
     @Test
@@ -184,7 +184,6 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
     fun `프로그램별 출석 시간 조회는 내부 토큰이 필요하고 HH mm 형식으로 돌려준다`() {
         standardAllowed("expo-h", 1007, 507)
         mockMvc.perform(scanStandard(1007, "expo-h", 507)).andExpect(status().isOk)
-        mockMvc.perform(scanStandard(1007, "expo-h", 507)).andExpect(status().isOk)
         standardAllowed("expo-h", 1007, 508)
         mockMvc.perform(scanStandard(1007, "expo-h", 508)).andExpect(status().isOk)
         trainingAllowed("expo-h", 2007, 607)
@@ -201,9 +200,7 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
                     "$[?(@.participantId==507)].entryTime",
                 ).value(org.hamcrest.Matchers.contains(org.hamcrest.Matchers.matchesPattern("\\d{2}:\\d{2}"))),
             ).andExpect(
-                jsonPath(
-                    "$[?(@.participantId==507)].leaveTime",
-                ).value(org.hamcrest.Matchers.contains(org.hamcrest.Matchers.matchesPattern("\\d{2}:\\d{2}"))),
+                jsonPath("$[?(@.participantId==507)].leaveTime").value(org.hamcrest.Matchers.contains(org.hamcrest.Matchers.nullValue())),
             ).andExpect(
                 jsonPath("$[?(@.participantId==508)].leaveTime").value(org.hamcrest.Matchers.contains(org.hamcrest.Matchers.nullValue())),
             )
