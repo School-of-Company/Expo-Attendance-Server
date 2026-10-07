@@ -36,4 +36,11 @@ interface EntryOutboxRepository : JpaRepository<EntryOutbox, Long> {
         @Param("attendanceDate") attendanceDate: LocalDate,
         @Param("createdAt") createdAt: LocalDateTime,
     ): Int
+
+    @Transactional
+    @Modifying
+    @Query(nativeQuery = true, value = "DELETE FROM tb_entry_outbox WHERE expo_id = :expoId")
+    fun deleteByExpoId(
+        @Param("expoId") expoId: String,
+    ): Int
 }
