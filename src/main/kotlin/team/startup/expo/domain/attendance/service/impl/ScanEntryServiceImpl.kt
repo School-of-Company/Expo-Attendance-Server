@@ -138,9 +138,9 @@ class ScanEntryServiceImpl(
 
     private fun toResponse(entry: RecordEntryResDto): ScanEntryResDto {
         val isTrainee = entry.participationType == TRAINEE
-        // 명찰 대상은 연수자 전원과 교사인 일반 참가자다
+        // 명찰 대상은 연수자 전원과 교사·예비교사인 일반 참가자다
         val badge =
-            if (isTrainee || entry.occupation == TEACHER) {
+            if (isTrainee || entry.occupation in BADGE_OCCUPATIONS) {
                 BadgeResDto(
                     name = entry.name,
                     school = entry.school,
@@ -187,6 +187,8 @@ class ScanEntryServiceImpl(
 
     private companion object {
         const val TRAINEE = "TRAINEE"
-        const val TEACHER = "TEACHER"
+
+        // 소속을 받아 명찰에 "소속 이름"으로 찍는 구분: 교사와 예비교사
+        val BADGE_OCCUPATIONS = setOf("TEACHER", "PRE_SERVICE_TEACHER")
     }
 }
