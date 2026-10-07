@@ -83,6 +83,24 @@ class ScanEntryApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `예비교사도 명찰을 받고 교사가 아닌 구분은 받지 않는다`() {
+        entryReturns("expo-s6", standardEntry(id = 4210, occupation = "PRE_SERVICE_TEACHER", school = "광주교육대학교"))
+        mockMvc
+            .perform(scan("expo-s6", "ROLE_STANDARD", "01012345678"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.badge.school").value("광주교육대학교"))
+            .andExpect(jsonPath("$.badge.qrCode").value("""{"participantId":4210,"phoneNumber":"01012345678"}"""))
+
+        listOf("SCHOOL_STAFF", "PARENT", "GENERAL", "ELEMENTARY_STUDENT").forEachIndexed { index, occupation ->
+            entryReturns("expo-s7-$index", standardEntry(id = 4220L + index, occupation = occupation))
+            mockMvc
+                .perform(scan("expo-s7-$index", "ROLE_STANDARD", "01012345678"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.badge").doesNotExist())
+        }
+    }
+
+    @Test
     fun `연수자는 항상 명찰을 받고 이벤트는 남기지 않는다`() {
         entryReturns(
             "expo-t1",
