@@ -60,13 +60,15 @@ class AttendanceSchemaTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `같은 날 같은 참가자의 아웃박스 행은 하나만 저장된다`() {
+    fun `같은 날 같은 번호의 아웃박스 행은 하나만 저장되고 다른 번호나 다른 날은 저장된다`() {
         outboxRepository.saveAndFlush(outbox(expoId = "expo-a", participantId = 1))
 
+        // 같은 번호를 쓰는 다른 참가자(대표자 번호를 쓰는 동행자)도 같은 날에는 한 통만 간다
         assertThrows<DataIntegrityViolationException> {
-            outboxRepository.saveAndFlush(outbox(expoId = "expo-a", participantId = 1))
+            outboxRepository.saveAndFlush(outbox(expoId = "expo-a", participantId = 2))
         }
-        outboxRepository.saveAndFlush(outbox(expoId = "expo-a", participantId = 2))
+        outboxRepository.saveAndFlush(outbox(expoId = "expo-a", participantId = 3, phoneNumber = "01099998888"))
+        outboxRepository.saveAndFlush(outbox(expoId = "expo-b", participantId = 1))
     }
 
     @Test
@@ -139,10 +141,11 @@ class AttendanceSchemaTests : IntegrationTestSupport() {
     private fun outbox(
         expoId: String,
         participantId: Long,
+        phoneNumber: String = "01012345678",
     ) = EntryOutbox(
         expoId = expoId,
         participantId = participantId,
-        phoneNumber = "01012345678",
+        phoneNumber = phoneNumber,
         attendanceDate = today,
     )
 }

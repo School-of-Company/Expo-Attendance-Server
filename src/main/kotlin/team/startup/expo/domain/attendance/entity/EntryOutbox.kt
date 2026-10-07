@@ -19,8 +19,8 @@ import java.util.UUID
     name = "tb_entry_outbox",
     uniqueConstraints = [
         UniqueConstraint(
-            name = "uk_entry_outbox_participant_date",
-            columnNames = ["expo_id", "participant_id", "attendance_date"],
+            name = "uk_entry_outbox_phone_date",
+            columnNames = ["expo_id", "phone_number", "attendance_date"],
         ),
     ],
     indexes = [Index(name = "ix_entry_outbox_status_created", columnList = "status, created_at")],

@@ -126,7 +126,7 @@ class ScanEntryServiceImpl(
         }
     }
 
-    /** 같은 날 같은 참가자의 이벤트는 한 번만 남는다. */
+    /** 같은 날 같은 번호의 이벤트는 한 번만 남는다(번호 하나로 설문 문자는 하루 한 통). */
     private fun saveEntryEvent(
         expoId: String,
         participantId: Long,
