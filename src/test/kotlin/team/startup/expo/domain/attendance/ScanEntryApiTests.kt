@@ -71,6 +71,19 @@ class ScanEntryApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `같은 번호를 쓰는 두 참가자가 같은 날 입장해도 설문 문자 이벤트는 한 번만 남는다`() {
+        entryReturns("expo-shared", standardEntry(id = 4601))
+        mockMvc.perform(scan("expo-shared", "ROLE_STANDARD", "01012345678")).andExpect(status().isOk)
+
+        // 대표자 번호를 쓰는 다른 참가자(동행자)가 이어서 입장한다
+        entryReturns("expo-shared", standardEntry(id = 4602))
+        mockMvc.perform(scan("expo-shared", "ROLE_STANDARD", "01012345678")).andExpect(status().isOk)
+
+        val rows = entryOutboxRepository.findAll().filter { it.expoId == "expo-shared" }
+        rows.map { it.participantId } shouldBe listOf(4601L)
+    }
+
+    @Test
     fun `교사인 일반 참가자는 명찰과 v1 형식 QR 값을 받는다`() {
         entryReturns("expo-s2", standardEntry(id = 4202, occupation = "TEACHER", school = "광주초등학교"))
 

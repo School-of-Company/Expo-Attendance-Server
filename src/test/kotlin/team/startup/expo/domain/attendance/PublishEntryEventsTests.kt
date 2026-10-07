@@ -112,7 +112,8 @@ class PublishEntryEventsTests : IntegrationTestSupport() {
     private fun expectedPayload(
         outbox: EntryOutbox,
         id: Long,
-    ) = """{"eventId":"${outbox.eventId}","expoId":"expo-relay","participationType":"STANDARD","id":$id,"phoneNumber":"01012345678"}"""
+    ) =
+        """{"eventId":"${outbox.eventId}","expoId":"expo-relay","participationType":"STANDARD","id":$id,"phoneNumber":"${outbox.phoneNumber}"}"""
 
     private fun saveOutbox(
         participantId: Long,
@@ -122,7 +123,8 @@ class PublishEntryEventsTests : IntegrationTestSupport() {
             EntryOutbox(
                 expoId = "expo-relay",
                 participantId = participantId,
-                phoneNumber = "01012345678",
+                // 같은 박람회·날짜에서 번호가 겹치면 하루 한 통만 남으므로 참가자마다 다른 번호를 쓴다
+                phoneNumber = "010%08d".format(participantId),
                 attendanceDate = today,
                 createdAt = createdAt,
             ),
