@@ -13,6 +13,12 @@ interface QrTokenRepository : JpaRepository<QrToken, String> {
         expoId: String,
     ): Boolean
 
+    /** 입장 기록이 한 번이라도 있는 토큰의 박람회 id. 없는 토큰과 입장 전 토큰은 둘 다 `null`이다. */
+    @Query("SELECT t.expoId FROM QrToken t WHERE t.token = :token AND EXISTS (SELECT 1 FROM QrEntry e WHERE e.token = t.token)")
+    fun findEnteredExpoId(
+        @Param("token") token: String,
+    ): String?
+
     /** 입장 기록은 외래키의 `ON DELETE CASCADE`로 함께 지워진다. */
     @Transactional
     @Modifying
