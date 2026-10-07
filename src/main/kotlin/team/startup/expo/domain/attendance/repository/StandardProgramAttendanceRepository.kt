@@ -50,4 +50,12 @@ interface StandardProgramAttendanceRepository : JpaRepository<StandardProgramAtt
         @Param("participantId") participantId: Long,
         @Param("leaveTime") leaveTime: LocalTime,
     ): Int
+
+    /** 프로그램의 출석 기록을 모두 지운다. */
+    @Transactional
+    @Modifying
+    @Query(nativeQuery = true, value = "DELETE FROM tb_standard_program_attendance WHERE standard_program_id = :programId")
+    fun deleteByProgramId(
+        @Param("programId") programId: Long,
+    ): Int
 }

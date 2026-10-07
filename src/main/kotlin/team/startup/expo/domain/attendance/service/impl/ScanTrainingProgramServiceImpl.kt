@@ -4,9 +4,11 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanTrainingProgramReqDto
-import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
+import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
+import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
 import team.startup.expo.domain.attendance.service.ScanTrainingProgramService
 import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.callService
@@ -30,7 +32,7 @@ class ScanTrainingProgramServiceImpl(
     @Qualifier("expoCircuitBreaker") private val expoCircuitBreaker: CircuitBreaker,
     @Qualifier("applicationCircuitBreaker") private val applicationCircuitBreaker: CircuitBreaker,
     private val expoPeriodValidator: ExpoPeriodValidator,
-    private val attendanceRepository: TrainingProgramAttendanceRepository,
+    private val recordProgramAttendanceService: RecordProgramAttendanceService,
     private val clock: Clock,
 ) : ScanTrainingProgramService {
     override fun scan(
@@ -55,9 +57,10 @@ class ScanTrainingProgramServiceImpl(
 
         // 분 단위로 기록한다(v1과 같음)
         val now = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES)
-        if (attendanceRepository.insertEntryIfAbsent(programId, reqDto.traineeId, LocalDate.now(clock), now) == 1) return
-        if (attendanceRepository.markLeaveIfPresent(programId, reqDto.traineeId, now) == 1) return
-
-        throw ExpectedException(HttpStatus.BAD_REQUEST, "이미 프로그램을 퇴실한 유저입니다.")
+        when (recordProgramAttendanceService.record(ProgramType.TRAINING, programId, reqDto.traineeId, LocalDate.now(clock), now)) {
+            ProgramAttendanceResult.ENTERED, ProgramAttendanceResult.LEFT -> Unit
+            ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, "연수 프로그램을 찾지 못했습니다.")
+            ProgramAttendanceResult.ALREADY_LEFT -> throw ExpectedException(HttpStatus.BAD_REQUEST, "이미 프로그램을 퇴실한 유저입니다.")
+        }
     }
 }

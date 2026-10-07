@@ -12,12 +12,16 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
+import team.startup.expo.domain.attendance.service.DeleteProgramAttendancesService
+import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
 import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.application.ProgramApplicationResDto
 import team.startup.expo.global.client.expo.ExpoClient
@@ -33,6 +37,10 @@ import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
 import java.time.LocalDate
+import java.time.LocalTime
+import java.util.concurrent.Callable
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 
 class ProgramAttendanceApiTests : IntegrationTestSupport() {
     @Autowired
@@ -46,6 +54,12 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
 
     @Autowired
     lateinit var clock: Clock
+
+    @Autowired
+    lateinit var deleteProgramAttendancesService: DeleteProgramAttendancesService
+
+    @Autowired
+    lateinit var recordProgramAttendanceService: RecordProgramAttendanceService
 
     @MockitoBean
     lateinit var userClient: UserClient
@@ -203,6 +217,89 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
             .perform(get("/internal/program-attendances/standard/9999").header("X-Internal-Token", INTERNAL_TOKEN))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.length()").value(0))
+    }
+
+    @Test
+    fun `프로그램 출석 정리는 내부 토큰이 필요하고 그 프로그램의 출석만 지우며 여러 번 불러도 같다`() {
+        standardAllowed("expo-del", 1100, 701)
+        standardAllowed("expo-del", 1101, 701)
+        trainingAllowed("expo-del", 2100, 801)
+        mockMvc.perform(scanStandard(1100, "expo-del", 701)).andExpect(status().isOk)
+        mockMvc.perform(scanStandard(1101, "expo-del", 701)).andExpect(status().isOk)
+        mockMvc.perform(scanTraining(2100, "expo-del", 801)).andExpect(status().isOk)
+
+        mockMvc.perform(delete("/internal/program-attendances/standard/1100")).andExpect(status().isUnauthorized)
+        repeat(2) {
+            mockMvc
+                .perform(delete("/internal/program-attendances/standard/1100").header("X-Internal-Token", INTERNAL_TOKEN))
+                .andExpect(status().isNoContent)
+        }
+
+        standardRepository.findByParticipantIdAndStandardProgramId(701, 1100) shouldBe null
+        (standardRepository.findByParticipantIdAndStandardProgramId(701, 1101) != null) shouldBe true
+        (trainingRepository.findByTraineeIdAndTrainingProgramId(801, 2100) != null) shouldBe true
+
+        mockMvc
+            .perform(delete("/internal/program-attendances/training/2100").header("X-Internal-Token", INTERNAL_TOKEN))
+            .andExpect(status().isNoContent)
+        trainingRepository.findByTraineeIdAndTrainingProgramId(801, 2100) shouldBe null
+    }
+
+    @Test
+    fun `삭제된 프로그램에는 스캔해도 출석이 되살아나지 않는다`() {
+        standardAllowed("expo-del2", 1102, 702)
+        trainingAllowed("expo-del2", 2101, 802)
+        deleteProgramAttendancesService.delete(ProgramType.STANDARD, 1102)
+        deleteProgramAttendancesService.delete(ProgramType.TRAINING, 2101)
+
+        // 박람회 서비스가 아직 프로그램을 돌려주더라도(삭제와 스캔이 겹친 경우) 기록하지 않는다
+        mockMvc
+            .perform(scanStandard(1102, "expo-del2", 702))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.message").value("일반 프로그램을 찾지 못 했습니다."))
+        mockMvc
+            .perform(scanTraining(2101, "expo-del2", 802))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.message").value("연수 프로그램을 찾지 못했습니다."))
+
+        standardRepository.findByParticipantIdAndStandardProgramId(702, 1102) shouldBe null
+        trainingRepository.findByTraineeIdAndTrainingProgramId(802, 2101) shouldBe null
+    }
+
+    @Test
+    fun `삭제와 겹친 스캔이 있어도 삭제 뒤에는 출석이 남지 않는다`() {
+        val threads = 9
+        val ready = CountDownLatch(threads)
+        val start = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(threads)
+
+        val tasks =
+            (1..threads).map { index ->
+                executor.submit(
+                    Callable {
+                        ready.countDown()
+                        start.await()
+                        if (index == 1) {
+                            deleteProgramAttendancesService.delete(ProgramType.STANDARD, 1103)
+                        } else {
+                            recordProgramAttendanceService.record(
+                                ProgramType.STANDARD,
+                                1103,
+                                900L + index,
+                                LocalDate.now(clock),
+                                LocalTime.of(10, 0),
+                            )
+                        }
+                    },
+                )
+            }
+        ready.await()
+        start.countDown()
+        tasks.forEach { it.get() }
+        executor.shutdown()
+
+        // 기록이 삭제보다 먼저 끝났으면 삭제가 함께 지우고, 나중이면 삭제 기록 때문에 기록되지 않는다
+        standardRepository.findAllByStandardProgramId(1103).isEmpty() shouldBe true
     }
 
     private fun standardAllowed(
