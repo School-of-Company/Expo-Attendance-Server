@@ -1,6 +1,13 @@
 spring:
   application:
     name: expo-attention-server
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 2000
+            read-timeout: 3000
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/expo_attention}
     username: ${DB_USERNAME:expo_attention}
@@ -9,3 +16,20 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+internal:
+  token: ${INTERNAL_TOKEN}
+clients:
+  user:
+    url: ${USER_URL:}
+    internal-token: ${USER_INTERNAL_TOKEN}
+  expo:
+    url: ${EXPO_URL:}
+    internal-token: ${EXPO_INTERNAL_TOKEN}
+entry-events:
+  recorded-topic: ${KAFKA_ENTRY_RECORDED_TOPIC:attention.entry.recorded}
