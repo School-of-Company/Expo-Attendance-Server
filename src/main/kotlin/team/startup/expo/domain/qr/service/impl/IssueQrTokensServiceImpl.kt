@@ -29,6 +29,12 @@ class IssueQrTokensServiceImpl(
         expoId: String,
         reqDto: IssueQrTokensReqDto,
     ): IssueQrTokensResDto {
+        // 박람회 ID는 소문자 UUID다. 폼 서비스가 `resolve` 응답의 `expoId`를 UUID 모양으로 검증하므로 다른 값으로 발급하면
+        // 설문 단계에서 장애로 처리된다.
+        if (!EXPO_ID_PATTERN.matches(expoId)) {
+            throw ExpectedException(HttpStatus.BAD_REQUEST, "박람회 ID가 올바르지 않습니다.")
+        }
+
         // 삭제와 같은 락을 잡은 뒤에 삭제 기록을 확인해, 삭제된 박람회의 토큰이 되살아나지 않게 한다
         deletedExpoRepository.lockExpo(expoId)
         if (deletedExpoRepository.existsById(expoId)) {
@@ -54,5 +60,6 @@ class IssueQrTokensServiceImpl(
 
     private companion object {
         const val TOKEN_BYTES = 16
+        val EXPO_ID_PATTERN = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     }
 }

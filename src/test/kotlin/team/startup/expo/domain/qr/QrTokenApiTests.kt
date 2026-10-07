@@ -53,7 +53,7 @@ class QrTokenApiTests : IntegrationTestSupport() {
         val response =
             mockMvc
                 .perform(
-                    post("/qr-tokens/expo-issue")
+                    post("/qr-tokens/11111111-1111-4111-8111-111111111111")
                         .asAdmin()
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"count": 50, "category": "ELEMENTARY_STUDENT"}"""),
@@ -74,13 +74,13 @@ class QrTokenApiTests : IntegrationTestSupport() {
 
         // 헤더가 없으면 인증되지 않아 401이다
         mockMvc
-            .perform(post("/qr-tokens/expo-auth").contentType(MediaType.APPLICATION_JSON).content(body))
+            .perform(post("/qr-tokens/22222222-2222-4222-8222-222222222222").contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isUnauthorized)
 
         // 사용자 ID 없이 역할만 있어도 인증하지 않는다
         mockMvc
             .perform(
-                post("/qr-tokens/expo-auth")
+                post("/qr-tokens/22222222-2222-4222-8222-222222222222")
                     .header("X-User-Role", "ROLE_ADMIN")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(body),
@@ -90,40 +90,40 @@ class QrTokenApiTests : IntegrationTestSupport() {
         listOf("ROLE_STANDARD", "ROLE_TRAINEE").forEach { role ->
             mockMvc
                 .perform(
-                    post("/qr-tokens/expo-auth")
+                    post("/qr-tokens/22222222-2222-4222-8222-222222222222")
                         .header("X-User-Id", "2")
                         .header("X-User-Role", role)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body),
                 ).andExpect(status().isForbidden)
         }
-        qrTokenRepository.findAll().none { it.expoId == "expo-auth" } shouldBe true
+        qrTokenRepository.findAll().none { it.expoId == "22222222-2222-4222-8222-222222222222" } shouldBe true
     }
 
     @Test
     fun `삭제된 박람회에는 다시 발급할 수 없고 삭제는 여러 번 불러도 같다`() {
         mockMvc
             .perform(
-                post("/qr-tokens/expo-gone")
+                post("/qr-tokens/33333333-3333-4333-8333-333333333333")
                     .asAdmin()
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"count": 3, "category": "GENERAL"}"""),
             ).andExpect(status().isCreated)
         repeat(2) {
             mockMvc
-                .perform(delete("/internal/expos/expo-gone").header("X-Internal-Token", INTERNAL_TOKEN))
+                .perform(delete("/internal/expos/33333333-3333-4333-8333-333333333333").header("X-Internal-Token", INTERNAL_TOKEN))
                 .andExpect(status().isNoContent)
         }
-        qrTokenRepository.findAll().none { it.expoId == "expo-gone" } shouldBe true
+        qrTokenRepository.findAll().none { it.expoId == "33333333-3333-4333-8333-333333333333" } shouldBe true
 
         mockMvc
             .perform(
-                post("/qr-tokens/expo-gone")
+                post("/qr-tokens/33333333-3333-4333-8333-333333333333")
                     .asAdmin()
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"count": 3, "category": "GENERAL"}"""),
             ).andExpect(status().isNotFound)
-        qrTokenRepository.findAll().none { it.expoId == "expo-gone" } shouldBe true
+        qrTokenRepository.findAll().none { it.expoId == "33333333-3333-4333-8333-333333333333" } shouldBe true
     }
 
     @Test
@@ -140,9 +140,12 @@ class QrTokenApiTests : IntegrationTestSupport() {
                     start.await()
                     runCatching {
                         if (index == 1) {
-                            deleteExpoDataService.delete("expo-race")
+                            deleteExpoDataService.delete("44444444-4444-4444-8444-444444444444")
                         } else {
-                            issueQrTokensService.issue("expo-race", IssueQrTokensReqDto(count = 5, category = QrCategory.GENERAL))
+                            issueQrTokensService.issue(
+                                "44444444-4444-4444-8444-444444444444",
+                                IssueQrTokensReqDto(count = 5, category = QrCategory.GENERAL),
+                            )
                         }
                     }
                 }
@@ -153,7 +156,7 @@ class QrTokenApiTests : IntegrationTestSupport() {
         executor.shutdown()
 
         // 발급이 삭제보다 먼저 끝났으면 함께 지워지고, 나중이면 거부되므로 어느 쪽이든 남는 토큰이 없다
-        qrTokenRepository.findAll().none { it.expoId == "expo-race" } shouldBe true
+        qrTokenRepository.findAll().none { it.expoId == "44444444-4444-4444-8444-444444444444" } shouldBe true
     }
 
     @Test
@@ -187,11 +190,31 @@ class QrTokenApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `박람회 ID가 소문자 UUID가 아니면 발급하지 않고 400이다`() {
+        listOf(
+            "expo-1",
+            "11111111-1111-4111-8111-11111111111",
+            "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+            "11111111111141118111111111111111",
+        ).forEach { expoId ->
+            mockMvc
+                .perform(
+                    post("/qr-tokens/$expoId")
+                        .asAdmin()
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"count": 1, "category": "GENERAL"}"""),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.message").value("박람회 ID가 올바르지 않습니다."))
+            qrTokenRepository.findAll().none { it.expoId == expoId } shouldBe true
+        }
+    }
+
+    @Test
     fun `개수가 범위를 벗어나면 400이다`() {
         listOf(0, 1001).forEach { count ->
             mockMvc
                 .perform(
-                    post("/qr-tokens/expo-issue")
+                    post("/qr-tokens/11111111-1111-4111-8111-111111111111")
                         .asAdmin()
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"count": $count, "category": "GENERAL"}"""),
@@ -204,7 +227,7 @@ class QrTokenApiTests : IntegrationTestSupport() {
         listOf("""{"count": 5}""", """{"count": 5, "category": "STANDARD"}""").forEach { body ->
             mockMvc
                 .perform(
-                    post("/qr-tokens/expo-issue")
+                    post("/qr-tokens/11111111-1111-4111-8111-111111111111")
                         .asAdmin()
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body),
