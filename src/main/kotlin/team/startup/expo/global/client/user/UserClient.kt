@@ -15,4 +15,10 @@ interface UserClient {
     fun recordEntry(
         @RequestBody request: RecordEntryReqDto,
     ): RecordEntryResDto
+
+    /** 박람회 ID와 전화번호로 참가자 ID를 찾는다. 없으면 404다. */
+    @PostMapping("/internal/participants/resolve")
+    fun resolveParticipant(
+        @RequestBody request: ResolveParticipantReqDto,
+    ): ResolveParticipantResDto
 }
