@@ -47,15 +47,37 @@ class ScanEntryServiceImpl(
         expoId: String,
         reqDto: ScanEntryReqDto,
     ): ScanEntryResDto {
+        checkIdentifier(reqDto)
         val today = LocalDate.now(clock)
         checkInProgress(expoId, today)
 
         val entry = recordEntry(expoId, reqDto, today)
 
         if (reqDto.authority == EntryAuthority.ROLE_STANDARD) {
-            saveEntryEvent(expoId, entry.id, entry.phoneNumber, today)
+            // 문자는 본인 번호로, 번호가 없는 동행자는 대표자 번호로 보낸다. 받을 번호가 없으면 이벤트를 남기지 않는다.
+            val notificationPhone = entry.notificationPhoneNumber ?: entry.phoneNumber
+            if (notificationPhone != null) {
+                saveEntryEvent(expoId, entry.id, notificationPhone, today)
+            } else {
+                logger.info("입장 이벤트를 남기지 않습니다(문자를 받을 번호 없음): participantId={}", entry.id)
+            }
         }
-        return toResponse(entry)
+        return toResponse(entry, reqDto)
+    }
+
+    /** 일반 참가자는 전화번호 또는 참가자 ID와 코드가 모두 필요하고, 연수자는 전화번호가 필요하다. */
+    private fun checkIdentifier(reqDto: ScanEntryReqDto) {
+        val hasPhone = !reqDto.phoneNumber.isNullOrBlank()
+        val hasParticipantCode = reqDto.participantId != null && !reqDto.code.isNullOrBlank()
+        val partial = (reqDto.participantId != null) != !reqDto.code.isNullOrBlank()
+
+        if (reqDto.authority == EntryAuthority.ROLE_TRAINEE) {
+            if (!hasPhone) throw ExpectedException(HttpStatus.BAD_REQUEST, "연수자는 전화번호가 필요합니다.")
+            return
+        }
+        if (partial || (!hasPhone && !hasParticipantCode)) {
+            throw ExpectedException(HttpStatus.BAD_REQUEST, "전화번호 또는 참가자 ID와 코드가 필요합니다.")
+        }
     }
 
     private fun checkInProgress(
@@ -83,7 +105,7 @@ class ScanEntryServiceImpl(
         reqDto: ScanEntryReqDto,
         today: LocalDate,
     ): RecordEntryResDto {
-        val request = RecordEntryReqDto(expoId, reqDto.authority.participationType, reqDto.phoneNumber)
+        val request = toEntryRequest(expoId, reqDto)
         return try {
             userCircuitBreaker.executeSupplier { userClient.recordEntry(request) }
         } catch (_: FeignException.NotFound) {
@@ -93,7 +115,10 @@ class ScanEntryServiceImpl(
             )
         } catch (_: FeignException.Conflict) {
             // 입장은 기록됐는데 이벤트 기록이 빠졌을 수 있다. 같은 QR을 다시 찍으면 이벤트가 만들어지게 한다.
-            if (reqDto.authority == EntryAuthority.ROLE_STANDARD) recoverEntryEvent(request, today)
+            // 참가자 ID와 코드로 온 요청은 문자를 받을 번호를 알 수 없어서(409에 정보가 없음) 복구하지 않는다.
+            if (reqDto.authority == EntryAuthority.ROLE_STANDARD && request.phoneNumber != null) {
+                recoverEntryEvent(request, request.phoneNumber, today)
+            }
             throw ExpectedException(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.")
         } catch (e: Exception) {
             throw unavailable("유저", e)
@@ -106,19 +131,20 @@ class ScanEntryServiceImpl(
      */
     private fun recoverEntryEvent(
         request: RecordEntryReqDto,
+        phoneNumber: String,
         today: LocalDate,
     ) {
         val participant =
             try {
                 userCircuitBreaker.executeSupplier {
-                    userClient.resolveParticipant(ResolveParticipantReqDto(request.expoId, request.phoneNumber, request.participationType))
+                    userClient.resolveParticipant(ResolveParticipantReqDto(request.expoId, phoneNumber, request.participationType))
                 }
             } catch (e: Exception) {
                 throw unavailable("유저", e)
             }
 
         try {
-            saveEntryEvent(request.expoId, participant.participantId, request.phoneNumber, today)
+            saveEntryEvent(request.expoId, participant.participantId, phoneNumber, today)
         } catch (e: Exception) {
             // 전화번호가 들어 있는 값은 로그에 남기지 않는다
             logger.warn("입장 이벤트 복구 저장 실패: expoId={}, 원인={}", request.expoId, e.javaClass.simpleName)
@@ -136,7 +162,25 @@ class ScanEntryServiceImpl(
         recordEntryEventService.record(expoId, participantId, phoneNumber, today)
     }
 
-    private fun toResponse(entry: RecordEntryResDto): ScanEntryResDto {
+    /** 일반 참가자가 참가자 ID와 코드로 왔으면 그 값을, 아니면 전화번호를 유저 서비스에 보낸다(ID와 코드가 우선). */
+    private fun toEntryRequest(
+        expoId: String,
+        reqDto: ScanEntryReqDto,
+    ): RecordEntryReqDto {
+        val type = reqDto.authority.participationType
+        val usesParticipantCode =
+            reqDto.authority == EntryAuthority.ROLE_STANDARD && reqDto.participantId != null && !reqDto.code.isNullOrBlank()
+        return if (usesParticipantCode) {
+            RecordEntryReqDto(expoId, type, participantId = reqDto.participantId, code = reqDto.code)
+        } else {
+            RecordEntryReqDto(expoId, type, phoneNumber = reqDto.phoneNumber)
+        }
+    }
+
+    private fun toResponse(
+        entry: RecordEntryResDto,
+        reqDto: ScanEntryReqDto,
+    ): ScanEntryResDto {
         val isTrainee = entry.participationType == TRAINEE
         // 명찰 대상은 연수자 전원과 교사·예비교사인 일반 참가자다
         val badge =
@@ -144,7 +188,7 @@ class ScanEntryServiceImpl(
                 BadgeResDto(
                     name = entry.name,
                     school = entry.school,
-                    qrCode = badgeQrCode(isTrainee, entry),
+                    qrCode = badgeQrCode(isTrainee, entry, reqDto),
                 )
             } else {
                 null
@@ -160,17 +204,25 @@ class ScanEntryServiceImpl(
         )
     }
 
-    /** v1 QR 형식: `{"participantId": 42, "phoneNumber": "010…"}`, 연수자는 `traineeId`. */
+    /**
+     * 명찰 QR은 입구 스캔이 읽는 값이다. 일반 참가자가 ID와 코드로 입장했으면 `{"participantId": 42, "code": "…"}`,
+     * 그 외는 이전 형식 `{"participantId": 42, "phoneNumber": "010…"}`(연수자는 `traineeId`)이다.
+     */
     private fun badgeQrCode(
         isTrainee: Boolean,
         entry: RecordEntryResDto,
-    ): String =
-        objectMapper.writeValueAsString(
+        reqDto: ScanEntryReqDto,
+    ): String {
+        if (!isTrainee && reqDto.participantId != null && !reqDto.code.isNullOrBlank()) {
+            return objectMapper.writeValueAsString(linkedMapOf("participantId" to entry.id, "code" to reqDto.code))
+        }
+        return objectMapper.writeValueAsString(
             linkedMapOf(
                 (if (isTrainee) "traineeId" else "participantId") to entry.id,
                 "phoneNumber" to entry.phoneNumber,
             ),
         )
+    }
 
     /** "없음(404)"과 달리 호출 자체가 실패한 경우다. 회로가 열려 있어도 같은 응답이다. */
     private fun unavailable(

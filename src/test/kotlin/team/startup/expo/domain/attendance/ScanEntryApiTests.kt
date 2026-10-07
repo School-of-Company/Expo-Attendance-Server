@@ -187,6 +187,97 @@ class ScanEntryApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `참가자 ID와 코드로 입장하면 번호 없이 기록하고 문자는 대표자 번호로 보낸다`() {
+        // 번호가 없는 동행자: 본인 번호는 없고 문자를 받을 번호는 대표자 번호다
+        entryByIdReturns(
+            "expo-i1",
+            5001,
+            "codeAAAAAAAAAAAAAAAAAA",
+            RecordEntryResDto(5001, "동행자", null, true, "STANDARD", "ELEMENTARY_STUDENT", null, "01077776666"),
+        )
+
+        mockMvc
+            .perform(scanById("expo-i1", 5001, "codeAAAAAAAAAAAAAAAAAA"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.id").value(5001))
+            .andExpect(jsonPath("$.phoneNumber").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.badge").doesNotExist())
+
+        val rows = entryOutboxRepository.findAll().filter { it.expoId == "expo-i1" }
+        rows.map { it.participantId to it.phoneNumber } shouldBe listOf(5001L to "01077776666")
+    }
+
+    @Test
+    fun `참가자 ID와 코드로 입장한 교사의 명찰 QR은 ID와 코드다`() {
+        entryByIdReturns(
+            "expo-i2",
+            5002,
+            "codeBBBBBBBBBBBBBBBBBB",
+            RecordEntryResDto(5002, "홍길동", "01012345678", true, "STANDARD", "TEACHER", "광주초등학교", "01012345678"),
+        )
+
+        mockMvc
+            .perform(scanById("expo-i2", 5002, "codeBBBBBBBBBBBBBBBBBB"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.badge.school").value("광주초등학교"))
+            .andExpect(jsonPath("$.badge.qrCode").value("""{"participantId":5002,"code":"codeBBBBBBBBBBBBBBBBBB"}"""))
+    }
+
+    @Test
+    fun `문자를 받을 번호가 없으면 입장은 기록하고 이벤트는 남기지 않는다`() {
+        entryByIdReturns(
+            "expo-i3",
+            5003,
+            "codeCCCCCCCCCCCCCCCCCC",
+            RecordEntryResDto(5003, "동행자", null, true, "STANDARD", "GENERAL", null, null),
+        )
+
+        mockMvc.perform(scanById("expo-i3", 5003, "codeCCCCCCCCCCCCCCCCCC")).andExpect(status().isOk)
+
+        entryOutboxRepository.findAll().none { it.expoId == "expo-i3" } shouldBe true
+    }
+
+    @Test
+    fun `코드가 틀리거나 참가자가 없으면 404이고 이미 입장했으면 복구 없이 400이다`() {
+        doThrow(feignException(404))
+            .`when`(userClient)
+            .recordEntry(RecordEntryReqDto("expo-i4", "STANDARD", participantId = 5004, code = "wrongWrongWrongWrong"))
+        mockMvc
+            .perform(scanById("expo-i4", 5004, "wrongWrongWrongWrong"))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.message").value("행사 참가자를 찾지 못 했습니다."))
+
+        // 참가자 ID와 코드로는 문자를 받을 번호를 알 수 없어 이벤트 복구를 시도하지 않는다(resolve 호출 없음)
+        doThrow(feignException(409))
+            .`when`(userClient)
+            .recordEntry(RecordEntryReqDto("expo-i5", "STANDARD", participantId = 5005, code = "codeEEEEEEEEEEEEEEEEEE"))
+        mockMvc
+            .perform(scanById("expo-i5", 5005, "codeEEEEEEEEEEEEEEEEEE"))
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.message").value("이미 박람회에 입장한 유저입니다."))
+        org.mockito.Mockito
+            .mockingDetails(userClient)
+            .invocations
+            .none { it.method.name == "resolveParticipant" } shouldBe true
+    }
+
+    @Test
+    fun `일반 참가자는 번호나 ID와 코드가 필요하고 연수자는 번호가 필요하다`() {
+        listOf(
+            """{"authority": "ROLE_STANDARD"}""",
+            """{"authority": "ROLE_STANDARD", "participantId": 1}""",
+            """{"authority": "ROLE_STANDARD", "code": "abc"}""",
+            """{"authority": "ROLE_STANDARD", "participantId": 0, "code": "abc"}""",
+            """{"authority": "ROLE_TRAINEE", "participantId": 1, "code": "abc"}""",
+            """{"authority": "ROLE_TRAINEE"}""",
+        ).forEach { body ->
+            mockMvc
+                .perform(patch("/attendance/expo-i6").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest)
+        }
+    }
+
+    @Test
     fun `참가자가 없으면 404이다`() {
         entryThrows("expo-s3", 404, phone = "01000000000")
 
@@ -254,6 +345,25 @@ class ScanEntryApiTests : IntegrationTestSupport() {
     ) {
         doReturn(response).`when`(userClient).recordEntry(RecordEntryReqDto(expoId, type, phone))
     }
+
+    private fun entryByIdReturns(
+        expoId: String,
+        participantId: Long,
+        code: String,
+        response: RecordEntryResDto,
+    ) {
+        doReturn(response)
+            .`when`(userClient)
+            .recordEntry(RecordEntryReqDto(expoId, "STANDARD", participantId = participantId, code = code))
+    }
+
+    private fun scanById(
+        expoId: String,
+        participantId: Long,
+        code: String,
+    ) = patch("/attendance/$expoId")
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("""{"authority": "ROLE_STANDARD", "participantId": $participantId, "code": "$code"}""")
 
     private fun entryThrows(
         expoId: String,
