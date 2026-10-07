@@ -67,7 +67,7 @@ class ScanEntryServiceImpl(
             try {
                 expoCircuitBreaker.executeSupplier { expoClient.getPeriod(expoId) }
             } catch (_: FeignException.NotFound) {
-                throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾을 수 없습니다.")
+                throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
             } catch (e: Exception) {
                 throw unavailable("박람회", e)
             }
@@ -75,7 +75,7 @@ class ScanEntryServiceImpl(
         // v1과 같이 시작일과 종료일을 모두 포함한다
         val inProgress = today >= LocalDate.parse(period.startedDay) && today <= LocalDate.parse(period.finishedDay)
         if (!inProgress) {
-            throw ExpectedException(HttpStatus.BAD_REQUEST, "진행 중인 박람회가 아닙니다.")
+            throw ExpectedException(HttpStatus.BAD_REQUEST, "해당 박람회는 진행 중인 상태가 아닙니다.")
         }
     }
 
@@ -88,11 +88,14 @@ class ScanEntryServiceImpl(
         return try {
             userCircuitBreaker.executeSupplier { userClient.recordEntry(request) }
         } catch (_: FeignException.NotFound) {
-            throw ExpectedException(HttpStatus.NOT_FOUND, "행사 참가자를 찾지 못 했습니다.")
+            throw ExpectedException(
+                HttpStatus.NOT_FOUND,
+                if (reqDto.authority == EntryAuthority.ROLE_TRAINEE) "연수자를 찾지 못 했습니다." else "행사 참가자를 찾지 못 했습니다.",
+            )
         } catch (_: FeignException.Conflict) {
             // 입장은 기록됐는데 이벤트 기록이 빠졌을 수 있다. 같은 QR을 다시 찍으면 이벤트가 만들어지게 한다.
             if (reqDto.authority == EntryAuthority.ROLE_STANDARD) recoverEntryEvent(request, today)
-            throw ExpectedException(HttpStatus.BAD_REQUEST, "오늘 이미 입장했습니다.")
+            throw ExpectedException(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.")
         } catch (e: Exception) {
             throw unavailable("유저", e)
         }

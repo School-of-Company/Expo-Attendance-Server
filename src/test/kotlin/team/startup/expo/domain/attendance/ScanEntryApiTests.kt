@@ -125,6 +125,35 @@ class ScanEntryApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `v1과 같은 문구로 응답한다`() {
+        entryThrows("expo-msg", 404)
+        mockMvc
+            .perform(scan("expo-msg", "ROLE_STANDARD", "01012345678"))
+            .andExpect(jsonPath("$.message").value("행사 참가자를 찾지 못 했습니다."))
+
+        entryThrows("expo-msg", 404, type = "TRAINEE")
+        mockMvc
+            .perform(scan("expo-msg", "ROLE_TRAINEE", "01012345678"))
+            .andExpect(jsonPath("$.message").value("연수자를 찾지 못 했습니다."))
+
+        entryThrows("expo-msg", 409)
+        resolveReturns("expo-msg", ResolveParticipantResDto(4299, "STANDARD"))
+        mockMvc
+            .perform(scan("expo-msg", "ROLE_STANDARD", "01012345678"))
+            .andExpect(jsonPath("$.message").value("이미 박람회에 입장한 유저입니다."))
+
+        periodThrows(404)
+        mockMvc
+            .perform(scan("expo-msg", "ROLE_STANDARD", "01012345678"))
+            .andExpect(jsonPath("$.message").value("박람회를 찾지 못 했습니다."))
+
+        periodReturns(ExpoPeriodResDto(today.plusDays(1).toString(), today.plusDays(3).toString()))
+        mockMvc
+            .perform(scan("expo-msg", "ROLE_STANDARD", "01012345678"))
+            .andExpect(jsonPath("$.message").value("해당 박람회는 진행 중인 상태가 아닙니다."))
+    }
+
+    @Test
     fun `박람회가 없으면 404이고 진행 기간이 아니면 400이다`() {
         periodThrows(404)
         mockMvc.perform(scan("expo-none", "ROLE_STANDARD", "01012345678")).andExpect(status().isNotFound)
