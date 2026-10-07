@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.startup.expo.domain.attendance.entity.EntryOutbox
 import team.startup.expo.domain.attendance.repository.EntryOutboxRepository
+import team.startup.expo.domain.attendance.service.RecordEntryEventService
 import team.startup.expo.domain.qr.entity.QrCategory
 import team.startup.expo.domain.qr.entity.QrToken
 import team.startup.expo.domain.qr.presentation.dto.request.IssueQrTokensReqDto
@@ -43,6 +44,9 @@ class QrTokenApiTests : IntegrationTestSupport() {
 
     @Autowired
     lateinit var deleteExpoDataService: DeleteExpoDataService
+
+    @Autowired
+    lateinit var recordEntryEventService: RecordEntryEventService
 
     @Test
     fun `토큰을 요청한 개수만큼 22자 난수로 발급하고 저장한다`() {
@@ -150,6 +154,36 @@ class QrTokenApiTests : IntegrationTestSupport() {
 
         // 발급이 삭제보다 먼저 끝났으면 함께 지워지고, 나중이면 거부되므로 어느 쪽이든 남는 토큰이 없다
         qrTokenRepository.findAll().none { it.expoId == "expo-race" } shouldBe true
+    }
+
+    @Test
+    fun `삭제와 겹친 입장 이벤트 저장이 있어도 삭제 뒤에는 이벤트가 남지 않는다`() {
+        val threads = 9
+        val ready = CountDownLatch(threads)
+        val start = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(threads)
+
+        val tasks =
+            (1..threads).map { index ->
+                executor.submit {
+                    ready.countDown()
+                    start.await()
+                    runCatching {
+                        if (index == 1) {
+                            deleteExpoDataService.delete("expo-outbox-race")
+                        } else {
+                            recordEntryEventService.record("expo-outbox-race", index.toLong(), "01012345678", LocalDate.now())
+                        }
+                    }
+                }
+            }
+        ready.await()
+        start.countDown()
+        tasks.forEach { it.get() }
+        executor.shutdown()
+
+        // 저장이 삭제보다 먼저 끝났으면 삭제가 함께 지우고, 나중이면 삭제 기록 때문에 저장되지 않는다
+        entryOutboxRepository.findAll().none { it.expoId == "expo-outbox-race" } shouldBe true
     }
 
     @Test
