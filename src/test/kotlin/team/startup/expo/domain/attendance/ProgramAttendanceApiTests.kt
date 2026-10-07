@@ -38,6 +38,7 @@ import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
+import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 
@@ -274,10 +275,10 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
 
         val tasks =
             (1..threads).map { index ->
-                executor.submit {
-                    ready.countDown()
-                    start.await()
-                    runCatching {
+                executor.submit(
+                    Callable {
+                        ready.countDown()
+                        start.await()
                         if (index == 1) {
                             deleteProgramAttendancesService.delete(ProgramType.STANDARD, 1103)
                         } else {
@@ -289,8 +290,8 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
                                 LocalTime.of(10, 0),
                             )
                         }
-                    }
-                }
+                    },
+                )
             }
         ready.await()
         start.countDown()
