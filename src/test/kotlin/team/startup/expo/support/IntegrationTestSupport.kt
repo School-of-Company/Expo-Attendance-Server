@@ -29,6 +29,7 @@ abstract class IntegrationTestSupport {
         const val INTERNAL_TOKEN = "test-internal-token-0123456789abcdef"
         const val USER_INTERNAL_TOKEN = "test-user-internal-token-0123456789ab"
         const val EXPO_INTERNAL_TOKEN = "test-expo-internal-token-0123456789ab"
+        const val APPLICATION_INTERNAL_TOKEN = "test-application-internal-token-0123456789"
 
         @JvmStatic
         @DynamicPropertySource
@@ -36,6 +37,7 @@ abstract class IntegrationTestSupport {
             registry.add("internal.token") { INTERNAL_TOKEN }
             registry.add("clients.user.internal-token") { USER_INTERNAL_TOKEN }
             registry.add("clients.expo.internal-token") { EXPO_INTERNAL_TOKEN }
+            registry.add("clients.application.internal-token") { APPLICATION_INTERNAL_TOKEN }
         }
     }
 }

@@ -31,5 +31,8 @@ clients:
   expo:
     url: ${EXPO_URL:}
     internal-token: ${EXPO_INTERNAL_TOKEN}
+  application:
+    url: ${APPLICATION_URL:}
+    internal-token: ${APPLICATION_INTERNAL_TOKEN}
 entry-events:
   recorded-topic: ${KAFKA_ENTRY_RECORDED_TOPIC:attention.entry.recorded}
