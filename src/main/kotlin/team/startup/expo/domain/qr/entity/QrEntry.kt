@@ -14,19 +14,17 @@ import java.time.LocalDateTime
 @Table(
     name = "tb_qr_entry",
     uniqueConstraints = [
-        UniqueConstraint(name = "uk_qr_entry", columnNames = ["expo_id", "qr_token_id", "attendance_date"]),
+        UniqueConstraint(name = "uk_qr_entry_token_date", columnNames = ["token", "attendance_date"]),
     ],
 )
 class QrEntry(
     @field:Id
     @field:GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
-    @field:Column(name = "entry_time", nullable = false)
-    val entryTime: LocalDateTime = LocalDateTime.now(),
+    @field:Column(nullable = false, length = 64)
+    val token: String,
     @field:Column(name = "attendance_date", nullable = false)
-    val attendanceDate: LocalDate = LocalDate.now(),
-    @field:Column(name = "qr_token_id", nullable = false)
-    val qrTokenId: Long,
-    @field:Column(name = "expo_id", nullable = false, length = 64)
-    val expoId: String,
+    val attendanceDate: LocalDate,
+    @field:Column(name = "entered_at", nullable = false)
+    val enteredAt: LocalDateTime,
 )
