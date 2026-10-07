@@ -4,9 +4,11 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanStandardProgramReqDto
-import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
+import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
+import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
 import team.startup.expo.domain.attendance.service.ScanStandardProgramService
 import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.callService
@@ -33,7 +35,7 @@ class ScanStandardProgramServiceImpl(
     @Qualifier("expoCircuitBreaker") private val expoCircuitBreaker: CircuitBreaker,
     @Qualifier("applicationCircuitBreaker") private val applicationCircuitBreaker: CircuitBreaker,
     private val expoPeriodValidator: ExpoPeriodValidator,
-    private val attendanceRepository: StandardProgramAttendanceRepository,
+    private val recordProgramAttendanceService: RecordProgramAttendanceService,
     private val clock: Clock,
 ) : ScanStandardProgramService {
     override fun scan(
@@ -58,9 +60,10 @@ class ScanStandardProgramServiceImpl(
 
         // 분 단위로 기록한다(v1과 같음)
         val now = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES)
-        if (attendanceRepository.insertEntryIfAbsent(programId, reqDto.participantId, LocalDate.now(clock), now) == 1) return
-        if (attendanceRepository.markLeaveIfPresent(programId, reqDto.participantId, now) == 1) return
-
-        throw ExpectedException(HttpStatus.BAD_REQUEST, "이미 프로그램을 퇴실한 유저입니다.")
+        when (recordProgramAttendanceService.record(ProgramType.STANDARD, programId, reqDto.participantId, LocalDate.now(clock), now)) {
+            ProgramAttendanceResult.ENTERED, ProgramAttendanceResult.LEFT -> Unit
+            ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, "일반 프로그램을 찾지 못 했습니다.")
+            ProgramAttendanceResult.ALREADY_LEFT -> throw ExpectedException(HttpStatus.BAD_REQUEST, "이미 프로그램을 퇴실한 유저입니다.")
+        }
     }
 }
