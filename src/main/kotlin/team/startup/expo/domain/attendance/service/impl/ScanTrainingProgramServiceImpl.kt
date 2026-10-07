@@ -58,9 +58,8 @@ class ScanTrainingProgramServiceImpl(
         // 분 단위로 기록한다(v1과 같음)
         val now = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES)
         when (recordProgramAttendanceService.record(ProgramType.TRAINING, programId, reqDto.traineeId, LocalDate.now(clock), now)) {
-            ProgramAttendanceResult.ENTERED, ProgramAttendanceResult.LEFT -> Unit
+            ProgramAttendanceResult.ENTERED, ProgramAttendanceResult.ALREADY_ENTERED -> Unit
             ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, "연수 프로그램을 찾지 못했습니다.")
-            ProgramAttendanceResult.ALREADY_LEFT -> throw ExpectedException(HttpStatus.BAD_REQUEST, "이미 프로그램을 퇴실한 유저입니다.")
         }
     }
 }

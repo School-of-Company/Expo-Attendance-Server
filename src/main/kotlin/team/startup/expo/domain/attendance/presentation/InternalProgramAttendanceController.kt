@@ -21,13 +21,13 @@ class InternalProgramAttendanceController(
     private val getProgramAttendancesService: GetProgramAttendancesService,
     private val deleteProgramAttendancesService: DeleteProgramAttendancesService,
 ) {
-    @Operation(summary = "일반 프로그램 출석 시간 조회", description = "프로그램 ID로 입·퇴실 시각(`HH:mm`)을 조회한다.")
+    @Operation(summary = "일반 프로그램 출석 시간 조회", description = "프로그램 ID로 입실 시각(`HH:mm`)을 조회한다. `leaveTime`은 항상 `null`이다.")
     @GetMapping("/standard/{programId}")
     fun getStandard(
         @PathVariable programId: Long,
     ): List<StandardProgramAttendanceResDto> = getProgramAttendancesService.getStandard(programId)
 
-    @Operation(summary = "연수 프로그램 출석 시간 조회", description = "프로그램 ID로 입·퇴실 시각(`HH:mm`)을 조회한다.")
+    @Operation(summary = "연수 프로그램 출석 시간 조회", description = "프로그램 ID로 입실 시각(`HH:mm`)을 조회한다. `leaveTime`은 항상 `null`이다.")
     @GetMapping("/training/{programId}")
     fun getTraining(
         @PathVariable programId: Long,

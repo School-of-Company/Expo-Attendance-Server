@@ -22,9 +22,9 @@ import java.time.LocalTime
 import java.time.temporal.ChronoUnit
 
 /**
- * v1 `ScanStandardProByQrCodeServiceImpl`의 일반 프로그램 출석. 첫 스캔은 입실, 두 번째는 퇴실을 기록하고
- * 퇴실한 뒤의 스캔은 400이다(v1은 이때 아무것도 하지 않았다). 다른 서비스를 부르는 동안 트랜잭션을 잡지
- * 않도록 이 서비스에는 `@Transactional`을 두지 않고, 기록은 조건부 SQL 한 번씩이라 동시 스캔에도 안전하다.
+ * v1 `ScanStandardProByQrCodeServiceImpl`의 일반 프로그램 출석. 첫 스캔은 입실을 기록하고, 이미 입실한 사람이
+ * 다시 찍어도 에러 없이 성공하며 아무것도 바꾸지 않는다(퇴실은 기록하지 않는다). 다른 서비스를 부르는 동안
+ * 트랜잭션을 잡지 않도록 이 서비스에는 `@Transactional`을 두지 않고, 기록은 조건부 SQL이라 동시 스캔에도 안전하다.
  */
 @Service
 class ScanStandardProgramServiceImpl(
@@ -61,9 +61,8 @@ class ScanStandardProgramServiceImpl(
         // 분 단위로 기록한다(v1과 같음)
         val now = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES)
         when (recordProgramAttendanceService.record(ProgramType.STANDARD, programId, reqDto.participantId, LocalDate.now(clock), now)) {
-            ProgramAttendanceResult.ENTERED, ProgramAttendanceResult.LEFT -> Unit
+            ProgramAttendanceResult.ENTERED, ProgramAttendanceResult.ALREADY_ENTERED -> Unit
             ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, "일반 프로그램을 찾지 못 했습니다.")
-            ProgramAttendanceResult.ALREADY_LEFT -> throw ExpectedException(HttpStatus.BAD_REQUEST, "이미 프로그램을 퇴실한 유저입니다.")
         }
     }
 }

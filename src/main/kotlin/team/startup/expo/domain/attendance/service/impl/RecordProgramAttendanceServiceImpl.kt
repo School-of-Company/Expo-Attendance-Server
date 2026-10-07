@@ -11,7 +11,7 @@ import team.startup.expo.domain.attendance.service.RecordProgramAttendanceServic
 import java.time.LocalDate
 import java.time.LocalTime
 
-/** 입실은 `INSERT ... ON CONFLICT DO NOTHING`, 퇴실은 `UPDATE ... WHERE leave_time IS NULL`이라 동시 스캔에도 한 번씩만 기록된다. */
+/** 입실은 `INSERT ... ON CONFLICT DO NOTHING`이라 동시 스캔에도 한 번만 기록된다. 퇴실은 기록하지 않는다. */
 @Service
 class RecordProgramAttendanceServiceImpl(
     private val deletedProgramRepository: DeletedProgramRepository,
@@ -35,13 +35,6 @@ class RecordProgramAttendanceServiceImpl(
                 ProgramType.STANDARD -> standardRepository.insertEntryIfAbsent(programId, personId, attendanceDate, time)
                 ProgramType.TRAINING -> trainingRepository.insertEntryIfAbsent(programId, personId, attendanceDate, time)
             }
-        if (entered == 1) return ProgramAttendanceResult.ENTERED
-
-        val left =
-            when (type) {
-                ProgramType.STANDARD -> standardRepository.markLeaveIfPresent(programId, personId, time)
-                ProgramType.TRAINING -> trainingRepository.markLeaveIfPresent(programId, personId, time)
-            }
-        return if (left == 1) ProgramAttendanceResult.LEFT else ProgramAttendanceResult.ALREADY_LEFT
+        return if (entered == 1) ProgramAttendanceResult.ENTERED else ProgramAttendanceResult.ALREADY_ENTERED
     }
 }
