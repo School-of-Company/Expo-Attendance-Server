@@ -15,4 +15,22 @@ interface UserClient {
     fun recordEntry(
         @RequestBody request: RecordEntryReqDto,
     ): RecordEntryResDto
+
+    /** 박람회 ID와 전화번호로 참가자 ID를 찾는다. 없으면 404다. */
+    @PostMapping("/internal/participants/resolve")
+    fun resolveParticipant(
+        @RequestBody request: ResolveParticipantReqDto,
+    ): ResolveParticipantResDto
+
+    /** 일반 참가자가 이 박람회에 모두 있는지 확인한다. 하나라도 없으면 404다. */
+    @PostMapping("/internal/standard-participants/names")
+    fun getStandardParticipantNames(
+        @RequestBody request: StandardParticipantNamesReqDto,
+    ): List<StandardParticipantNameResDto>
+
+    /** 연수자가 이 박람회에 모두 있는지 확인한다. 하나라도 없으면 404다. */
+    @PostMapping("/internal/trainees/names")
+    fun getTraineeNames(
+        @RequestBody request: TraineeNamesReqDto,
+    ): List<TraineeNameResDto>
 }

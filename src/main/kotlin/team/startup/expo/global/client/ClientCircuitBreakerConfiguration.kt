@@ -23,6 +23,9 @@ class ClientCircuitBreakerConfiguration {
     @Bean
     fun expoCircuitBreaker(): CircuitBreaker = circuitBreaker("expo")
 
+    @Bean
+    fun applicationCircuitBreaker(): CircuitBreaker = circuitBreaker("application")
+
     /** 최근 20번 중 10번 이상 호출되고 절반 이상 실패하면 10초 동안 열려 상대를 부르지 않고 바로 실패한다. */
     private fun circuitBreaker(name: String): CircuitBreaker =
         CircuitBreaker.of(

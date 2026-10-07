@@ -15,7 +15,7 @@ Attendance (참여) service of the Expo MSA. Kotlin 2.3 / Spring Boot 4.1, Gradl
 
 ## Auth
 
-- The gateway verifies the JWT and forwards only `X-User-Id`. Do not parse tokens or trust that header outside the gateway path; service-to-service calls bypass the gateway and need their own authentication (undecided).
+- The gateway verifies the JWT and forwards `X-User-Id` and, when the token has a role, `X-User-Role` (it strips any client-sent copies). Do not parse tokens or trust those headers outside the gateway path: admin-only routes check `X-User-Role` (`GatewayRoleAuthenticationFilter`), so the service must be reachable only through the gateway. Service-to-service calls bypass the gateway and use `X-Internal-Token` on `/internal/**`.
 - Never commit keys or secrets.
 
 ## Conventions

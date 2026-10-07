@@ -17,3 +17,15 @@ data class RecordEntryResDto(
     val occupation: String?,
     val school: String?,
 )
+
+/** 유저 서비스 `POST /internal/participants/resolve` 요청. */
+data class ResolveParticipantReqDto(
+    val expoId: String,
+    val phoneNumber: String,
+    val participationType: String,
+)
+
+data class ResolveParticipantResDto(
+    val participantId: Long,
+    val participationType: String,
+)

@@ -12,9 +12,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer
 
 /**
  * 실제 애플리케이션 컨텍스트를 PostgreSQL 컨테이너 위에서 띄운다. 같은 설정을 쓰는 테스트 클래스는
- * 컨텍스트와 컨테이너를 공유한다. 브로커와 다른 서비스는 띄우지 않는다.
+ * 컨텍스트와 컨테이너를 공유한다. 브로커와 다른 서비스는 띄우지 않으므로 아웃박스 릴레이는 끈다.
  */
-@SpringBootTest(properties = ["eureka.client.enabled=false"])
+@SpringBootTest(properties = ["eureka.client.enabled=false", "entry-events.relay.enabled=false"])
 @AutoConfigureMockMvc
 @Import(IntegrationTestSupport.ContainersConfig::class)
 abstract class IntegrationTestSupport {
@@ -29,6 +29,7 @@ abstract class IntegrationTestSupport {
         const val INTERNAL_TOKEN = "test-internal-token-0123456789abcdef"
         const val USER_INTERNAL_TOKEN = "test-user-internal-token-0123456789ab"
         const val EXPO_INTERNAL_TOKEN = "test-expo-internal-token-0123456789ab"
+        const val APPLICATION_INTERNAL_TOKEN = "test-application-internal-token-0123456789"
 
         @JvmStatic
         @DynamicPropertySource
@@ -36,6 +37,7 @@ abstract class IntegrationTestSupport {
             registry.add("internal.token") { INTERNAL_TOKEN }
             registry.add("clients.user.internal-token") { USER_INTERNAL_TOKEN }
             registry.add("clients.expo.internal-token") { EXPO_INTERNAL_TOKEN }
+            registry.add("clients.application.internal-token") { APPLICATION_INTERNAL_TOKEN }
         }
     }
 }
