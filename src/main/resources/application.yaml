@@ -22,6 +22,10 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+        # 브로커가 죽어 있어도 릴레이가 오래 매달리지 않게 한다(기본 60초)
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
 internal:
   token: ${INTERNAL_TOKEN}
 clients:

@@ -12,9 +12,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer
 
 /**
  * 실제 애플리케이션 컨텍스트를 PostgreSQL 컨테이너 위에서 띄운다. 같은 설정을 쓰는 테스트 클래스는
- * 컨텍스트와 컨테이너를 공유한다. 브로커와 다른 서비스는 띄우지 않는다.
+ * 컨텍스트와 컨테이너를 공유한다. 브로커와 다른 서비스는 띄우지 않으므로 아웃박스 릴레이는 끈다.
  */
-@SpringBootTest(properties = ["eureka.client.enabled=false"])
+@SpringBootTest(properties = ["eureka.client.enabled=false", "entry-events.relay.enabled=false"])
 @AutoConfigureMockMvc
 @Import(IntegrationTestSupport.ContainersConfig::class)
 abstract class IntegrationTestSupport {

@@ -17,6 +17,26 @@ interface EntryOutboxRepository : JpaRepository<EntryOutbox, Long> {
         attendanceDate: LocalDate,
     ): Boolean
 
+    /**
+     * 발행하지 않은 이벤트를 오래된 순서로 잠그고 읽는다. `SKIP LOCKED`라 인스턴스가 여럿이어도 같은 행을
+     * 동시에 발행하지 않는다. 트랜잭션 안에서 불러야 잠금이 유지된다.
+     */
+    @Query(
+        nativeQuery = true,
+        value = "SELECT * FROM tb_entry_outbox WHERE status = 'PENDING' ORDER BY created_at, id LIMIT :limit FOR UPDATE SKIP LOCKED",
+    )
+    fun findPendingForUpdate(
+        @Param("limit") limit: Int,
+    ): List<EntryOutbox>
+
+    /** 발행을 마치고 보관 기간이 지난 이벤트를 지운다. */
+    @Transactional
+    @Modifying
+    @Query(nativeQuery = true, value = "DELETE FROM tb_entry_outbox WHERE status = 'PUBLISHED' AND published_at < :cutoff")
+    fun deletePublishedBefore(
+        @Param("cutoff") cutoff: LocalDateTime,
+    ): Int
+
     /** 같은 날 같은 참가자의 행이 있으면 아무것도 하지 않는다. 반환값 1이면 새로 남긴 것이다. */
     @Transactional
     @Modifying
