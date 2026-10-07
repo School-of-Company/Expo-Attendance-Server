@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.startup.expo.domain.attendance.entity.EntryOutbox
 import team.startup.expo.domain.attendance.repository.EntryOutboxRepository
+import team.startup.expo.domain.qr.entity.QrCategory
 import team.startup.expo.domain.qr.entity.QrToken
 import team.startup.expo.domain.qr.repository.QrEntryRepository
 import team.startup.expo.domain.qr.repository.QrTokenRepository
@@ -39,7 +40,7 @@ class QrTokenApiTests : IntegrationTestSupport() {
                 .perform(
                     post("/qr-tokens/expo-issue")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{"count": 50}"""),
+                        .content("""{"count": 50, "category": "ELEMENTARY_STUDENT"}"""),
                 ).andExpect(status().isCreated)
                 .andExpect(jsonPath("$.tokens.length()").value(50))
                 .andReturn()
@@ -48,7 +49,7 @@ class QrTokenApiTests : IntegrationTestSupport() {
         val tokens = Regex("\"([A-Za-z0-9_-]{22})\"").findAll(response).map { it.groupValues[1] }.toList()
         tokens shouldHaveSize 50
         tokens.toSet() shouldHaveSize 50
-        qrTokenRepository.findAllById(tokens).map { it.category }.toSet() shouldBe setOf("STANDARD")
+        qrTokenRepository.findAllById(tokens).map { it.category }.toSet() shouldBe setOf(QrCategory.ELEMENTARY_STUDENT)
     }
 
     @Test
@@ -58,14 +59,26 @@ class QrTokenApiTests : IntegrationTestSupport() {
                 .perform(
                     post("/qr-tokens/expo-issue")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{"count": $count}"""),
+                        .content("""{"count": $count, "category": "GENERAL"}"""),
+                ).andExpect(status().isBadRequest)
+        }
+    }
+
+    @Test
+    fun `구분이 없거나 Form에 없는 값이면 400이다`() {
+        listOf("""{"count": 5}""", """{"count": 5, "category": "STANDARD"}""").forEach { body ->
+            mockMvc
+                .perform(
+                    post("/qr-tokens/expo-issue")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body),
                 ).andExpect(status().isBadRequest)
         }
     }
 
     @Test
     fun `첫 스캔은 입장을 기록하고 같은 날 두 번째 스캔은 400이다`() {
-        qrTokenRepository.save(QrToken(token = "scan-token-1", expoId = "expo-scan", category = "STANDARD"))
+        qrTokenRepository.save(QrToken(token = "scan-token-1", expoId = "expo-scan", category = QrCategory.GENERAL))
 
         mockMvc.perform(scan("expo-scan", "scan-token-1")).andExpect(status().isOk)
         mockMvc.perform(scan("expo-scan", "scan-token-1")).andExpect(status().isBadRequest)
@@ -75,7 +88,7 @@ class QrTokenApiTests : IntegrationTestSupport() {
 
     @Test
     fun `없는 토큰과 다른 박람회 토큰은 404이다`() {
-        qrTokenRepository.save(QrToken(token = "scan-token-2", expoId = "expo-scan", category = "STANDARD"))
+        qrTokenRepository.save(QrToken(token = "scan-token-2", expoId = "expo-scan", category = QrCategory.GENERAL))
 
         mockMvc.perform(scan("expo-scan", "unknown-token")).andExpect(status().isNotFound)
         mockMvc.perform(scan("expo-other", "scan-token-2")).andExpect(status().isNotFound)
@@ -84,8 +97,8 @@ class QrTokenApiTests : IntegrationTestSupport() {
 
     @Test
     fun `박람회 정리는 내부 토큰이 있어야 하고 토큰과 입장 기록과 아웃박스를 지운다`() {
-        qrTokenRepository.save(QrToken(token = "clean-token", expoId = "expo-clean", category = "STANDARD"))
-        qrTokenRepository.save(QrToken(token = "keep-token", expoId = "expo-keep", category = "STANDARD"))
+        qrTokenRepository.save(QrToken(token = "clean-token", expoId = "expo-clean", category = QrCategory.GENERAL))
+        qrTokenRepository.save(QrToken(token = "keep-token", expoId = "expo-keep", category = QrCategory.GENERAL))
         mockMvc.perform(scan("expo-clean", "clean-token")).andExpect(status().isOk)
         entryOutboxRepository.save(
             EntryOutbox(expoId = "expo-clean", participantId = 1, phoneNumber = "01012345678", attendanceDate = LocalDate.now()),

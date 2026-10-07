@@ -2,6 +2,8 @@ package team.startup.expo.domain.qr.entity
 
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.Index
 import jakarta.persistence.PostLoad
@@ -22,9 +24,9 @@ class QrToken(
     val token: String,
     @field:Column(name = "expo_id", nullable = false, length = 36)
     val expoId: String,
-    // Form-Server가 정의한 구분(enum) 값을 그대로 저장한다. 값 목록은 여기서 정하지 않는다.
+    @field:Enumerated(EnumType.STRING)
     @field:Column(nullable = false, length = 30)
-    val category: String,
+    val category: QrCategory,
     @field:Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
 ) : Persistable<String> {

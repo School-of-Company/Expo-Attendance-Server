@@ -11,6 +11,7 @@ import team.startup.expo.domain.attendance.entity.TrainingProgramAttendance
 import team.startup.expo.domain.attendance.repository.EntryOutboxRepository
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
+import team.startup.expo.domain.qr.entity.QrCategory
 import team.startup.expo.domain.qr.entity.QrToken
 import team.startup.expo.domain.qr.repository.QrEntryRepository
 import team.startup.expo.domain.qr.repository.QrTokenRepository
@@ -70,7 +71,7 @@ class AttendanceSchemaTests : IntegrationTestSupport() {
 
     @Test
     fun `종이 QR은 같은 날 한 번만 입장하고 다음 날은 다시 입장할 수 있다`() {
-        qrTokenRepository.save(QrToken(token = "token-daily", expoId = "expo-a", category = "ADULT"))
+        qrTokenRepository.save(QrToken(token = "token-daily", expoId = "expo-a", category = QrCategory.GENERAL))
         val now = LocalDateTime.now()
 
         qrEntryRepository.insertIfAbsent("token-daily", "expo-a", today, now) shouldBe 1
@@ -80,7 +81,7 @@ class AttendanceSchemaTests : IntegrationTestSupport() {
 
     @Test
     fun `없는 토큰이나 다른 박람회 토큰은 입장이 기록되지 않는다`() {
-        qrTokenRepository.save(QrToken(token = "token-other", expoId = "expo-a", category = "ADULT"))
+        qrTokenRepository.save(QrToken(token = "token-other", expoId = "expo-a", category = QrCategory.GENERAL))
         val now = LocalDateTime.now()
 
         qrEntryRepository.insertIfAbsent("unknown", "expo-a", today, now) shouldBe 0
@@ -89,7 +90,7 @@ class AttendanceSchemaTests : IntegrationTestSupport() {
 
     @Test
     fun `같은 토큰을 동시에 스캔해도 입장은 한 번만 기록된다`() {
-        qrTokenRepository.save(QrToken(token = "token-race", expoId = "expo-a", category = "ADULT"))
+        qrTokenRepository.save(QrToken(token = "token-race", expoId = "expo-a", category = QrCategory.GENERAL))
         val threads = 8
         val ready = CountDownLatch(threads)
         val start = CountDownLatch(1)
