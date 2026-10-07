@@ -1,4 +1,4 @@
-package team.startup.expo.domain.qr.entity
+package team.startup.expo.domain.attendance.entity
 
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -12,21 +12,24 @@ import java.time.LocalDateTime
 
 @Entity
 @Table(
-    name = "tb_qr_entry",
+    name = "tb_trainee_participation",
     uniqueConstraints = [
-        UniqueConstraint(name = "uk_qr_entry", columnNames = ["expo_id", "qr_token_id", "attendance_date"]),
+        UniqueConstraint(
+            name = "uk_trainee_participation",
+            columnNames = ["expo_id", "trainee_id", "attendance_date"],
+        ),
     ],
 )
-class QrEntry(
+class TraineeParticipation(
     @field:Id
     @field:GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
     @field:Column(name = "entry_time", nullable = false)
-    val entryTime: LocalDateTime = LocalDateTime.now(),
+    val entryTime: LocalDateTime,
     @field:Column(name = "attendance_date", nullable = false)
-    val attendanceDate: LocalDate = LocalDate.now(),
-    @field:Column(name = "qr_token_id", nullable = false)
-    val qrTokenId: Long,
+    val attendanceDate: LocalDate,
+    @field:Column(name = "trainee_id", nullable = false)
+    val traineeId: Long,
     @field:Column(name = "expo_id", nullable = false, length = 64)
     val expoId: String,
 )

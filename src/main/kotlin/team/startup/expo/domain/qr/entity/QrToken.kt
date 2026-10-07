@@ -9,7 +9,7 @@ import jakarta.persistence.Table
 import java.time.LocalDateTime
 
 @Entity
-@Table(name = "qr_token")
+@Table(name = "tb_qr_token")
 class QrToken(
     @field:Id
     @field:GeneratedValue(strategy = GenerationType.IDENTITY)
