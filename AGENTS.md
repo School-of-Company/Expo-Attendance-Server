@@ -11,7 +11,7 @@ Attendance (참여) service of the Expo MSA. Kotlin 2.3 / Spring Boot 4.1, Gradl
 ## Boundaries
 
 - Domains: `domain/{attendance,qr}`. Other services' data (expo, program, participant, survey) is referenced by ID only: no FK, no local entity. Reach them through Feign.
-- Entry is recorded once per QR/token. A second scan must be rejected, as `PreEnterScanQrCode` does in v1.
+- Entry is recorded once per QR/token per day. A second scan on the same day must be rejected (as `PreEnterScanQrCode` does in v1); the next day it is accepted again.
 
 ## Auth
 
