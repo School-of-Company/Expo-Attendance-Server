@@ -1,0 +1,12 @@
+name: "Todo"
+description: "해야 할 작업이 있나요?"
+body:
+  - type: textarea
+    attributes:
+      label: Describe
+      description: "[Description] 할 일의 설명을 작성해주세요."
+      placeholder: "종이 QR 토큰 발급 API 구현"
+  - type: textarea
+    attributes:
+      label: Additional
+      description: "[추가사항] 별도로 알려줘야 할 사항이나 추가사항을 작성해주세요."
