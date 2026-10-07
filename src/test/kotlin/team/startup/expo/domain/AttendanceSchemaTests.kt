@@ -4,12 +4,7 @@ import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.dao.DataIntegrityViolationException
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.postgresql.PostgreSQLContainer
 import team.startup.expo.domain.attendance.entity.EntryOutbox
 import team.startup.expo.domain.attendance.entity.StandardProgramAttendance
 import team.startup.expo.domain.attendance.entity.TrainingProgramAttendance
@@ -19,6 +14,7 @@ import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceR
 import team.startup.expo.domain.qr.entity.QrToken
 import team.startup.expo.domain.qr.repository.QrEntryRepository
 import team.startup.expo.domain.qr.repository.QrTokenRepository
+import team.startup.expo.support.IntegrationTestSupport
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -26,9 +22,7 @@ import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 
-@SpringBootTest(properties = ["eureka.client.enabled=false"])
-@Testcontainers
-class AttendanceSchemaTests {
+class AttendanceSchemaTests : IntegrationTestSupport() {
     @Autowired
     lateinit var standardAttendanceRepository: StandardProgramAttendanceRepository
 
@@ -150,11 +144,4 @@ class AttendanceSchemaTests {
         phoneNumber = "01012345678",
         attendanceDate = today,
     )
-
-    companion object {
-        @Container
-        @ServiceConnection
-        @JvmStatic
-        val postgres = PostgreSQLContainer("postgres:17-alpine")
-    }
 }
