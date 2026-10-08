@@ -22,7 +22,7 @@ Verified against the other services' `develop` code. Change a contract by openin
 | Service | Call | Used for |
 |---|---|---|
 | User | `POST /internal/entries` — STANDARD: `{expoId, participationType, participantId, code}` or legacy `{phoneNumber}`; TRAINEE: `{phoneNumber}` → `{id, name, phoneNumber?, notificationPhoneNumber?, personalInformationStatus, participationType, occupation?, school?}`; 404 unknown/wrong code, 409 already entered today | entry scan |
-| User | `POST /internal/participants/resolve`, `POST /internal/standard-participants/names`, `POST /internal/trainees/names` | event recovery, program scan |
+| User | `POST /internal/participants/resolve`, `POST /internal/standard-participants/details` → `[{participantId, name, phoneNumber?, personalInformationStatus, notificationPhoneNumber?}]` (404 if any id is unknown), `POST /internal/standard-participants/names`, `POST /internal/trainees/names` | event recovery (details; `notificationPhoneNumber` is not sent yet, so a companion without a number cannot be recovered), program scan |
 | Expo | `GET /internal/expo/{expoId}`, `GET /internal/expo/{expoId}/standard-programs/{programId}`, `POST /internal/expo/{expoId}/training-programs/batch` | period and program checks |
 | Application | `GET /internal/program-applications/standard/{programId}/participants/{id}`, `.../training/{programId}/trainees/{id}` → `{applied}` | program scan |
 

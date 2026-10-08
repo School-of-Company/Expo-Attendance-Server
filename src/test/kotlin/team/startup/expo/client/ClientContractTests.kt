@@ -21,6 +21,8 @@ import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.ResolveParticipantReqDto
 import team.startup.expo.global.client.user.ResolveParticipantResDto
+import team.startup.expo.global.client.user.StandardParticipantBriefResDto
+import team.startup.expo.global.client.user.StandardParticipantBriefsReqDto
 import team.startup.expo.global.client.user.StandardParticipantNameResDto
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.TraineeNameResDto
@@ -180,6 +182,32 @@ class ClientContractTests : IntegrationTestSupport() {
         received[0].let { it.method to it.path } shouldBe ("POST" to "/internal/participants/resolve")
         received[0].token shouldBe USER_INTERNAL_TOKEN
         received[0].body.tree() shouldBe """{"expoId":"expo-1","phoneNumber":"01012345678","participationType":"STANDARD"}""".tree()
+    }
+
+    @Test
+    fun `유저 서비스 참가자 요약 조회는 본문을 맞추고 번호 없는 동행자와 문자 수신 번호 유무를 모두 읽는다`() {
+        respond(
+            "/internal/standard-participants/details",
+            """[{"participantId":1,"name":"대표","phoneNumber":"01012345678","personalInformationStatus":true,"extra":1},""" +
+                """{"participantId":2,"name":"동행","personalInformationStatus":true,"notificationPhoneNumber":"01012345678"}]""",
+        )
+
+        userClient.getStandardParticipantBriefs(StandardParticipantBriefsReqDto("expo-1", listOf(1, 2))) shouldBe
+            listOf(
+                StandardParticipantBriefResDto(1, "대표", "01012345678", true, null),
+                StandardParticipantBriefResDto(2, "동행", null, true, "01012345678"),
+            )
+
+        received[0].let { it.method to it.path } shouldBe ("POST" to "/internal/standard-participants/details")
+        received[0].token shouldBe USER_INTERNAL_TOKEN
+        received[0].body.tree() shouldBe """{"expoId":"expo-1","participantIds":[1,2]}""".tree()
+
+        notFoundPaths += "/internal/standard-participants/details"
+        assertThrows<FeignException.NotFound> {
+            userClient.getStandardParticipantBriefs(
+                StandardParticipantBriefsReqDto("expo-1", listOf(9)),
+            )
+        }
     }
 
     @Test

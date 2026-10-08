@@ -33,4 +33,10 @@ interface UserClient {
     fun getTraineeNames(
         @RequestBody request: TraineeNamesReqDto,
     ): List<TraineeNameResDto>
+
+    /** 일반 참가자 요약(이름, 번호)을 조회한다. 없는 id나 다른 박람회의 참가자가 있으면 404다. */
+    @PostMapping("/internal/standard-participants/details")
+    fun getStandardParticipantBriefs(
+        @RequestBody request: StandardParticipantBriefsReqDto,
+    ): List<StandardParticipantBriefResDto>
 }
