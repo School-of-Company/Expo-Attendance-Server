@@ -24,6 +24,8 @@ import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.ResolveParticipantReqDto
 import team.startup.expo.global.client.user.ResolveParticipantResDto
+import team.startup.expo.global.client.user.StandardParticipantBriefResDto
+import team.startup.expo.global.client.user.StandardParticipantBriefsReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
@@ -138,6 +140,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
 
         entryThrows("expo-dup", 409)
         resolveReturns("expo-dup", ResolveParticipantResDto(4203, "STANDARD"))
+        briefsReturns("expo-dup", 4203, phone = "01012345678")
         mockMvc.perform(scan("expo-dup", "ROLE_STANDARD", "01012345678")).andExpect(status().isBadRequest)
 
         entryOutboxRepository.findAll().count { it.expoId == "expo-dup" && it.participantId == 4203L } shouldBe 1
@@ -147,10 +150,67 @@ class ScanEntryApiTests : IntegrationTestSupport() {
     fun `이벤트 기록이 빠진 채 이미 입장한 참가자는 다시 찍으면 이벤트가 만들어진다`() {
         entryThrows("expo-recover", 409)
         resolveReturns("expo-recover", ResolveParticipantResDto(4204, "STANDARD"))
+        briefsReturns("expo-recover", 4204, phone = "01012345678")
 
         mockMvc.perform(scan("expo-recover", "ROLE_STANDARD", "01012345678")).andExpect(status().isBadRequest)
 
         entryOutboxRepository.existsByExpoIdAndParticipantIdAndAttendanceDate("expo-recover", 4204, today) shouldBe true
+    }
+
+    @Test
+    fun `복구 이벤트의 번호는 요청 원문이 아니라 유저 서비스 기준 번호다`() {
+        entryThrows("expo-recover-canon", 409, phone = "010-1234-5678")
+        resolveReturns("expo-recover-canon", ResolveParticipantResDto(4210, "STANDARD"), phone = "010-1234-5678")
+        briefsReturns("expo-recover-canon", 4210, phone = "01012345678")
+
+        mockMvc.perform(scan("expo-recover-canon", "ROLE_STANDARD", "010-1234-5678")).andExpect(status().isBadRequest)
+
+        entryOutboxRepository
+            .findAll()
+            .single { it.expoId == "expo-recover-canon" && it.participantId == 4210L }
+            .phoneNumber shouldBe "01012345678"
+    }
+
+    @Test
+    fun `참가자 ID와 코드로 다시 찍어도 이벤트가 복구되고 동행자는 대표자 번호로 보낸다`() {
+        val code = "codeRRRRRRRRRRRRRRRRRR"
+        doThrow(feignException(409))
+            .`when`(userClient)
+            .recordEntry(RecordEntryReqDto("expo-recover-id", "STANDARD", participantId = 5101, code = code))
+        briefsReturns("expo-recover-id", 5101, phone = null, notification = "01077776666")
+
+        mockMvc.perform(scanById("expo-recover-id", 5101, code)).andExpect(status().isBadRequest)
+
+        entryOutboxRepository
+            .findAll()
+            .single { it.expoId == "expo-recover-id" && it.participantId == 5101L }
+            .phoneNumber shouldBe "01077776666"
+    }
+
+    @Test
+    fun `문자를 받을 번호가 없으면 복구하지 않고 400으로 끝난다`() {
+        val code = "codeSSSSSSSSSSSSSSSSSS"
+        doThrow(feignException(409))
+            .`when`(userClient)
+            .recordEntry(RecordEntryReqDto("expo-recover-none", "STANDARD", participantId = 5102, code = code))
+        briefsReturns("expo-recover-none", 5102, phone = null)
+
+        mockMvc.perform(scanById("expo-recover-none", 5102, code)).andExpect(status().isBadRequest)
+
+        entryOutboxRepository.existsByExpoIdAndParticipantIdAndAttendanceDate("expo-recover-none", 5102, today) shouldBe false
+    }
+
+    @Test
+    fun `참가자 요약 조회가 실패하면 복구하지 못하므로 503이다`() {
+        val code = "codeTTTTTTTTTTTTTTTTTT"
+        doThrow(feignException(409))
+            .`when`(userClient)
+            .recordEntry(RecordEntryReqDto("expo-recover-brief", "STANDARD", participantId = 5103, code = code))
+        doThrow(feignException(500))
+            .`when`(userClient)
+            .getStandardParticipantBriefs(StandardParticipantBriefsReqDto("expo-recover-brief", listOf(5103)))
+
+        mockMvc.perform(scanById("expo-recover-brief", 5103, code)).andExpect(status().isServiceUnavailable)
     }
 
     @Test
@@ -163,6 +223,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
         val longPhone = "0101234567890123456"
         entryThrows("expo-recover-fail", 409, phone = longPhone)
         resolveReturns("expo-recover-fail", ResolveParticipantResDto(4300, "STANDARD"), phone = longPhone)
+        briefsReturns("expo-recover-fail", 4300, phone = longPhone)
         mockMvc
             .perform(scan("expo-recover-fail", "ROLE_STANDARD", longPhone))
             .andExpect(status().isServiceUnavailable)
@@ -182,6 +243,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
         // 이미 입장한 뒤의 복구 경로도 같은 저장 경로라 이벤트를 만들지 않는다
         entryThrows("expo-deleted", 409)
         resolveReturns("expo-deleted", ResolveParticipantResDto(4401, "STANDARD"))
+        briefsReturns("expo-deleted", 4401, phone = "01012345678")
         mockMvc.perform(scan("expo-deleted", "ROLE_STANDARD", "01012345678")).andExpect(status().isBadRequest)
         entryOutboxRepository.existsByExpoIdAndParticipantIdAndAttendanceDate("expo-deleted", 4401, today) shouldBe false
     }
@@ -238,7 +300,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `코드가 틀리거나 참가자가 없으면 404이고 이미 입장했으면 복구 없이 400이다`() {
+    fun `코드가 틀리거나 참가자가 없으면 404이고 이미 입장했으면 400이다`() {
         doThrow(feignException(404))
             .`when`(userClient)
             .recordEntry(RecordEntryReqDto("expo-i4", "STANDARD", participantId = 5004, code = "wrongWrongWrongWrong"))
@@ -247,7 +309,8 @@ class ScanEntryApiTests : IntegrationTestSupport() {
             .andExpect(status().isNotFound)
             .andExpect(jsonPath("$.message").value("행사 참가자를 찾지 못 했습니다."))
 
-        // 참가자 ID와 코드로는 문자를 받을 번호를 알 수 없어 이벤트 복구를 시도하지 않는다(resolve 호출 없음)
+        // 요약 조회가 번호를 주지 않으면(스텁 없음) 복구하지 않고 400으로 끝난다
+        briefsReturns("expo-i5", 5005, phone = null)
         doThrow(feignException(409))
             .`when`(userClient)
             .recordEntry(RecordEntryReqDto("expo-i5", "STANDARD", participantId = 5005, code = "codeEEEEEEEEEEEEEEEEEE"))
@@ -255,10 +318,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
             .perform(scanById("expo-i5", 5005, "codeEEEEEEEEEEEEEEEEEE"))
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.message").value("이미 박람회에 입장한 유저입니다."))
-        org.mockito.Mockito
-            .mockingDetails(userClient)
-            .invocations
-            .none { it.method.name == "resolveParticipant" } shouldBe true
+        entryOutboxRepository.existsByExpoIdAndParticipantIdAndAttendanceDate("expo-i5", 5005, today) shouldBe false
     }
 
     @Test
@@ -298,6 +358,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
 
         entryThrows("expo-msg", 409)
         resolveReturns("expo-msg", ResolveParticipantResDto(4299, "STANDARD"))
+        briefsReturns("expo-msg", 4299, phone = "01012345678")
         mockMvc
             .perform(scan("expo-msg", "ROLE_STANDARD", "01012345678"))
             .andExpect(jsonPath("$.message").value("이미 박람회에 입장한 유저입니다."))
@@ -390,6 +451,17 @@ class ScanEntryApiTests : IntegrationTestSupport() {
         phone: String = "01012345678",
     ) {
         doReturn(response).`when`(userClient).resolveParticipant(ResolveParticipantReqDto(expoId, phone, type))
+    }
+
+    private fun briefsReturns(
+        expoId: String,
+        participantId: Long,
+        phone: String?,
+        notification: String? = null,
+    ) {
+        doReturn(listOf(StandardParticipantBriefResDto(participantId, "홍길동", phone, true, notification)))
+            .`when`(userClient)
+            .getStandardParticipantBriefs(StandardParticipantBriefsReqDto(expoId, listOf(participantId)))
     }
 
     private fun periodReturns(response: ExpoPeriodResDto) {

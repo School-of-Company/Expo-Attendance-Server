@@ -17,6 +17,7 @@ import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.ResolveParticipantReqDto
+import team.startup.expo.global.client.user.StandardParticipantBriefsReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.exception.ExpectedException
 import tools.jackson.databind.ObjectMapper
@@ -115,10 +116,7 @@ class ScanEntryServiceImpl(
             )
         } catch (_: FeignException.Conflict) {
             // 입장은 기록됐는데 이벤트 기록이 빠졌을 수 있다. 같은 QR을 다시 찍으면 이벤트가 만들어지게 한다.
-            // 참가자 ID와 코드로 온 요청은 문자를 받을 번호를 알 수 없어서(409에 정보가 없음) 복구하지 않는다.
-            if (reqDto.authority == EntryAuthority.ROLE_STANDARD && request.phoneNumber != null) {
-                recoverEntryEvent(request, request.phoneNumber, today)
-            }
+            if (reqDto.authority == EntryAuthority.ROLE_STANDARD) recoverEntryEvent(expoId, request, today)
             throw ExpectedException(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.")
         } catch (e: Exception) {
             throw unavailable("유저", e)
@@ -126,31 +124,62 @@ class ScanEntryServiceImpl(
     }
 
     /**
-     * 입장은 기록됐는데 이벤트가 빠진 상태에서 다시 스캔한 경우다. 복구가 끝났거나 이벤트가 이미 있을 때만 호출자가
-     * "이미 입장"(400)을 받는다. 조회나 저장이 실패하면 복구가 끝나지 않았으므로 재시도할 수 있게 503으로 알린다.
+     * 입장은 기록됐는데 이벤트가 빠진 상태에서 다시 스캔한 경우다. 참가자 ID(요청에 없으면 전화번호로 조회)로 유저 서비스에서
+     * 문자를 받을 번호를 다시 읽어 이벤트를 만든다. 요청에 들어온 원문 번호가 아니라 유저 서비스 기준 값을 써서, 정상 경로가 남긴
+     * 이벤트와 같은 번호 문자열로 하루 한 통 규칙이 지켜진다.
+     *
+     * 복구가 끝났거나 이벤트가 이미 있을 때만 호출자가 "이미 입장"(400)을 받는다. 조회나 저장이 실패하면 복구가 끝나지 않았으므로
+     * 재시도할 수 있게 503으로 알린다. 문자를 받을 번호가 없으면(번호 없는 동행자, 유저 서비스가 대표자 번호를 내려주기 전) 복구할
+     * 수 없어 이벤트 없이 400으로 끝난다.
      */
     private fun recoverEntryEvent(
+        expoId: String,
         request: RecordEntryReqDto,
-        phoneNumber: String,
         today: LocalDate,
     ) {
-        val participant =
+        val participantId = request.participantId ?: resolveParticipantId(expoId, request)
+        val brief =
             try {
-                userCircuitBreaker.executeSupplier {
-                    userClient.resolveParticipant(ResolveParticipantReqDto(request.expoId, phoneNumber, request.participationType))
-                }
+                userCircuitBreaker
+                    .executeSupplier {
+                        userClient.getStandardParticipantBriefs(
+                            StandardParticipantBriefsReqDto(expoId, listOf(participantId)),
+                        )
+                    }.first()
             } catch (e: Exception) {
                 throw unavailable("유저", e)
             }
 
+        val notificationPhone = brief.notificationPhoneNumber ?: brief.phoneNumber
+        if (notificationPhone == null) {
+            logger.info("입장 이벤트를 복구하지 못합니다(문자를 받을 번호 없음): participantId={}", participantId)
+            return
+        }
+
         try {
-            saveEntryEvent(request.expoId, participant.participantId, phoneNumber, today)
+            saveEntryEvent(expoId, participantId, notificationPhone, today)
         } catch (e: Exception) {
             // 전화번호가 들어 있는 값은 로그에 남기지 않는다
-            logger.warn("입장 이벤트 복구 저장 실패: expoId={}, 원인={}", request.expoId, e.javaClass.simpleName)
+            logger.warn("입장 이벤트 복구 저장 실패: expoId={}, 원인={}", expoId, e.javaClass.simpleName)
             throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "입장 이벤트를 기록하지 못했습니다. 잠시 후 다시 시도해 주세요.")
         }
     }
+
+    /** 전화번호로 온 요청의 참가자 ID를 찾는다. 번호는 요청에 있어야 한다(`checkIdentifier`가 보장). */
+    private fun resolveParticipantId(
+        expoId: String,
+        request: RecordEntryReqDto,
+    ): Long =
+        try {
+            userCircuitBreaker
+                .executeSupplier {
+                    userClient.resolveParticipant(
+                        ResolveParticipantReqDto(expoId, requireNotNull(request.phoneNumber), request.participationType),
+                    )
+                }.participantId
+        } catch (e: Exception) {
+            throw unavailable("유저", e)
+        }
 
     /** 같은 날 같은 번호의 이벤트는 한 번만 남는다(번호 하나로 설문 문자는 하루 한 통). */
     private fun saveEntryEvent(
