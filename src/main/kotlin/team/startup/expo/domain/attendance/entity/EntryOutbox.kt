@@ -51,4 +51,10 @@ class EntryOutbox(
         this.status = OutboxStatus.PUBLISHED
         this.publishedAt = publishedAt
     }
+
+    /** `publishedAt`은 "처리를 마친 시각"이라 포기한 이벤트도 여기에 남겨 보관 기간 계산에 쓴다. */
+    fun markFailed(failedAt: LocalDateTime) {
+        this.status = OutboxStatus.FAILED
+        this.publishedAt = failedAt
+    }
 }
