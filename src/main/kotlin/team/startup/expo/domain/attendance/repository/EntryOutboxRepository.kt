@@ -29,10 +29,10 @@ interface EntryOutboxRepository : JpaRepository<EntryOutbox, Long> {
         @Param("limit") limit: Int,
     ): List<EntryOutbox>
 
-    /** 발행을 마치고 보관 기간이 지난 이벤트를 지운다. */
+    /** 발행을 마치거나 포기하고 보관 기간이 지난 이벤트를 지운다. 발행 대기 중인 이벤트는 오래돼도 지우지 않는다. */
     @Transactional
     @Modifying
-    @Query(nativeQuery = true, value = "DELETE FROM tb_entry_outbox WHERE status = 'PUBLISHED' AND published_at < :cutoff")
+    @Query(nativeQuery = true, value = "DELETE FROM tb_entry_outbox WHERE status IN ('PUBLISHED', 'FAILED') AND published_at < :cutoff")
     fun deletePublishedBefore(
         @Param("cutoff") cutoff: LocalDateTime,
     ): Int
