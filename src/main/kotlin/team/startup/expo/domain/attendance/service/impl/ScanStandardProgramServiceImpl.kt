@@ -15,6 +15,8 @@ import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.UserClient
+import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
+import team.startup.expo.global.config.ProgramAttendanceProperties
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDate
@@ -36,15 +38,33 @@ class ScanStandardProgramServiceImpl(
     @Qualifier("applicationCircuitBreaker") private val applicationCircuitBreaker: CircuitBreaker,
     private val expoPeriodValidator: ExpoPeriodValidator,
     private val recordProgramAttendanceService: RecordProgramAttendanceService,
+    private val properties: ProgramAttendanceProperties,
     private val clock: Clock,
 ) : ScanStandardProgramService {
+    /**
+     * `code`가 있으면 참가자 ID와 함께 유저 서비스에서 확인한다(없는 참가자, 다른 박람회, 틀린 code는 같은 404).
+     * 없으면 설정에 따라 거부하거나 이전 앱을 위해 참가자 ID만으로 존재만 확인한다.
+     */
+    private fun checkParticipant(reqDto: ScanStandardProgramReqDto) {
+        val notFound = ExpectedException(HttpStatus.NOT_FOUND, "행사 참가자를 찾지 못 했습니다.")
+        val code = reqDto.code
+        if (!code.isNullOrBlank()) {
+            userCircuitBreaker.callService("유저", notFound) {
+                userClient.verifyStandardParticipant(VerifyStandardParticipantReqDto(reqDto.expoId, reqDto.participantId, code))
+            }
+            return
+        }
+        if (properties.requireCode) throw ExpectedException(HttpStatus.BAD_REQUEST, "참가자 코드가 필요합니다.")
+        userCircuitBreaker.callService("유저", notFound) {
+            userClient.getStandardParticipantNames(StandardParticipantNamesReqDto(reqDto.expoId, listOf(reqDto.participantId)))
+        }
+    }
+
     override fun scan(
         programId: Long,
         reqDto: ScanStandardProgramReqDto,
     ) {
-        userCircuitBreaker.callService("유저", ExpectedException(HttpStatus.NOT_FOUND, "행사 참가자를 찾지 못 했습니다.")) {
-            userClient.getStandardParticipantNames(StandardParticipantNamesReqDto(reqDto.expoId, listOf(reqDto.participantId)))
-        }
+        checkParticipant(reqDto)
         expoCircuitBreaker.callService("박람회", ExpectedException(HttpStatus.NOT_FOUND, "일반 프로그램을 찾지 못 했습니다.")) {
             expoClient.getStandardProgram(reqDto.expoId, programId)
         }

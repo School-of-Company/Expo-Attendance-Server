@@ -12,6 +12,7 @@ Attendance (참여) service of the Expo MSA. Kotlin 2.3 / Spring Boot 4.1, Gradl
 
 - Domains: `domain/{attendance,qr}`. Other services' data (expo, program, participant, survey) is referenced by ID only: no FK, no local entity. Reach them through Feign.
 - Entry is recorded once per QR/token per day. A second scan on the same day must be rejected (as `PreEnterScanQrCode` does in v1); the next day it is accepted again.
+- Standard program scan (`PATCH /attendance/standard/{programId}`) takes an optional `code`: when present it is verified (wrong code = same 404 as an unknown participant); when absent it is accepted by participant ID only unless `program-attendance.require-code` is on (turn it on once the client sends `code`).
 - A pre-registration QR (`participantId` + `code`) whose participant has a recorded session is accepted only from `preregister-entry.lead-minutes` (default 30) before the session starts until it ends; a cancelled one is rejected. Participants without a record (on-site, trainees, paper QR, phone-number scans) are not checked.
 
 ## Service contracts
@@ -23,7 +24,7 @@ Verified against the other services' `develop` code. Change a contract by openin
 | Service | Call | Used for |
 |---|---|---|
 | User | `POST /internal/entries` — STANDARD: `{expoId, participationType, participantId, code}` or legacy `{phoneNumber}`; TRAINEE: `{phoneNumber}` → `{id, name, phoneNumber?, notificationPhoneNumber?, personalInformationStatus, participationType, occupation?, school?}`; 404 unknown/wrong code, 409 already entered today | entry scan |
-| User | `POST /internal/participants/resolve`, `POST /internal/standard-participants/verify` `{expoId, participantId, code}` → 204 (records nothing; 404 for unknown participant, other expo or wrong code, indistinguishable), `POST /internal/standard-participants/details` → `[{participantId, name, phoneNumber?, personalInformationStatus, notificationPhoneNumber?}]` (404 if any id is unknown), `POST /internal/standard-participants/names`, `POST /internal/trainees/names` | event recovery (details; `notificationPhoneNumber` is not sent yet, so a companion without a number cannot be recovered), program scan |
+| User | `POST /internal/participants/resolve`, `POST /internal/standard-participants/verify` `{expoId, participantId, code}` → 204 (records nothing; 404 for unknown participant, other expo or wrong code, indistinguishable), `POST /internal/standard-participants/details` → `[{participantId, name, phoneNumber?, personalInformationStatus, notificationPhoneNumber?}]` (404 if any id is unknown), `POST /internal/standard-participants/names`, `POST /internal/trainees/names` | entry scan before the session check, standard program scan with `code`, event recovery (details; `notificationPhoneNumber` is not sent yet, so a companion without a number cannot be recovered), program scan |
 | Expo | `GET /internal/expo/{expoId}`, `GET /internal/expo/{expoId}/standard-programs/{programId}`, `POST /internal/expo/{expoId}/training-programs/batch`, `GET /internal/expo/{expoId}/preregister-sessions/{sessionId}` → `{id, startedAt, endedAt}` (UTC instants; 404 unknown, 409 expo being deleted) | period, program and session-time checks |
 | Application | `GET /internal/program-applications/standard/{programId}/participants/{id}`, `.../training/{programId}/trainees/{id}` → `{applied}` | program scan |
 

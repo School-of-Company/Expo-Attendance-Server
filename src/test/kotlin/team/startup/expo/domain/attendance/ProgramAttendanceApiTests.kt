@@ -8,6 +8,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.doReturn
 import org.mockito.Mockito.doThrow
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
 import org.springframework.test.context.bean.override.mockito.MockitoBean
@@ -34,6 +36,7 @@ import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.TraineeNameResDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
+import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
 import java.time.LocalDate
@@ -92,6 +95,53 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
         again.leaveTime shouldBe null
         again.entryTime shouldBe entered.entryTime
         standardRepository.findAllByStandardProgramId(1001).size shouldBe 1
+    }
+
+    @Test
+    fun `code가 있으면 유저 서비스에서 확인하고 맞으면 입실을 기록한다`() {
+        standardAllowed("expo-code", 1201, 601)
+
+        mockMvc
+            .perform(rawStandard(1201, """{"expoId": "expo-code", "participantId": 601, "code": "$CODE"}"""))
+            .andExpect(status().isOk)
+
+        standardRepository.findAllByStandardProgramId(1201).map { it.participantId } shouldBe listOf(601L)
+        verify(userClient).verifyStandardParticipant(VerifyStandardParticipantReqDto("expo-code", 601, CODE))
+        verify(userClient, never()).getStandardParticipantNames(StandardParticipantNamesReqDto("expo-code", listOf(601)))
+    }
+
+    @Test
+    fun `code가 틀리면 참가자가 없을 때와 같은 404이고 기록하지 않는다`() {
+        standardAllowed("expo-code2", 1202, 602)
+        doThrow(feignException(404))
+            .`when`(userClient)
+            .verifyStandardParticipant(VerifyStandardParticipantReqDto("expo-code2", 602, "wrongWrongWrongWrongWr"))
+
+        mockMvc
+            .perform(rawStandard(1202, """{"expoId": "expo-code2", "participantId": 602, "code": "wrongWrongWrongWrongWr"}"""))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.message").value("행사 참가자를 찾지 못 했습니다."))
+
+        standardRepository.findAllByStandardProgramId(1202).isEmpty() shouldBe true
+    }
+
+    @Test
+    fun `code 확인이 실패하면 503이다`() {
+        standardAllowed("expo-code3", 1203, 603)
+        doThrow(feignException(500)).`when`(userClient).verifyStandardParticipant(VerifyStandardParticipantReqDto("expo-code3", 603, CODE))
+
+        mockMvc
+            .perform(rawStandard(1203, """{"expoId": "expo-code3", "participantId": 603, "code": "$CODE"}"""))
+            .andExpect(status().isServiceUnavailable)
+    }
+
+    @Test
+    fun `code가 없는 이전 앱 요청은 설정이 꺼져 있으면 참가자 ID만으로 받는다`() {
+        standardAllowed("expo-nocode", 1204, 604)
+
+        mockMvc.perform(scanStandard(1204, "expo-nocode", 604)).andExpect(status().isOk)
+
+        verify(userClient, never()).verifyStandardParticipant(VerifyStandardParticipantReqDto("expo-nocode", 604, CODE))
     }
 
     @Test
@@ -361,4 +411,8 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
         programId: Long,
         body: String,
     ) = patch("/attendance/training/$programId").contentType(MediaType.APPLICATION_JSON).content(body)
+
+    private companion object {
+        const val CODE = "codeCCCCCCCCCCCCCCCCCC"
+    }
 }
