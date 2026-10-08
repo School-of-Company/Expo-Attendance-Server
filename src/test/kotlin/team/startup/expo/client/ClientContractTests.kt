@@ -13,16 +13,23 @@ import org.springframework.test.context.DynamicPropertySource
 import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.application.ProgramApplicationResDto
 import team.startup.expo.global.client.expo.ExpoClient
+import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.expo.StandardProgramResDto
 import team.startup.expo.global.client.expo.TrainingProgramBatchReqDto
 import team.startup.expo.global.client.expo.TrainingProgramResDto
+import team.startup.expo.global.client.user.RecordEntryReqDto
+import team.startup.expo.global.client.user.RecordEntryResDto
+import team.startup.expo.global.client.user.ResolveParticipantReqDto
+import team.startup.expo.global.client.user.ResolveParticipantResDto
 import team.startup.expo.global.client.user.StandardParticipantNameResDto
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.TraineeNameResDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.IntegrationTestSupport
+import tools.jackson.databind.json.JsonMapper
 import java.net.InetSocketAddress
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -50,6 +57,7 @@ class ClientContractTests : IntegrationTestSupport() {
     fun clear() {
         received.clear()
         notFoundPaths.clear()
+        forcedStatuses.clear()
     }
 
     @Test
@@ -103,6 +111,92 @@ class ClientContractTests : IntegrationTestSupport() {
         assertThrows<FeignException.NotFound> { userClient.getTraineeNames(TraineeNamesReqDto("expo-1", listOf(3))) }
     }
 
+    @Test
+    fun `유저 서비스 입장 기록은 전화번호 방식의 본문과 응답을 맞추고 빈 필드를 보내지 않는다`() {
+        respond(
+            "/internal/entries",
+            """{"id":42,"name":"홍길동","phoneNumber":"01012345678","notificationPhoneNumber":"01012345678",""" +
+                """"personalInformationStatus":true,"participationType":"STANDARD","occupation":"TEACHER","school":"광주초"}""",
+        )
+
+        userClient.recordEntry(RecordEntryReqDto("expo-1", "STANDARD", phoneNumber = "01012345678")) shouldBe
+            RecordEntryResDto(42, "홍길동", "01012345678", true, "STANDARD", "TEACHER", "광주초", "01012345678")
+
+        received[0].let { it.method to it.path } shouldBe ("POST" to "/internal/entries")
+        received[0].token shouldBe USER_INTERNAL_TOKEN
+        // `participantId`와 `code`는 `null`이라 본문에서 빠져야 한다(유저 서비스는 이 값이 있으면 그 경로를 우선한다)
+        received[0].body.tree() shouldBe
+            """{"expoId":"expo-1","participationType":"STANDARD","phoneNumber":"01012345678"}""".tree()
+    }
+
+    @Test
+    fun `유저 서비스 입장 기록은 참가자 ID와 코드 방식의 본문을 맞추고 번호 없는 동행자 응답을 읽는다`() {
+        respond(
+            "/internal/entries",
+            """{"id":5001,"name":"동행자","phoneNumber":null,"notificationPhoneNumber":"01077776666",""" +
+                """"personalInformationStatus":true,"participationType":"STANDARD","occupation":"ELEMENTARY_STUDENT","school":null}""",
+        )
+
+        userClient.recordEntry(RecordEntryReqDto("expo-1", "STANDARD", participantId = 5001, code = "abcdefghijklmnopqrstuv")) shouldBe
+            RecordEntryResDto(5001, "동행자", null, true, "STANDARD", "ELEMENTARY_STUDENT", null, "01077776666")
+
+        // 전화번호는 null이라 보내지 않고 ID와 코드만 보낸다
+        received[0].body.tree() shouldBe
+            """{"expoId":"expo-1","participationType":"STANDARD","participantId":5001,"code":"abcdefghijklmnopqrstuv"}""".tree()
+    }
+
+    @Test
+    fun `유저 서비스 입장 기록 응답에 문자 수신 번호 필드가 없어도 읽는다`() {
+        // 필드가 추가되기 전의 응답(옛 유저 서비스)과 호환되어야 한다
+        respond(
+            "/internal/entries",
+            """{"id":7,"name":"김연수","phoneNumber":"01099998888","personalInformationStatus":true,""" +
+                """"participationType":"TRAINEE","occupation":null,"school":"광주중"}""",
+        )
+
+        userClient.recordEntry(RecordEntryReqDto("expo-1", "TRAINEE", phoneNumber = "01099998888")) shouldBe
+            RecordEntryResDto(7, "김연수", "01099998888", true, "TRAINEE", null, "광주중", null)
+    }
+
+    @Test
+    fun `유저 서비스 입장 기록의 404는 NotFound로 409는 Conflict로 던져진다`() {
+        respond("/internal/entries", "{}")
+        val request = RecordEntryReqDto("expo-1", "STANDARD", phoneNumber = "01012345678")
+
+        forcedStatuses += 404
+        assertThrows<FeignException.NotFound> { userClient.recordEntry(request) }
+
+        forcedStatuses += 409
+        assertThrows<FeignException.Conflict> { userClient.recordEntry(request) }
+    }
+
+    @Test
+    fun `유저 서비스 참가자 조회는 본문과 응답을 맞춘다`() {
+        respond("/internal/participants/resolve", """{"participantId":7,"participationType":"STANDARD"}""")
+
+        userClient.resolveParticipant(ResolveParticipantReqDto("expo-1", "01012345678", "STANDARD")) shouldBe
+            ResolveParticipantResDto(7, "STANDARD")
+
+        received[0].let { it.method to it.path } shouldBe ("POST" to "/internal/participants/resolve")
+        received[0].token shouldBe USER_INTERNAL_TOKEN
+        received[0].body.tree() shouldBe """{"expoId":"expo-1","phoneNumber":"01012345678","participationType":"STANDARD"}""".tree()
+    }
+
+    @Test
+    fun `박람회 서비스 기간 조회는 경로와 토큰을 맞추고 404는 NotFound로 던진다`() {
+        respond("/internal/expo/expo-1", """{"title":"박람회","startedDay":"2026-10-07","finishedDay":"2026-10-09"}""")
+
+        expoClient.getPeriod("expo-1") shouldBe ExpoPeriodResDto("2026-10-07", "2026-10-09")
+
+        received[0].let { it.method to it.path } shouldBe ("GET" to "/internal/expo/expo-1")
+        received[0].token shouldBe EXPO_INTERNAL_TOKEN
+
+        notFoundPaths += "/internal/expo/expo-none"
+        assertThrows<FeignException.NotFound> { expoClient.getPeriod("expo-none") }
+    }
+
+    private fun String.tree() = mapper.readTree(this)
+
     private fun respond(
         path: String,
         json: String,
@@ -114,6 +208,10 @@ class ClientContractTests : IntegrationTestSupport() {
         private val received = CopyOnWriteArrayList<Received>()
         private val responses = java.util.concurrent.ConcurrentHashMap<String, String>()
         private val notFoundPaths = CopyOnWriteArrayList<String>()
+
+        /** 다음 요청들에 순서대로 돌려줄 상태 코드. 같은 경로가 상태별로 다르게 답해야 할 때 쓴다. */
+        private val forcedStatuses = ConcurrentLinkedQueue<Int>()
+        private val mapper = JsonMapper.builder().build()
 
         private val server: HttpServer =
             HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
@@ -127,8 +225,10 @@ class ClientContractTests : IntegrationTestSupport() {
             received += Received(exchange.requestMethod, path, exchange.requestHeaders.getFirst("X-Internal-Token"), body)
 
             val json = responses[path]
+            val forced = forcedStatuses.poll()
             val (status, payload) =
                 when {
+                    forced != null -> forced to """{"status":$forced,"message":"강제 응답"}"""
                     path in notFoundPaths -> 404 to """{"status":404,"message":"없음"}"""
                     json == null -> 500 to """{"message":"unexpected path"}"""
                     else -> 200 to json
