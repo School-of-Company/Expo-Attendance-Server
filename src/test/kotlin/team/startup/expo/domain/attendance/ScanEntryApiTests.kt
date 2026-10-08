@@ -345,6 +345,13 @@ class ScanEntryApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `박람회 서비스가 잘못된 날짜를 주면 500이 아니라 503이다`() {
+        periodReturns(ExpoPeriodResDto(startedDay = "2026/10/01", finishedDay = today.plusDays(1).toString()))
+
+        mockMvc.perform(scan("expo-bad-date", "ROLE_STANDARD", "01012345678")).andExpect(status().isServiceUnavailable)
+    }
+
+    @Test
     fun `v1과 같은 문구로 응답한다`() {
         entryThrows("expo-msg", 404)
         mockMvc

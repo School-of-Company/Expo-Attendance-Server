@@ -48,7 +48,7 @@ class ScanEntryServiceImpl(
     ): ScanEntryResDto {
         checkIdentifier(reqDto)
         val today = LocalDate.now(clock)
-        expoPeriodValidator.checkInProgress(expoId)
+        expoPeriodValidator.checkInProgress(expoId, today)
 
         val entry = recordEntry(expoId, reqDto, today)
 
