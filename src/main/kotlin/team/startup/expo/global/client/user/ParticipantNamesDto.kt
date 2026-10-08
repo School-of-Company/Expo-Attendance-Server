@@ -39,3 +39,10 @@ data class StandardParticipantBriefResDto(
     val personalInformationStatus: Boolean,
     val notificationPhoneNumber: String? = null,
 )
+
+/** 유저 서비스 `POST /internal/standard-participants/verify` 요청. 입장·출석을 기록하지 않고 ID와 code가 맞는지만 확인한다. */
+data class VerifyStandardParticipantReqDto(
+    val expoId: String,
+    val participantId: Long,
+    val code: String,
+)

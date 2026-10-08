@@ -14,6 +14,7 @@ import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.application.ProgramApplicationResDto
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
+import team.startup.expo.global.client.expo.PreregisterSessionResDto
 import team.startup.expo.global.client.expo.StandardProgramResDto
 import team.startup.expo.global.client.expo.TrainingProgramBatchReqDto
 import team.startup.expo.global.client.expo.TrainingProgramResDto
@@ -28,9 +29,11 @@ import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.TraineeNameResDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
+import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.support.IntegrationTestSupport
 import tools.jackson.databind.json.JsonMapper
 import java.net.InetSocketAddress
+import java.time.Instant
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -208,6 +211,43 @@ class ClientContractTests : IntegrationTestSupport() {
                 StandardParticipantBriefsReqDto("expo-1", listOf(9)),
             )
         }
+    }
+
+    @Test
+    fun `유저 서비스 참가자 확인은 본문과 토큰을 맞추고 204를 정상으로, 404는 NotFound로 던진다`() {
+        respond("/internal/standard-participants/verify", "")
+
+        userClient.verifyStandardParticipant(VerifyStandardParticipantReqDto("expo-1", 7, "codeCCCCCCCCCCCCCCCCCC"))
+
+        received[0].let { it.method to it.path } shouldBe ("POST" to "/internal/standard-participants/verify")
+        received[0].token shouldBe USER_INTERNAL_TOKEN
+        received[0].body.tree() shouldBe """{"expoId":"expo-1","participantId":7,"code":"codeCCCCCCCCCCCCCCCCCC"}""".tree()
+
+        notFoundPaths += "/internal/standard-participants/verify"
+        assertThrows<FeignException.NotFound> {
+            userClient.verifyStandardParticipant(
+                VerifyStandardParticipantReqDto("expo-1", 7, "wrong"),
+            )
+        }
+    }
+
+    @Test
+    fun `박람회 서비스 회차 조회는 경로와 토큰을 맞추고 UTC 시각을 읽으며 404와 409는 호출 실패로 던진다`() {
+        respond(
+            "/internal/expo/expo-1/preregister-sessions/5",
+            """{"id":5,"expoId":"expo-1","title":"오전","startedAt":"2026-10-31T00:30:00Z","endedAt":"2026-10-31T03:30:00Z","place":"광주","capacity":100,"revision":2}""",
+        )
+
+        expoClient.getPreregisterSession("expo-1", 5) shouldBe
+            PreregisterSessionResDto(5, Instant.parse("2026-10-31T00:30:00Z"), Instant.parse("2026-10-31T03:30:00Z"))
+
+        received[0].let { it.method to it.path } shouldBe ("GET" to "/internal/expo/expo-1/preregister-sessions/5")
+        received[0].token shouldBe EXPO_INTERNAL_TOKEN
+
+        notFoundPaths += "/internal/expo/expo-1/preregister-sessions/6"
+        assertThrows<FeignException.NotFound> { expoClient.getPreregisterSession("expo-1", 6) }
+        forcedStatuses += 409
+        assertThrows<FeignException.Conflict> { expoClient.getPreregisterSession("expo-1", 5) }
     }
 
     @Test

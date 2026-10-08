@@ -45,3 +45,5 @@ clients:
     internal-token: ${APPLICATION_INTERNAL_TOKEN}
 entry-events:
   recorded-topic: ${KAFKA_ENTRY_RECORDED_TOPIC:attention.entry.recorded}
+preregister-entry:
+  lead-minutes: ${PREREGISTER_ENTRY_LEAD_MINUTES:30}

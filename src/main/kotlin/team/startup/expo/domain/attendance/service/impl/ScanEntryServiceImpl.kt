@@ -10,6 +10,7 @@ import team.startup.expo.domain.attendance.presentation.dto.request.ScanEntryReq
 import team.startup.expo.domain.attendance.presentation.dto.response.BadgeResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ScanEntryResDto
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
+import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
 import team.startup.expo.domain.attendance.service.RecordEntryEventService
 import team.startup.expo.domain.attendance.service.ScanEntryService
 import team.startup.expo.global.client.callService
@@ -18,6 +19,7 @@ import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.ResolveParticipantReqDto
 import team.startup.expo.global.client.user.StandardParticipantBriefsReqDto
 import team.startup.expo.global.client.user.UserClient
+import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.global.exception.ExpectedException
 import tools.jackson.databind.ObjectMapper
 import java.time.Clock
@@ -36,6 +38,7 @@ class ScanEntryServiceImpl(
     private val userClient: UserClient,
     @Qualifier("userCircuitBreaker") private val userCircuitBreaker: CircuitBreaker,
     private val expoPeriodValidator: ExpoPeriodValidator,
+    private val preregisterSessionValidator: PreregisterSessionValidator,
     private val recordEntryEventService: RecordEntryEventService,
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
@@ -49,6 +52,16 @@ class ScanEntryServiceImpl(
         checkIdentifier(reqDto)
         val today = LocalDate.now(clock)
         expoPeriodValidator.checkInProgress(expoId, today)
+        // 사전등록 QR(참가자 ID와 코드)은 신청한 회차의 입장 시간이어야 한다. 입장을 기록하기 전에 확인한다.
+        if (reqDto.authority == EntryAuthority.ROLE_STANDARD && reqDto.participantId != null && !reqDto.code.isNullOrBlank()) {
+            val code = reqDto.code
+            preregisterSessionValidator.check(expoId, reqDto.participantId) {
+                // 코드가 틀리면 입장 기록과 같은 404여야 해서, 신청 상태를 알리기 전에 먼저 확인한다
+                userCircuitBreaker.callService("유저", participantNotFound(reqDto)) {
+                    userClient.verifyStandardParticipant(VerifyStandardParticipantReqDto(expoId, reqDto.participantId, code))
+                }
+            }
+        }
 
         val entry = recordEntry(expoId, reqDto, today)
 
@@ -63,6 +76,12 @@ class ScanEntryServiceImpl(
         }
         return toResponse(entry, reqDto)
     }
+
+    private fun participantNotFound(reqDto: ScanEntryReqDto) =
+        ExpectedException(
+            HttpStatus.NOT_FOUND,
+            if (reqDto.authority == EntryAuthority.ROLE_TRAINEE) "연수자를 찾지 못 했습니다." else "행사 참가자를 찾지 못 했습니다.",
+        )
 
     /** 일반 참가자는 전화번호 또는 참가자 ID와 코드가 모두 필요하고, 연수자는 전화번호가 필요하다. */
     private fun checkIdentifier(reqDto: ScanEntryReqDto) {
@@ -85,14 +104,9 @@ class ScanEntryServiceImpl(
         today: LocalDate,
     ): RecordEntryResDto {
         val request = toEntryRequest(expoId, reqDto)
-        val notFound =
-            ExpectedException(
-                HttpStatus.NOT_FOUND,
-                if (reqDto.authority == EntryAuthority.ROLE_TRAINEE) "연수자를 찾지 못 했습니다." else "행사 참가자를 찾지 못 했습니다.",
-            )
         return userCircuitBreaker.callService(
             "유저",
-            notFound,
+            participantNotFound(reqDto),
             onConflict = {
                 // 입장은 기록됐는데 이벤트 기록이 빠졌을 수 있다. 같은 QR을 다시 찍으면 이벤트가 만들어지게 한다.
                 if (reqDto.authority == EntryAuthority.ROLE_STANDARD) recoverEntryEvent(expoId, request, today)

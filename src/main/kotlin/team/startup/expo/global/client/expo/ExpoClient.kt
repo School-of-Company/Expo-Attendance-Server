@@ -30,4 +30,11 @@ interface ExpoClient {
         @PathVariable("expoId") expoId: String,
         @RequestBody request: TrainingProgramBatchReqDto,
     ): List<TrainingProgramResDto>
+
+    /** 사전등록 회차 하나를 조회한다. 박람회나 회차가 없거나 다른 박람회의 회차면 404, 삭제 중인 박람회면 409다. */
+    @GetMapping("/internal/expo/{expoId}/preregister-sessions/{sessionId}")
+    fun getPreregisterSession(
+        @PathVariable("expoId") expoId: String,
+        @PathVariable("sessionId") sessionId: Long,
+    ): PreregisterSessionResDto
 }
