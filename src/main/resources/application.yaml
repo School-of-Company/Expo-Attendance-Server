@@ -16,6 +16,11 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        # QR 토큰 발급이 한 번에 최대 1000건을 넣으므로 INSERT를 묶어 보낸다
+        jdbc.batch_size: 100
+        order_inserts: true
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
     producer:
