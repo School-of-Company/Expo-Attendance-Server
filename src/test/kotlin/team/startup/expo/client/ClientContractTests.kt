@@ -29,6 +29,7 @@ import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.TraineeNameResDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
+import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.support.IntegrationTestSupport
 import tools.jackson.databind.json.JsonMapper
 import java.net.InetSocketAddress
@@ -208,6 +209,24 @@ class ClientContractTests : IntegrationTestSupport() {
         assertThrows<FeignException.NotFound> {
             userClient.getStandardParticipantBriefs(
                 StandardParticipantBriefsReqDto("expo-1", listOf(9)),
+            )
+        }
+    }
+
+    @Test
+    fun `유저 서비스 참가자 확인은 본문과 토큰을 맞추고 204를 정상으로, 404는 NotFound로 던진다`() {
+        respond("/internal/standard-participants/verify", "")
+
+        userClient.verifyStandardParticipant(VerifyStandardParticipantReqDto("expo-1", 7, "codeCCCCCCCCCCCCCCCCCC"))
+
+        received[0].let { it.method to it.path } shouldBe ("POST" to "/internal/standard-participants/verify")
+        received[0].token shouldBe USER_INTERNAL_TOKEN
+        received[0].body.tree() shouldBe """{"expoId":"expo-1","participantId":7,"code":"codeCCCCCCCCCCCCCCCCCC"}""".tree()
+
+        notFoundPaths += "/internal/standard-participants/verify"
+        assertThrows<FeignException.NotFound> {
+            userClient.verifyStandardParticipant(
+                VerifyStandardParticipantReqDto("expo-1", 7, "wrong"),
             )
         }
     }

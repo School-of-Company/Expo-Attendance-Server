@@ -31,6 +31,7 @@ import team.startup.expo.global.client.expo.PreregisterSessionResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.UserClient
+import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
 import java.time.Duration
@@ -143,6 +144,49 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `잘못된 code는 취소·이른 입장·지난 회차 어느 상태에서도 같은 404이고 신청 상태를 알리지 않는다`() {
+        assign(SESSION).andExpect(status().isNoContent)
+        doThrow(
+            feignException(404),
+        ).`when`(userClient).verifyStandardParticipant(VerifyStandardParticipantReqDto(EXPO, PARTICIPANT, WRONG_CODE))
+
+        val responses =
+            listOf(
+                // 이른 입장
+                { sessionAt(start = now.plus(Duration.ofHours(2)), end = now.plus(Duration.ofHours(5))) },
+                // 지난 회차
+                { sessionAt(start = now.minus(Duration.ofHours(5)), end = now.minus(Duration.ofHours(2))) },
+                // 취소
+                { cancel() },
+            ).map { prepare ->
+                prepare()
+                scan(WRONG_CODE)
+                    .andExpect(status().isNotFound)
+                    .andExpect(jsonPath("$.message").value("행사 참가자를 찾지 못 했습니다."))
+                    .andReturn()
+                    .response.contentAsString
+            }
+
+        responses.toSet().size shouldBe 1
+        verify(userClient, never()).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = WRONG_CODE))
+    }
+
+    @Test
+    fun `유저 서비스가 코드를 확인하지 못하면 신청 상태를 알리지 않고 503이다`() {
+        assign(SESSION).andExpect(status().isNoContent)
+        doThrow(feignException(500)).`when`(userClient).verifyStandardParticipant(VerifyStandardParticipantReqDto(EXPO, PARTICIPANT, CODE))
+
+        scan().andExpect(status().isServiceUnavailable)
+    }
+
+    @Test
+    fun `회차 기록이 없는 참가자는 코드 확인을 따로 부르지 않는다`() {
+        scan().andExpect(status().isOk)
+
+        verify(userClient, never()).verifyStandardParticipant(VerifyStandardParticipantReqDto(EXPO, PARTICIPANT, CODE))
+    }
+
+    @Test
     fun `전화번호로 입장하는 이전 방식과 연수자는 회차를 확인하지 않는다`() {
         assign(SESSION).andExpect(status().isNoContent)
         doReturn(entry(PARTICIPANT)).`when`(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", phoneNumber = "01012345678"))
@@ -201,11 +245,11 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
         doReturn(PreregisterSessionResDto(SESSION, start, end)).`when`(expoClient).getPreregisterSession(EXPO, SESSION)
     }
 
-    private fun scan(): ResultActions =
+    private fun scan(code: String = CODE): ResultActions =
         mockMvc.perform(
             patch("/attendance/$EXPO")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""{"authority":"ROLE_STANDARD","participantId":$PARTICIPANT,"code":"$CODE"}"""),
+                .content("""{"authority":"ROLE_STANDARD","participantId":$PARTICIPANT,"code":"$code"}"""),
         )
 
     private fun assign(sessionId: Long): ResultActions =
@@ -234,6 +278,7 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
         const val EXPO = "0b1f6c3e-52a4-4d6e-9d57-4b7a1e5c9a10"
         const val PARTICIPANT = 7001L
         const val CODE = "codePPPPPPPPPPPPPPPPPP"
+        const val WRONG_CODE = "wrongWrongWrongWrongWr"
         const val SESSION = 11L
         const val OTHER_SESSION = 12L
         const val PATH = "/internal/expos/$EXPO/participants/$PARTICIPANT/preregister-session"

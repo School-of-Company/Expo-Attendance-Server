@@ -15,6 +15,7 @@ import java.time.Duration
 
 /**
  * 사전등록 참가자가 신청한 회차의 입장 시간인지 확인한다. 회차 기록이 없는 참가자(현장등록, 연동 전 등록)는 확인하지 않는다.
+ * 신청 상태는 참가자 ID와 code가 맞는 사람에게만 알려야 하므로, 회차 기록이 있으면 먼저 `verifyCode`로 확인한 뒤에 검사한다.
  * 허용 시간은 회차 시작 `leadMinutes`분 전부터 종료 시각까지이고, 시각은 모두 `Instant`(UTC)로 비교한다.
  */
 @Component
@@ -28,8 +29,10 @@ class PreregisterSessionValidator(
     fun check(
         expoId: String,
         participantId: Long,
+        verifyCode: () -> Unit,
     ) {
         val assignment = preregisterSessionRepository.findByExpoIdAndParticipantId(expoId, participantId) ?: return
+        verifyCode()
         if (assignment.status == PreregisterSessionStatus.CANCELLED) {
             throw ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청의 QR입니다.")
         }

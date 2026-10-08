@@ -39,4 +39,10 @@ interface UserClient {
     fun getStandardParticipantBriefs(
         @RequestBody request: StandardParticipantBriefsReqDto,
     ): List<StandardParticipantBriefResDto>
+
+    /** 참가자 ID와 code가 맞으면 204다. 없는 참가자, 다른 박람회, code 불일치는 구분 없이 404이고 아무것도 기록하지 않는다. */
+    @PostMapping("/internal/standard-participants/verify")
+    fun verifyStandardParticipant(
+        @RequestBody request: VerifyStandardParticipantReqDto,
+    )
 }
