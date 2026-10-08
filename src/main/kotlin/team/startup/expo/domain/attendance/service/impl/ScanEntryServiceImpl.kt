@@ -10,6 +10,7 @@ import team.startup.expo.domain.attendance.presentation.dto.request.ScanEntryReq
 import team.startup.expo.domain.attendance.presentation.dto.response.BadgeResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ScanEntryResDto
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
+import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
 import team.startup.expo.domain.attendance.service.RecordEntryEventService
 import team.startup.expo.domain.attendance.service.ScanEntryService
 import team.startup.expo.global.client.callService
@@ -36,6 +37,7 @@ class ScanEntryServiceImpl(
     private val userClient: UserClient,
     @Qualifier("userCircuitBreaker") private val userCircuitBreaker: CircuitBreaker,
     private val expoPeriodValidator: ExpoPeriodValidator,
+    private val preregisterSessionValidator: PreregisterSessionValidator,
     private val recordEntryEventService: RecordEntryEventService,
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
@@ -49,6 +51,10 @@ class ScanEntryServiceImpl(
         checkIdentifier(reqDto)
         val today = LocalDate.now(clock)
         expoPeriodValidator.checkInProgress(expoId, today)
+        // 사전등록 QR(참가자 ID와 코드)은 신청한 회차의 입장 시간이어야 한다. 입장을 기록하기 전에 확인한다.
+        if (reqDto.authority == EntryAuthority.ROLE_STANDARD && reqDto.participantId != null && !reqDto.code.isNullOrBlank()) {
+            preregisterSessionValidator.check(expoId, reqDto.participantId)
+        }
 
         val entry = recordEntry(expoId, reqDto, today)
 

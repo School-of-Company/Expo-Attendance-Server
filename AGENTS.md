@@ -12,6 +12,7 @@ Attendance (참여) service of the Expo MSA. Kotlin 2.3 / Spring Boot 4.1, Gradl
 
 - Domains: `domain/{attendance,qr}`. Other services' data (expo, program, participant, survey) is referenced by ID only: no FK, no local entity. Reach them through Feign.
 - Entry is recorded once per QR/token per day. A second scan on the same day must be rejected (as `PreEnterScanQrCode` does in v1); the next day it is accepted again.
+- A pre-registration QR (`participantId` + `code`) whose participant has a recorded session is accepted only from `preregister-entry.lead-minutes` (default 30) before the session starts until it ends; a cancelled one is rejected. Participants without a record (on-site, trainees, paper QR, phone-number scans) are not checked.
 
 ## Service contracts
 
@@ -23,7 +24,7 @@ Verified against the other services' `develop` code. Change a contract by openin
 |---|---|---|
 | User | `POST /internal/entries` — STANDARD: `{expoId, participationType, participantId, code}` or legacy `{phoneNumber}`; TRAINEE: `{phoneNumber}` → `{id, name, phoneNumber?, notificationPhoneNumber?, personalInformationStatus, participationType, occupation?, school?}`; 404 unknown/wrong code, 409 already entered today | entry scan |
 | User | `POST /internal/participants/resolve`, `POST /internal/standard-participants/details` → `[{participantId, name, phoneNumber?, personalInformationStatus, notificationPhoneNumber?}]` (404 if any id is unknown), `POST /internal/standard-participants/names`, `POST /internal/trainees/names` | event recovery (details; `notificationPhoneNumber` is not sent yet, so a companion without a number cannot be recovered), program scan |
-| Expo | `GET /internal/expo/{expoId}`, `GET /internal/expo/{expoId}/standard-programs/{programId}`, `POST /internal/expo/{expoId}/training-programs/batch` | period and program checks |
+| Expo | `GET /internal/expo/{expoId}`, `GET /internal/expo/{expoId}/standard-programs/{programId}`, `POST /internal/expo/{expoId}/training-programs/batch`, `GET /internal/expo/{expoId}/preregister-sessions/{sessionId}` → `{id, startedAt, endedAt}` (UTC instants; 404 unknown, 409 expo being deleted) | period, program and session-time checks |
 | Application | `GET /internal/program-applications/standard/{programId}/participants/{id}`, `.../training/{programId}/trainees/{id}` → `{applied}` | program scan |
 
 **We provide**:
@@ -32,6 +33,7 @@ Verified against the other services' `develop` code. Change a contract by openin
 |---|---|
 | Form | `POST /internal/qr-tokens/resolve` `{token}` → 200 `{expoId}` if the token was entered at least once, else 404 |
 | Expo | `GET /internal/program-attendances/{standard\|training}/{programId}` → `[{participantId\|traineeId, entryTime "HH:mm", leaveTime null}]`; `DELETE` of the same path and `DELETE /internal/expos/{expoId}` clean up (204, idempotent) |
+| Application | `PUT /internal/expos/{expoId}/participants/{participantId}/preregister-session` `{sessionId}` → 204 (confirmed/promoted, also revives a cancelled one; idempotent); `DELETE` of the same path → 204 (cancelled, idempotent, no-op if unknown) | session-time check on entry (proposed, see #40) |
 | Gateway clients | `PATCH /attendance/{expoId}`, `PATCH /attendance/{standard\|training}/{programId}`, `PATCH /attendance/qr/{expoId}`, `POST /qr-tokens/{expoId}` (`ROLE_ADMIN`) |
 
 **Event**: topic `attention.entry.recorded`, key and `eventId` identical, payload `{eventId, expoId, participationType: "STANDARD", id, phoneNumber}` (`phoneNumber` is the number that receives the survey SMS: the participant's own, else the representative's). Delivery is at-least-once through `tb_entry_outbox`, so the consumer dedupes on `eventId`. Only add fields; never rename or remove them.
