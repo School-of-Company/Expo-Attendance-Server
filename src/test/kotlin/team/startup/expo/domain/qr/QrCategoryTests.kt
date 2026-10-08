@@ -40,7 +40,7 @@ class QrCategoryTests : IntegrationTestSupport() {
         val response =
             mockMvc
                 .perform(
-                    post("/qr-tokens/expo-kindergarten")
+                    post("/qr-tokens/55555555-5555-4555-8555-555555555555")
                         .header("X-User-Id", "1")
                         .header("X-User-Role", "ROLE_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
