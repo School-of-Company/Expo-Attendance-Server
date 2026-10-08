@@ -26,7 +26,10 @@ class ClientCircuitBreakerConfiguration {
     @Bean
     fun applicationCircuitBreaker(): CircuitBreaker = circuitBreaker("application")
 
-    /** 최근 20번 중 10번 이상 호출되고 절반 이상 실패하면 10초 동안 열려 상대를 부르지 않고 바로 실패한다. */
+    /**
+     * 최근 20번 중 10번 이상 호출되고 절반 이상 실패하거나 80% 이상이 2초보다 느리면 10초 동안 열려 상대를 부르지 않고
+     * 바로 실패한다. 느린 호출 기준(2초)은 Feign 읽기 제한(3초)보다 짧아, 응답은 오지만 느린 상대도 감지한다.
+     */
     private fun circuitBreaker(name: String): CircuitBreaker =
         CircuitBreaker.of(
             name,
@@ -35,6 +38,8 @@ class ClientCircuitBreakerConfiguration {
                 .slidingWindowSize(WINDOW_SIZE)
                 .minimumNumberOfCalls(MIN_CALLS)
                 .failureRateThreshold(FAILURE_RATE_THRESHOLD)
+                .slowCallDurationThreshold(Duration.ofMillis(SLOW_CALL_MILLIS))
+                .slowCallRateThreshold(SLOW_CALL_RATE_THRESHOLD)
                 .waitDurationInOpenState(Duration.ofSeconds(OPEN_SECONDS))
                 .ignoreExceptions(FeignException.NotFound::class.java, FeignException.Conflict::class.java)
                 .build(),
@@ -44,6 +49,8 @@ class ClientCircuitBreakerConfiguration {
         const val WINDOW_SIZE = 20
         const val MIN_CALLS = 10
         const val FAILURE_RATE_THRESHOLD = 50f
+        const val SLOW_CALL_MILLIS = 2_000L
+        const val SLOW_CALL_RATE_THRESHOLD = 80f
         const val OPEN_SECONDS = 10L
     }
 }

@@ -8,6 +8,7 @@ import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import team.startup.expo.global.client.ClientCircuitBreakerConfiguration
+import java.util.concurrent.TimeUnit
 
 class ClientCircuitBreakerTests {
     private val configuration = ClientCircuitBreakerConfiguration()
@@ -50,7 +51,30 @@ class ClientCircuitBreakerTests {
         breaker.state shouldBe CircuitBreaker.State.OPEN
     }
 
+    @Test
+    fun `성공해도 대부분 2초보다 느리면 회로가 열린다`() {
+        val breaker = configuration.userCircuitBreaker()
+
+        repeat(MIN_CALLS_TO_OPEN) { breaker.onSuccess(SLOW_MILLIS, TimeUnit.MILLISECONDS) }
+
+        breaker.state shouldBe CircuitBreaker.State.OPEN
+    }
+
+    @Test
+    fun `빠른 호출이 대부분이면 가끔 느려도 회로가 열리지 않는다`() {
+        val breaker = configuration.userCircuitBreaker()
+
+        repeat(MIN_CALLS_TO_OPEN * 2) { index ->
+            breaker.onSuccess(if (index % 5 == 0) SLOW_MILLIS else FAST_MILLIS, TimeUnit.MILLISECONDS)
+        }
+
+        breaker.state shouldBe CircuitBreaker.State.CLOSED
+    }
+
     private companion object {
+        const val SLOW_MILLIS = 2_500L
+        const val FAST_MILLIS = 100L
+
         // 설정의 슬라이딩 윈도우(20)를 채우고도 남는 횟수
         const val IGNORED_CALLS = 30
 
