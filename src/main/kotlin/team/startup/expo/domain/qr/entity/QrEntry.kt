@@ -2,6 +2,8 @@ package team.startup.expo.domain.qr.entity
 
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
@@ -27,4 +29,7 @@ class QrEntry(
     val attendanceDate: LocalDate,
     @field:Column(name = "entered_at", nullable = false)
     val enteredAt: LocalDateTime,
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(name = "period_check", nullable = false, length = 20)
+    val periodCheck: QrEntryPeriodCheck = QrEntryPeriodCheck.VERIFIED,
 )

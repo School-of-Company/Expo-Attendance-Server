@@ -39,3 +39,6 @@ program-attendance:
   require-code: ${PROGRAM_ATTENDANCE_REQUIRE_CODE:false}
 entry-retry:
   window-seconds: ${ENTRY_RETRY_WINDOW_SECONDS:300}
+qr-entry-review:
+  enabled: ${QR_ENTRY_REVIEW_ENABLED:true}
+  interval-ms: ${QR_ENTRY_REVIEW_INTERVAL_MS:300000}
