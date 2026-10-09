@@ -63,6 +63,15 @@ class RecentEntryResponsesTests {
     }
 
     @Test
+    fun `기간 안이어도 자정을 넘기면 새 날짜의 입장이라 이전 응답을 돌려주지 않는다`() {
+        clock.now = Instant.parse("2026-10-09T23:59:00Z")
+        recent.remember("expo-1", request, "staff-1", response)
+
+        clock.now = Instant.parse("2026-10-10T00:01:00Z")
+        recent.find("expo-1", request, "staff-1") shouldBe null
+    }
+
+    @Test
     fun `기간이 0이면 꺼진다`() {
         val disabled = RecentEntryResponses(EntryRetryProperties(windowSeconds = 0), clock)
         disabled.remember("expo-1", request, "staff-1", response)
