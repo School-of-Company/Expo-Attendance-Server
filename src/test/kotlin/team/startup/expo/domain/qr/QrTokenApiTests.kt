@@ -2,9 +2,14 @@ package team.startup.expo.domain.qr
 
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers.anyString
+import org.mockito.Mockito.doReturn
+import org.mockito.Mockito.doThrow
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
@@ -18,12 +23,29 @@ import team.startup.expo.domain.qr.repository.QrEntryRepository
 import team.startup.expo.domain.qr.repository.QrTokenRepository
 import team.startup.expo.domain.qr.service.DeleteExpoDataService
 import team.startup.expo.domain.qr.service.IssueQrTokensService
+import team.startup.expo.global.client.expo.ExpoClient
+import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.support.IntegrationTestSupport
+import java.time.Clock
 import java.time.LocalDate
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 
 class QrTokenApiTests : IntegrationTestSupport() {
+    @MockitoBean
+    lateinit var expoClient: ExpoClient
+
+    @Autowired
+    lateinit var clock: Clock
+
+    @BeforeEach
+    fun setUpPeriod() {
+        val today = LocalDate.now(clock)
+        doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString()))
+            .`when`(expoClient)
+            .getPeriod(anyString())
+    }
+
     @Autowired
     lateinit var mockMvc: MockMvc
 
@@ -204,6 +226,30 @@ class QrTokenApiTests : IntegrationTestSupport() {
         mockMvc.perform(scan("expo-scan", "scan-token-1")).andExpect(status().isBadRequest)
 
         qrEntryRepository.existsByToken("scan-token-1") shouldBe true
+    }
+
+    @Test
+    fun `진행 중이 아닌 박람회에서는 400이고 입장을 기록하지 않는다`() {
+        qrTokenRepository.save(QrToken(token = "scan-token-3", expoId = "expo-ended", category = QrCategory.GENERAL))
+        val today = LocalDate.now(clock)
+        doReturn(ExpoPeriodResDto(today.minusDays(10).toString(), today.minusDays(1).toString()))
+            .`when`(expoClient)
+            .getPeriod(anyString())
+
+        mockMvc
+            .perform(scan("expo-ended", "scan-token-3"))
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.message").value("해당 박람회는 진행 중인 상태가 아닙니다."))
+        qrEntryRepository.existsByToken("scan-token-3") shouldBe false
+    }
+
+    @Test
+    fun `박람회 서비스가 응답하지 못하면 503이고 입장을 기록하지 않는다`() {
+        qrTokenRepository.save(QrToken(token = "scan-token-4", expoId = "expo-down", category = QrCategory.GENERAL))
+        doThrow(RuntimeException("down")).`when`(expoClient).getPeriod(anyString())
+
+        mockMvc.perform(scan("expo-down", "scan-token-4")).andExpect(status().isServiceUnavailable)
+        qrEntryRepository.existsByToken("scan-token-4") shouldBe false
     }
 
     @Test

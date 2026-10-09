@@ -15,7 +15,10 @@ import team.startup.expo.domain.qr.service.ScanQrTokenService
 class QrAttendanceController(
     private val scanQrTokenService: ScanQrTokenService,
 ) {
-    @Operation(summary = "종이 QR 입구 스캔", description = "토큰의 오늘 입장을 기록한다. 같은 날 두 번째 스캔은 400, 없는 토큰·다른 박람회 토큰은 404다.")
+    @Operation(
+        summary = "종이 QR 입구 스캔",
+        description = "진행 중인 박람회에서 토큰의 오늘 입장을 기록한다. 진행 중이 아니면 400, 같은 날 두 번째 스캔은 400, 없는 토큰·다른 박람회 토큰은 404다.",
+    )
     @PatchMapping("/{expoId}")
     fun scan(
         @PathVariable expoId: String,
