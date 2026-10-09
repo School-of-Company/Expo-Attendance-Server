@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.doReturn
 import org.mockito.Mockito.doThrow
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
 import org.springframework.test.context.bean.override.mockito.MockitoBean
@@ -115,6 +117,41 @@ class ScanEntryApiTests : IntegrationTestSupport() {
 
         entryThrows("expo-dup", 409)
         mockMvc.perform(scan("expo-dup", "ROLE_STANDARD", "01012345678")).andExpect(status().isBadRequest)
+    }
+
+    @Test
+    fun `응답이 유실돼 같은 스캐너 사용자가 곧바로 다시 찍으면 처음 응답을 돌려주고 입장은 한 번만 기록한다`() {
+        entryReturns("expo-retry", standardEntry(id = 4800, occupation = "TEACHER", school = "광주초등학교"))
+        val first =
+            mockMvc
+                .perform(scan("expo-retry", "ROLE_STANDARD", "01012345678").header("X-User-Id", "staff-1"))
+                .andExpect(status().isOk)
+                .andReturn()
+                .response.contentAsString
+
+        // 유저 서비스는 이미 입장했다고 답하지만 같은 스캐너의 재시도는 처음 응답(명찰 포함)을 받는다
+        entryThrows("expo-retry", 409)
+        val retry =
+            mockMvc
+                .perform(scan("expo-retry", "ROLE_STANDARD", "01012345678").header("X-User-Id", "staff-1"))
+                .andExpect(status().isOk)
+                .andReturn()
+                .response.contentAsString
+
+        retry shouldBe first
+        verify(userClient, times(1)).recordEntry(RecordEntryReqDto("expo-retry", "STANDARD", "01012345678"))
+    }
+
+    @Test
+    fun `다른 스캐너 사용자나 스캐너를 모르는 요청은 재시도로 보지 않고 400이다`() {
+        entryReturns("expo-retry2", standardEntry(id = 4801))
+        mockMvc.perform(scan("expo-retry2", "ROLE_STANDARD", "01012345678").header("X-User-Id", "staff-1")).andExpect(status().isOk)
+
+        entryThrows("expo-retry2", 409)
+        mockMvc
+            .perform(scan("expo-retry2", "ROLE_STANDARD", "01012345678").header("X-User-Id", "staff-2"))
+            .andExpect(status().isBadRequest)
+        mockMvc.perform(scan("expo-retry2", "ROLE_STANDARD", "01012345678")).andExpect(status().isBadRequest)
     }
 
     @Test

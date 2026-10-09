@@ -7,5 +7,6 @@ interface ScanEntryService {
     fun scan(
         expoId: String,
         reqDto: ScanEntryReqDto,
+        scannerId: String? = null,
     ): ScanEntryResDto
 }
