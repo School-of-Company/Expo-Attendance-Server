@@ -10,6 +10,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.BadgeResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ScanEntryResDto
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
+import team.startup.expo.domain.attendance.service.RecentEntryResponses
 import team.startup.expo.domain.attendance.service.ScanEntryService
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.RecordEntryReqDto
@@ -33,14 +34,18 @@ class ScanEntryServiceImpl(
     @Qualifier("userCircuitBreaker") private val userCircuitBreaker: CircuitBreaker,
     private val expoPeriodValidator: ExpoPeriodValidator,
     private val preregisterSessionValidator: PreregisterSessionValidator,
+    private val recentEntryResponses: RecentEntryResponses,
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
 ) : ScanEntryService {
     override fun scan(
         expoId: String,
         reqDto: ScanEntryReqDto,
+        scannerId: String?,
     ): ScanEntryResDto {
         checkIdentifier(reqDto)
+        // 방금 성공한 스캔의 재시도(응답 유실)면 처음 응답을 그대로 돌려준다
+        recentEntryResponses.find(expoId, reqDto, scannerId)?.let { return it }
         val today = LocalDate.now(clock)
         expoPeriodValidator.checkInProgress(expoId, today)
         // 사전등록 QR(참가자 ID와 코드)은 신청한 회차의 입장 시간이어야 한다. 입장을 기록하기 전에 확인한다.
@@ -56,7 +61,7 @@ class ScanEntryServiceImpl(
 
         val entry = recordEntry(expoId, reqDto)
 
-        return toResponse(entry, reqDto)
+        return toResponse(entry, reqDto).also { recentEntryResponses.remember(expoId, reqDto, scannerId, it) }
     }
 
     private fun participantNotFound(reqDto: ScanEntryReqDto) =
