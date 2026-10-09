@@ -11,9 +11,6 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import team.startup.expo.domain.attendance.entity.EntryOutbox
-import team.startup.expo.domain.attendance.repository.EntryOutboxRepository
-import team.startup.expo.domain.attendance.service.RecordEntryEventService
 import team.startup.expo.domain.qr.entity.QrCategory
 import team.startup.expo.domain.qr.entity.QrToken
 import team.startup.expo.domain.qr.presentation.dto.request.IssueQrTokensReqDto
@@ -37,16 +34,10 @@ class QrTokenApiTests : IntegrationTestSupport() {
     lateinit var qrEntryRepository: QrEntryRepository
 
     @Autowired
-    lateinit var entryOutboxRepository: EntryOutboxRepository
-
-    @Autowired
     lateinit var issueQrTokensService: IssueQrTokensService
 
     @Autowired
     lateinit var deleteExpoDataService: DeleteExpoDataService
-
-    @Autowired
-    lateinit var recordEntryEventService: RecordEntryEventService
 
     @Test
     fun `토큰을 요청한 개수만큼 22자 난수로 발급하고 저장한다`() {
@@ -160,36 +151,6 @@ class QrTokenApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `삭제와 겹친 입장 이벤트 저장이 있어도 삭제 뒤에는 이벤트가 남지 않는다`() {
-        val threads = 9
-        val ready = CountDownLatch(threads)
-        val start = CountDownLatch(1)
-        val executor = Executors.newFixedThreadPool(threads)
-
-        val tasks =
-            (1..threads).map { index ->
-                executor.submit {
-                    ready.countDown()
-                    start.await()
-                    runCatching {
-                        if (index == 1) {
-                            deleteExpoDataService.delete("expo-outbox-race")
-                        } else {
-                            recordEntryEventService.record("expo-outbox-race", index.toLong(), "01012345678", LocalDate.now())
-                        }
-                    }
-                }
-            }
-        ready.await()
-        start.countDown()
-        tasks.forEach { it.get() }
-        executor.shutdown()
-
-        // 저장이 삭제보다 먼저 끝났으면 삭제가 함께 지우고, 나중이면 삭제 기록 때문에 저장되지 않는다
-        entryOutboxRepository.findAll().none { it.expoId == "expo-outbox-race" } shouldBe true
-    }
-
-    @Test
     fun `박람회 ID가 소문자 UUID가 아니면 발급하지 않고 400이다`() {
         listOf(
             "expo-1",
@@ -255,13 +216,10 @@ class QrTokenApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `박람회 정리는 내부 토큰이 있어야 하고 토큰과 입장 기록과 아웃박스를 지운다`() {
+    fun `박람회 정리는 내부 토큰이 있어야 하고 토큰과 입장 기록을 지운다`() {
         qrTokenRepository.save(QrToken(token = "clean-token", expoId = "expo-clean", category = QrCategory.GENERAL))
         qrTokenRepository.save(QrToken(token = "keep-token", expoId = "expo-keep", category = QrCategory.GENERAL))
         mockMvc.perform(scan("expo-clean", "clean-token")).andExpect(status().isOk)
-        entryOutboxRepository.save(
-            EntryOutbox(expoId = "expo-clean", participantId = 1, phoneNumber = "01012345678", attendanceDate = LocalDate.now()),
-        )
 
         mockMvc.perform(delete("/internal/expos/expo-clean")).andExpect(status().isUnauthorized)
         mockMvc
@@ -270,7 +228,6 @@ class QrTokenApiTests : IntegrationTestSupport() {
 
         qrTokenRepository.existsById("clean-token") shouldBe false
         qrEntryRepository.existsByToken("clean-token") shouldBe false
-        entryOutboxRepository.existsByExpoIdAndParticipantIdAndAttendanceDate("expo-clean", 1, LocalDate.now()) shouldBe false
         qrTokenRepository.existsById("keep-token") shouldBe true
     }
 

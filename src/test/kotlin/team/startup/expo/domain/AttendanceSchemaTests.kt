@@ -5,10 +5,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.dao.DataIntegrityViolationException
-import team.startup.expo.domain.attendance.entity.EntryOutbox
 import team.startup.expo.domain.attendance.entity.StandardProgramAttendance
 import team.startup.expo.domain.attendance.entity.TrainingProgramAttendance
-import team.startup.expo.domain.attendance.repository.EntryOutboxRepository
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
 import team.startup.expo.domain.qr.entity.QrCategory
@@ -29,9 +27,6 @@ class AttendanceSchemaTests : IntegrationTestSupport() {
 
     @Autowired
     lateinit var trainingAttendanceRepository: TrainingProgramAttendanceRepository
-
-    @Autowired
-    lateinit var outboxRepository: EntryOutboxRepository
 
     @Autowired
     lateinit var qrTokenRepository: QrTokenRepository
@@ -57,18 +52,6 @@ class AttendanceSchemaTests : IntegrationTestSupport() {
         assertThrows<DataIntegrityViolationException> {
             trainingAttendanceRepository.saveAndFlush(trainingAttendance(traineeId = 1, programId = 10))
         }
-    }
-
-    @Test
-    fun `같은 날 같은 번호의 아웃박스 행은 하나만 저장되고 다른 번호나 다른 날은 저장된다`() {
-        outboxRepository.saveAndFlush(outbox(expoId = "expo-a", participantId = 1))
-
-        // 같은 번호를 쓰는 다른 참가자(대표자 번호를 쓰는 동행자)도 같은 날에는 한 통만 간다
-        assertThrows<DataIntegrityViolationException> {
-            outboxRepository.saveAndFlush(outbox(expoId = "expo-a", participantId = 2))
-        }
-        outboxRepository.saveAndFlush(outbox(expoId = "expo-a", participantId = 3, phoneNumber = "01099998888"))
-        outboxRepository.saveAndFlush(outbox(expoId = "expo-b", participantId = 1))
     }
 
     @Test
@@ -136,16 +119,5 @@ class AttendanceSchemaTests : IntegrationTestSupport() {
         traineeId = traineeId,
         attendanceDate = today,
         entryTime = LocalTime.of(10, 0),
-    )
-
-    private fun outbox(
-        expoId: String,
-        participantId: Long,
-        phoneNumber: String = "01012345678",
-    ) = EntryOutbox(
-        expoId = expoId,
-        participantId = participantId,
-        phoneNumber = phoneNumber,
-        attendanceDate = today,
     )
 }

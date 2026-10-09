@@ -11,7 +11,7 @@ Expo-Attention-Server
 | `INTERNAL_TOKEN` | 이 서비스의 `/internal/**`를 보호하는 `X-Internal-Token` 값. 폼 서비스가 이 값을 `PARTICIPATION_SERVICE_INTERNAL_TOKEN`으로 들고 있다 |
 | `USER_INTERNAL_TOKEN`, `EXPO_INTERNAL_TOKEN`, `APPLICATION_INTERNAL_TOKEN` | 유저·박람회·신청 서비스를 호출할 때 보내는 토큰. 각 서비스의 `INTERNAL_TOKEN`과 같은 값 |
 | `USER_URL`, `EXPO_URL`, `APPLICATION_URL` | 비우면 Eureka로 찾는다. Gateway·Eureka 없이 로컬에서 직접 부를 때만 지정한다 |
-| `KAFKA_BOOTSTRAP_SERVERS` | 입장 이벤트를 발행하는 브로커 (기본 `localhost:19092`) |
-| `KAFKA_ENTRY_RECORDED_TOPIC` | 입장 이벤트 토픽 (기본 `attention.entry.recorded`) |
+| `PREREGISTER_ENTRY_LEAD_MINUTES` | 사전등록 입장을 회차 시작 몇 분 전부터 허용할지 (기본 `30`) |
+| `PROGRAM_ATTENDANCE_REQUIRE_CODE` | 켜면 일반 프로그램 출석 스캔에 참가자 `code`가 필수 (기본 `false`) |
 
 `/internal`은 게이트웨이 라우팅에 넣지 않는다. 게이트웨이가 모르는 경로는 404로 막아 주기 때문에 외부에서 닿지 않는다.
