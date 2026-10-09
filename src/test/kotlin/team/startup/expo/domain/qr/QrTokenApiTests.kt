@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.startup.expo.domain.qr.entity.QrCategory
+import team.startup.expo.domain.qr.entity.QrEntry
 import team.startup.expo.domain.qr.entity.QrEntryPeriodCheck
 import team.startup.expo.domain.qr.entity.QrToken
 import team.startup.expo.domain.qr.presentation.dto.request.IssueQrTokensReqDto
@@ -53,6 +54,8 @@ class QrTokenApiTests : IntegrationTestSupport() {
     fun setUpPeriod() {
         // 앞선 테스트의 장애 호출이 회로를 열어 두지 않게 한다
         expoCircuitBreaker.reset()
+        // 앞선 테스트가 남긴 기간 확인 대기 입장이 재확인 건수에 섞이지 않게 한다
+        qrEntryRepository.deleteAll()
         val today = LocalDate.now(clock)
         doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString()))
             .`when`(expoClient)
@@ -329,6 +332,46 @@ class QrTokenApiTests : IntegrationTestSupport() {
         qrTokenRepository.existsById("clean-token") shouldBe false
         qrEntryRepository.existsByToken("clean-token") shouldBe false
         qrTokenRepository.existsById("keep-token") shouldBe true
+    }
+
+    @Test
+    fun `응답하지 못하는 박람회의 대기 입장이 200건을 넘어도 다른 박람회의 확인은 진행된다`() {
+        val today = LocalDate.now(clock)
+        val now = java.time.LocalDateTime.now(clock)
+        val downTokens = (1..250).map { QrToken(token = "down-$it", expoId = "expo-starve-down", category = QrCategory.GENERAL) }
+        qrTokenRepository.saveAll(downTokens + QrToken(token = "healthy-1", expoId = "expo-starve-ok", category = QrCategory.GENERAL))
+        qrEntryRepository.saveAll(
+            (downTokens.map { it.token } + "healthy-1").map {
+                QrEntry(token = it, attendanceDate = today, enteredAt = now, periodCheck = QrEntryPeriodCheck.PENDING)
+            },
+        )
+        expoCircuitBreaker.reset()
+        doThrow(RuntimeException("down")).`when`(expoClient).getPeriod("expo-starve-down")
+        doReturn(
+            ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString()),
+        ).`when`(expoClient).getPeriod("expo-starve-ok")
+
+        qrEntryPeriodReviewService.reviewPending() shouldBe 1
+
+        statusOf("healthy-1") shouldBe QrEntryPeriodCheck.VERIFIED
+        qrEntryRepository.findAll().count { it.token.startsWith("down-") && it.periodCheck == QrEntryPeriodCheck.PENDING } shouldBe 250
+    }
+
+    @Test
+    fun `대기 입장이 200건을 넘는 박람회도 한 번에 모두 확인한다`() {
+        val today = LocalDate.now(clock)
+        val now = java.time.LocalDateTime.now(clock)
+        val tokens = (1..450).map { QrToken(token = "many-$it", expoId = "expo-many", category = QrCategory.GENERAL) }
+        qrTokenRepository.saveAll(tokens)
+        qrEntryRepository.saveAll(
+            tokens.map { QrEntry(token = it.token, attendanceDate = today, enteredAt = now, periodCheck = QrEntryPeriodCheck.PENDING) },
+        )
+        expoCircuitBreaker.reset()
+        doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString())).`when`(expoClient).getPeriod("expo-many")
+
+        qrEntryPeriodReviewService.reviewPending() shouldBe 450
+
+        qrEntryRepository.findAll().count { it.token.startsWith("many-") && it.periodCheck == QrEntryPeriodCheck.VERIFIED } shouldBe 450
     }
 
     private fun statusOf(token: String) = qrEntryRepository.findAll().single { it.token == token }.periodCheck

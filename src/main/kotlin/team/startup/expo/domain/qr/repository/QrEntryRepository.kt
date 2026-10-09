@@ -35,13 +35,21 @@ interface QrEntryRepository : JpaRepository<QrEntry, Long> {
         @Param("periodCheck") periodCheck: String,
     ): Int
 
-    /** 기간을 확인하지 못한 채 기록한 입장을 오래된 순서로 읽는다. 박람회 ID는 토큰에서 가져온다. */
+    /** 기간 확인을 기다리는 입장이 있는 박람회 ID. 박람회 ID는 토큰에서 가져온다. */
+    @Query("SELECT DISTINCT t.expoId FROM QrEntry e JOIN QrToken t ON t.token = e.token WHERE e.periodCheck = :status")
+    fun findExpoIdsByPeriodCheck(
+        @Param("status") status: QrEntryPeriodCheck,
+    ): List<String>
+
+    /** 한 박람회에서 기간 확인을 기다리는 입장을 오래된 순서로 읽는다. */
     @Query(
         "SELECT new team.startup.expo.domain.qr.repository.PendingQrEntry(e.id, t.expoId, e.attendanceDate) " +
-            "FROM QrEntry e JOIN QrToken t ON t.token = e.token WHERE e.periodCheck = :status ORDER BY e.id",
+            "FROM QrEntry e JOIN QrToken t ON t.token = e.token " +
+            "WHERE e.periodCheck = :status AND t.expoId = :expoId ORDER BY e.id",
     )
-    fun findByPeriodCheck(
+    fun findByPeriodCheckAndExpoId(
         @Param("status") status: QrEntryPeriodCheck,
+        @Param("expoId") expoId: String,
         pageable: Pageable,
     ): List<PendingQrEntry>
 
