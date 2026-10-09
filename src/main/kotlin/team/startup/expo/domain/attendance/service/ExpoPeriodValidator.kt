@@ -23,19 +23,23 @@ class ExpoPeriodValidator(
         expoId: String,
         today: LocalDate = LocalDate.now(clock),
     ) {
+        val (startedDay, finishedDay) = period(expoId)
+        if (today < startedDay || today > finishedDay) {
+            throw ExpectedException(HttpStatus.BAD_REQUEST, "해당 박람회는 진행 중인 상태가 아닙니다.")
+        }
+    }
+
+    /** 박람회의 시작일과 종료일(둘 다 포함). 없으면 404, 박람회 서비스가 응답하지 못하거나 날짜가 잘못이면 503이다. */
+    fun period(expoId: String): Pair<LocalDate, LocalDate> {
         val period =
             expoCircuitBreaker.callService("박람회", ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")) {
                 expoClient.getPeriod(expoId)
             }
         // 박람회 서비스가 날짜를 잘못 주면 호출 실패와 같이 503으로 알린다(500이 아니라)
-        val (startedDay, finishedDay) =
-            try {
-                LocalDate.parse(period.startedDay) to LocalDate.parse(period.finishedDay)
-            } catch (_: DateTimeParseException) {
-                throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "박람회 서비스를 잠시 사용할 수 없습니다.")
-            }
-        if (today < startedDay || today > finishedDay) {
-            throw ExpectedException(HttpStatus.BAD_REQUEST, "해당 박람회는 진행 중인 상태가 아닙니다.")
+        return try {
+            LocalDate.parse(period.startedDay) to LocalDate.parse(period.finishedDay)
+        } catch (_: DateTimeParseException) {
+            throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "박람회 서비스를 잠시 사용할 수 없습니다.")
         }
     }
 }

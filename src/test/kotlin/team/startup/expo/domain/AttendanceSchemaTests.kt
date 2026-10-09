@@ -59,9 +59,9 @@ class AttendanceSchemaTests : IntegrationTestSupport() {
         qrTokenRepository.save(QrToken(token = "token-daily", expoId = "expo-a", category = QrCategory.GENERAL))
         val now = LocalDateTime.now()
 
-        qrEntryRepository.insertIfAbsent("token-daily", "expo-a", today, now) shouldBe 1
-        qrEntryRepository.insertIfAbsent("token-daily", "expo-a", today, now) shouldBe 0
-        qrEntryRepository.insertIfAbsent("token-daily", "expo-a", today.plusDays(1), now) shouldBe 1
+        qrEntryRepository.insertIfAbsent("token-daily", "expo-a", today, now, "VERIFIED") shouldBe 1
+        qrEntryRepository.insertIfAbsent("token-daily", "expo-a", today, now, "VERIFIED") shouldBe 0
+        qrEntryRepository.insertIfAbsent("token-daily", "expo-a", today.plusDays(1), now, "VERIFIED") shouldBe 1
     }
 
     @Test
@@ -69,8 +69,8 @@ class AttendanceSchemaTests : IntegrationTestSupport() {
         qrTokenRepository.save(QrToken(token = "token-other", expoId = "expo-a", category = QrCategory.GENERAL))
         val now = LocalDateTime.now()
 
-        qrEntryRepository.insertIfAbsent("unknown", "expo-a", today, now) shouldBe 0
-        qrEntryRepository.insertIfAbsent("token-other", "expo-b", today, now) shouldBe 0
+        qrEntryRepository.insertIfAbsent("unknown", "expo-a", today, now, "VERIFIED") shouldBe 0
+        qrEntryRepository.insertIfAbsent("token-other", "expo-b", today, now, "VERIFIED") shouldBe 0
     }
 
     @Test
@@ -88,7 +88,7 @@ class AttendanceSchemaTests : IntegrationTestSupport() {
                         Callable {
                             ready.countDown()
                             start.await()
-                            qrEntryRepository.insertIfAbsent("token-race", "expo-a", today, LocalDateTime.now())
+                            qrEntryRepository.insertIfAbsent("token-race", "expo-a", today, LocalDateTime.now(), "VERIFIED")
                         },
                     )
                 }.let {
