@@ -2,7 +2,7 @@ package team.startup.expo.domain.qr.service.impl
 
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
+import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.qr.presentation.dto.request.ScanQrTokenReqDto
 import team.startup.expo.domain.qr.repository.QrEntryRepository
 import team.startup.expo.domain.qr.repository.QrTokenRepository
@@ -11,18 +11,23 @@ import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDateTime
 
+/**
+ * 종이 QR 입구 스캔. 일반 입장 스캔처럼 진행 중인 박람회에서만 입장을 기록한다. 박람회 서비스를 부르는 동안 DB 트랜잭션을
+ * 잡지 않도록 이 서비스에는 `@Transactional`을 두지 않고, 기록은 리포지토리 호출 하나가 각자 트랜잭션이다.
+ */
 @Service
 class ScanQrTokenServiceImpl(
     private val qrTokenRepository: QrTokenRepository,
     private val qrEntryRepository: QrEntryRepository,
+    private val expoPeriodValidator: ExpoPeriodValidator,
     private val clock: Clock,
 ) : ScanQrTokenService {
-    @Transactional
     override fun scan(
         expoId: String,
         reqDto: ScanQrTokenReqDto,
     ) {
         val now = LocalDateTime.now(clock)
+        expoPeriodValidator.checkInProgress(expoId, now.toLocalDate())
 
         // 같은 날 두 번 스캔해도 한 번만 기록되도록 DB가 판정한다. 0이면 없는 토큰이거나 이미 입장한 것이다.
         if (qrEntryRepository.insertIfAbsent(reqDto.token, expoId, now.toLocalDate(), now) == 1) return

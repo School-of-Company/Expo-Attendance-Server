@@ -12,6 +12,7 @@ Attendance (참여) service of the Expo MSA. Kotlin 2.3 / Spring Boot 4.1, Gradl
 
 - Domains: `domain/{attendance,qr}`. Other services' data (expo, program, participant, survey) is referenced by ID only: no FK, no local entity. Reach them through Feign.
 - Entry is recorded once per QR/token per day. A second scan on the same day must be rejected (as `PreEnterScanQrCode` does in v1); the next day it is accepted again.
+- Paper QR entry (`PATCH /attendance/qr/{expoId}`) is accepted only while the expo is in progress, like the standard entry scan (period from Expo-Server, 503 if it cannot answer).
 - Standard program scan (`PATCH /attendance/standard/{programId}`) takes an optional `code`: when present it is verified (wrong code = same 404 as an unknown participant); when absent it is accepted by participant ID only unless `program-attendance.require-code` is on (turn it on once the client sends `code`).
 - A pre-registration QR (`participantId` + `code`) whose participant has a recorded session is accepted only from `preregister-entry.lead-minutes` (default 30) before the session starts until it ends; a cancelled one is rejected. Participants without a record (on-site, trainees, paper QR, phone-number scans) are not checked.
 
