@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "team.startup"
-version = "0.0.1-SNAPSHOT"
+version = "0.1.0"
 
 java {
     toolchain {
@@ -28,8 +28,6 @@ dependencies {
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
-    implementation("com.querydsl:querydsl-jpa:5.1.0:jakarta")
-    kapt("com.querydsl:querydsl-apt:5.1.0:jakarta")
     kapt("jakarta.annotation:jakarta.annotation-api")
     kapt("jakarta.persistence:jakarta.persistence-api")
     runtimeOnly("org.postgresql:postgresql")

@@ -9,14 +9,19 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.web.SecurityFilterChain
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
 import team.startup.expo.global.exception.ErrorResponse
 import tools.jackson.databind.ObjectMapper
 
 /**
- * 아직 열어줄 엔드포인트가 없어 actuator만 허용하고 나머지는 전부 막아둔다. 게이트웨이가 JWT를
- * 검증하고 `X-User-Id`만 넘기므로 이 서비스는 토큰을 직접 파싱하지 않는다 — 엔드포인트가
- * 생기면 경로별로 `permitAll`/인증 규칙을 추가한다. 서비스 간 호출(폼 서비스의 토큰 확인 등)은
- * 게이트웨이를 거치지 않으므로 별도 인증 방식을 정해야 한다.
+ * 게이트웨이가 JWT를 검증하고 `X-User-Id`만 넘기므로 이 서비스는 사용자 토큰을 직접 파싱하지 않는다.
+ * 서비스 간 호출(폼 서비스의 토큰 확인 등)은 게이트웨이를 거치지 않으므로 `/internal` 하위 경로에서
+ * `X-Internal-Token`으로 인증한다(`InternalTokenAuthenticationFilter`). 명시하지 않은 경로는 전부 막아 두고,
+ * 엔드포인트가 생기면 경로별 규칙을 여기에 더한다.
+ *
+ * 박람회 입장 스캔, 프로그램 출석 스캔, 종이 QR 입구 스캔은 게이트웨이를 거쳐 오는 요청이다. 토큰 검증은 게이트웨이가
+ * 맡으므로 여기서는 경로만 열어 둔다. 종이 QR 발급은 관리자 전용이라 게이트웨이가 넘기는 `X-User-Role`이
+ * `ROLE_ADMIN`일 때만 허용한다(`GatewayRoleAuthenticationFilter`). 이 경로들은 게이트웨이 라우팅으로만 외부에 닿아야 한다.
  */
 @Configuration
 @EnableWebSecurity
@@ -25,6 +30,7 @@ class SecurityConfig {
     fun securityFilterChain(
         http: HttpSecurity,
         objectMapper: ObjectMapper,
+        internalProperties: InternalProperties,
     ): SecurityFilterChain {
         http
             .csrf { it.disable() }
@@ -32,6 +38,8 @@ class SecurityConfig {
             .formLogin { it.disable() }
             .httpBasic { it.disable() }
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
+            .addFilterBefore(InternalTokenAuthenticationFilter(internalProperties), UsernamePasswordAuthenticationFilter::class.java)
+            .addFilterBefore(GatewayRoleAuthenticationFilter(), UsernamePasswordAuthenticationFilter::class.java)
             .exceptionHandling { exceptions ->
                 exceptions
                     .authenticationEntryPoint { _, response, _ ->
@@ -43,6 +51,17 @@ class SecurityConfig {
                 requests
                     .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/prometheus")
                     .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/qr-tokens/*")
+                    .hasAuthority(GatewayRoleAuthenticationFilter.ADMIN_AUTHORITY)
+                    .requestMatchers(
+                        HttpMethod.PATCH,
+                        "/attendance/*",
+                        "/attendance/standard/*",
+                        "/attendance/training/*",
+                        "/attendance/qr/*",
+                    ).permitAll()
+                    .requestMatchers(InternalTokenAuthenticationFilter.INTERNAL_PATH_MATCHER)
+                    .hasAuthority(InternalTokenAuthenticationFilter.SERVICE_AUTHORITY)
                     .anyRequest()
                     .denyAll()
             }

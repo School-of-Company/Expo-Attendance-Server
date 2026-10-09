@@ -1,6 +1,13 @@
 spring:
   application:
     name: expo-attention-server
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 2000
+            read-timeout: 3000
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/expo_attention}
     username: ${DB_USERNAME:expo_attention}
@@ -9,3 +16,29 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        # QR 토큰 발급이 한 번에 최대 1000건을 넣으므로 INSERT를 묶어 보낸다
+        jdbc.batch_size: 100
+        order_inserts: true
+internal:
+  token: ${INTERNAL_TOKEN}
+clients:
+  user:
+    url: ${USER_URL:}
+    internal-token: ${USER_INTERNAL_TOKEN}
+  expo:
+    url: ${EXPO_URL:}
+    internal-token: ${EXPO_INTERNAL_TOKEN}
+  application:
+    url: ${APPLICATION_URL:}
+    internal-token: ${APPLICATION_INTERNAL_TOKEN}
+preregister-entry:
+  lead-minutes: ${PREREGISTER_ENTRY_LEAD_MINUTES:30}
+program-attendance:
+  require-code: ${PROGRAM_ATTENDANCE_REQUIRE_CODE:false}
+entry-retry:
+  window-seconds: ${ENTRY_RETRY_WINDOW_SECONDS:300}
+qr-entry-review:
+  enabled: ${QR_ENTRY_REVIEW_ENABLED:true}
+  interval-ms: ${QR_ENTRY_REVIEW_INTERVAL_MS:300000}

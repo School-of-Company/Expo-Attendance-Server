@@ -1,0 +1,74 @@
+name: Close Linked Issues
+
+# 기본 브랜치가 main이라 develop으로 머지되는 PR은 GitHub이 이슈를 자동으로 닫지 않는다.
+# PR 본문의 `Closes #N` / `Resolves: #N` 이슈를 develop 머지 시점에 직접 닫는다.
+on:
+  pull_request:
+    types: [closed]
+    branches: [develop]
+
+jobs:
+  close-issues:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: PR 본문에 연결된 이슈 닫기
+        uses: actions/github-script@v7
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        with:
+          script: |
+            const body = process.env.PR_BODY || '';
+            const pattern = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+#(\d+)/gi;
+            const numbers = [...new Set([...body.matchAll(pattern)].map((m) => Number(m[1])))];
+
+            const { owner, repo } = context.repo;
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+            // GitHub API의 일시 오류(500 등)에 대비해 최대 3번, 1초·2초 간격으로 다시 시도한다.
+            const withRetry = async (label, call) => {
+              for (let attempt = 1; ; attempt++) {
+                try {
+                  return await call();
+                } catch (error) {
+                  if (attempt === 3) throw new Error(`${label}: ${error.message}`);
+                  core.warning(`${label} 실패(${attempt}번째), 다시 시도합니다: ${error.message}`);
+                  await sleep(1000 * 2 ** (attempt - 1));
+                }
+              }
+            };
+
+            const failures = [];
+            for (const issue_number of numbers) {
+              try {
+                const { data: issue } = await withRetry(`#${issue_number} 조회`, () =>
+                  github.rest.issues.get({ owner, repo, issue_number }),
+                );
+                if (issue.pull_request || issue.state === 'closed') continue;
+
+                // 코멘트가 실패해도 닫기는 시도한다.
+                try {
+                  await withRetry(`#${issue_number} 코멘트`, () =>
+                    github.rest.issues.createComment({
+                      owner,
+                      repo,
+                      issue_number,
+                      body: `#${context.payload.pull_request.number} 머지로 이슈를 닫습니다.`,
+                    }),
+                  );
+                } catch (error) {
+                  failures.push(error.message);
+                }
+
+                await withRetry(`#${issue_number} 닫기`, () =>
+                  github.rest.issues.update({ owner, repo, issue_number, state: 'closed', state_reason: 'completed' }),
+                );
+              } catch (error) {
+                // 이슈 하나가 실패해도 다음 이슈를 계속 처리한다.
+                failures.push(error.message);
+              }
+            }
+
+            if (failures.length > 0) core.setFailed(`처리하지 못한 항목:\n${failures.join('\n')}`);

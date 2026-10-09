@@ -1,0 +1,21 @@
+package team.startup.expo.domain.attendance.presentation.dto.response
+
+data class ScanEntryResDto(
+    val id: Long,
+    val name: String,
+    /** 번호가 없는 참가자(동행자)는 `null`이다. */
+    val phoneNumber: String?,
+    val personalInformationStatus: Boolean,
+    val participationType: String,
+    /** 명찰 출력 대상(연수자 전원, 교사인 일반 참가자)이 아니면 `null`이다. */
+    val badge: BadgeResDto?,
+) {
+    override fun toString() = "ScanEntryResDto(id=$id, participationType=$participationType)"
+}
+
+data class BadgeResDto(
+    val name: String,
+    val school: String?,
+    /** 입구 스캔 QR과 같은 값의 JSON 문자열이다(참가자 ID와 코드, 이전 방식은 전화번호). 이름·소속은 담지 않는다. */
+    val qrCode: String,
+)
