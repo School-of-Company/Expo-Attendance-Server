@@ -5,7 +5,7 @@ Attendance (참여) service of the Expo MSA. Kotlin 2.3 / Spring Boot 4.1, Gradl
 ## Scope
 
 - Port of the v1 monolith (`Expo-Server`) `attendance` domain: expo entry scan (`PreEnterScanQrCode`), standard/training program attendance. Match v1; adapt only what the split forces.
-- New in v2: on-site **paper QR** tokens. This service issues the tokens, records entry when one is scanned at the door, and answers Form-Server's "was this token entered?" check. Form-Server stores the survey answers; it never issues tokens.
+- New in v2: on-site **paper QR** tokens. This service issues the tokens, and records entry when one is scanned at the door. The survey no longer depends on entry: Form-Server serves a public survey link and stores the answers; it never issues tokens.
 - Not owned here: SMS (Notification-Server sends the pre-registration QR link and the survey link), pre-application (신청) creation and the pre-registration QR, form/survey definitions and answers (Form-Server), participants, companions and trainees (User-Server), expo, session (회차) and program data (Expo-Expo-Server).
 
 ## Boundaries
@@ -32,7 +32,6 @@ Verified against the other services' `develop` code. Change a contract by openin
 
 | Caller | Endpoint |
 |---|---|
-| Form | `POST /internal/qr-tokens/resolve` `{token}` → 200 `{expoId}` if the token was entered at least once, else 404 |
 | Expo | `GET /internal/program-attendances/{standard\|training}/{programId}` → `[{participantId\|traineeId, entryTime "HH:mm", leaveTime null}]`; `DELETE` of the same path and `DELETE /internal/expos/{expoId}` clean up (204, idempotent) |
 | Application | `PUT /internal/expos/{expoId}/participants/{participantId}/preregister-session` `{sessionId}` → 204 (confirmed/promoted, also revives a cancelled one; idempotent); `DELETE` of the same path → 204 (cancelled, idempotent, no-op if unknown) | session-time check on entry (proposed, see #40) |
 | Gateway clients | `PATCH /attendance/{expoId}`, `PATCH /attendance/{standard\|training}/{programId}`, `PATCH /attendance/qr/{expoId}`, `POST /qr-tokens/{expoId}` (`ROLE_ADMIN`) |
