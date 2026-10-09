@@ -15,10 +15,7 @@ data class RecordEntryReqDto(
     val code: String? = null,
 )
 
-/**
- * 연수자는 `occupation`이 없고(연수자는 모두 교사) `school`만 있다. 동행자는 `phoneNumber`가 없고, 입장 문자는
- * `notificationPhoneNumber`(본인 번호, 없으면 대표자 번호)로 보낸다.
- */
+/** 연수자는 `occupation`이 없고(연수자는 모두 교사) `school`만 있다. 동행자는 `phoneNumber`가 없다. */
 data class RecordEntryResDto(
     val id: Long,
     val name: String,
@@ -27,17 +24,4 @@ data class RecordEntryResDto(
     val participationType: String,
     val occupation: String?,
     val school: String?,
-    val notificationPhoneNumber: String? = null,
-)
-
-/** 유저 서비스 `POST /internal/participants/resolve` 요청. */
-data class ResolveParticipantReqDto(
-    val expoId: String,
-    val phoneNumber: String,
-    val participationType: String,
-)
-
-data class ResolveParticipantResDto(
-    val participantId: Long,
-    val participationType: String,
 )

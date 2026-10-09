@@ -22,24 +22,6 @@ data class TraineeNameResDto(
     val name: String,
 )
 
-/** 유저 서비스 `POST /internal/standard-participants/details` 요청. 없는 id나 다른 박람회의 참가자가 있으면 404다. */
-data class StandardParticipantBriefsReqDto(
-    val expoId: String,
-    val participantIds: List<Long>,
-)
-
-/**
- * 참가자 요약. 동행자는 `phoneNumber`가 없다. `notificationPhoneNumber`는 문자를 받을 번호(본인 번호, 없으면 대표자 번호)이며
- * 유저 서비스가 이 필드를 내려주기 전에는 `null`이다.
- */
-data class StandardParticipantBriefResDto(
-    val participantId: Long,
-    val name: String,
-    val phoneNumber: String?,
-    val personalInformationStatus: Boolean,
-    val notificationPhoneNumber: String? = null,
-)
-
 /** 유저 서비스 `POST /internal/standard-participants/verify` 요청. 입장·출석을 기록하지 않고 ID와 code가 맞는지만 확인한다. */
 data class VerifyStandardParticipantReqDto(
     val expoId: String,

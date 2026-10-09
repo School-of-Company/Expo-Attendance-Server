@@ -61,7 +61,7 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
-        jdbcTemplate.execute("TRUNCATE TABLE tb_preregister_session, tb_entry_outbox, tb_deleted_expo RESTART IDENTITY CASCADE")
+        jdbcTemplate.execute("TRUNCATE TABLE tb_preregister_session, tb_deleted_expo RESTART IDENTITY CASCADE")
         reset(userClient, expoClient)
         val today = LocalDate.now(clock)
         doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString())).`when`(expoClient).getPeriod(anyString())

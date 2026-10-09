@@ -20,10 +20,6 @@ import team.startup.expo.global.client.expo.TrainingProgramBatchReqDto
 import team.startup.expo.global.client.expo.TrainingProgramResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
-import team.startup.expo.global.client.user.ResolveParticipantReqDto
-import team.startup.expo.global.client.user.ResolveParticipantResDto
-import team.startup.expo.global.client.user.StandardParticipantBriefResDto
-import team.startup.expo.global.client.user.StandardParticipantBriefsReqDto
 import team.startup.expo.global.client.user.StandardParticipantNameResDto
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.TraineeNameResDto
@@ -120,12 +116,12 @@ class ClientContractTests : IntegrationTestSupport() {
     fun `유저 서비스 입장 기록은 전화번호 방식의 본문과 응답을 맞추고 빈 필드를 보내지 않는다`() {
         respond(
             "/internal/entries",
-            """{"id":42,"name":"홍길동","phoneNumber":"01012345678","notificationPhoneNumber":"01012345678",""" +
+            """{"id":42,"name":"홍길동","phoneNumber":"01012345678",""" +
                 """"personalInformationStatus":true,"participationType":"STANDARD","occupation":"TEACHER","school":"광주초"}""",
         )
 
         userClient.recordEntry(RecordEntryReqDto("expo-1", "STANDARD", phoneNumber = "01012345678")) shouldBe
-            RecordEntryResDto(42, "홍길동", "01012345678", true, "STANDARD", "TEACHER", "광주초", "01012345678")
+            RecordEntryResDto(42, "홍길동", "01012345678", true, "STANDARD", "TEACHER", "광주초")
 
         received[0].let { it.method to it.path } shouldBe ("POST" to "/internal/entries")
         received[0].token shouldBe USER_INTERNAL_TOKEN
@@ -138,29 +134,16 @@ class ClientContractTests : IntegrationTestSupport() {
     fun `유저 서비스 입장 기록은 참가자 ID와 코드 방식의 본문을 맞추고 번호 없는 동행자 응답을 읽는다`() {
         respond(
             "/internal/entries",
-            """{"id":5001,"name":"동행자","phoneNumber":null,"notificationPhoneNumber":"01077776666",""" +
+            """{"id":5001,"name":"동행자","phoneNumber":null,""" +
                 """"personalInformationStatus":true,"participationType":"STANDARD","occupation":"ELEMENTARY_STUDENT","school":null}""",
         )
 
         userClient.recordEntry(RecordEntryReqDto("expo-1", "STANDARD", participantId = 5001, code = "abcdefghijklmnopqrstuv")) shouldBe
-            RecordEntryResDto(5001, "동행자", null, true, "STANDARD", "ELEMENTARY_STUDENT", null, "01077776666")
+            RecordEntryResDto(5001, "동행자", null, true, "STANDARD", "ELEMENTARY_STUDENT", null)
 
         // 전화번호는 null이라 보내지 않고 ID와 코드만 보낸다
         received[0].body.tree() shouldBe
             """{"expoId":"expo-1","participationType":"STANDARD","participantId":5001,"code":"abcdefghijklmnopqrstuv"}""".tree()
-    }
-
-    @Test
-    fun `유저 서비스 입장 기록 응답에 문자 수신 번호 필드가 없어도 읽는다`() {
-        // 필드가 추가되기 전의 응답(옛 유저 서비스)과 호환되어야 한다
-        respond(
-            "/internal/entries",
-            """{"id":7,"name":"김연수","phoneNumber":"01099998888","personalInformationStatus":true,""" +
-                """"participationType":"TRAINEE","occupation":null,"school":"광주중"}""",
-        )
-
-        userClient.recordEntry(RecordEntryReqDto("expo-1", "TRAINEE", phoneNumber = "01099998888")) shouldBe
-            RecordEntryResDto(7, "김연수", "01099998888", true, "TRAINEE", null, "광주중", null)
     }
 
     @Test
@@ -173,44 +156,6 @@ class ClientContractTests : IntegrationTestSupport() {
 
         forcedStatuses += 409
         assertThrows<FeignException.Conflict> { userClient.recordEntry(request) }
-    }
-
-    @Test
-    fun `유저 서비스 참가자 조회는 본문과 응답을 맞춘다`() {
-        respond("/internal/participants/resolve", """{"participantId":7,"participationType":"STANDARD"}""")
-
-        userClient.resolveParticipant(ResolveParticipantReqDto("expo-1", "01012345678", "STANDARD")) shouldBe
-            ResolveParticipantResDto(7, "STANDARD")
-
-        received[0].let { it.method to it.path } shouldBe ("POST" to "/internal/participants/resolve")
-        received[0].token shouldBe USER_INTERNAL_TOKEN
-        received[0].body.tree() shouldBe """{"expoId":"expo-1","phoneNumber":"01012345678","participationType":"STANDARD"}""".tree()
-    }
-
-    @Test
-    fun `유저 서비스 참가자 요약 조회는 본문을 맞추고 번호 없는 동행자와 문자 수신 번호 유무를 모두 읽는다`() {
-        respond(
-            "/internal/standard-participants/details",
-            """[{"participantId":1,"name":"대표","phoneNumber":"01012345678","personalInformationStatus":true,"extra":1},""" +
-                """{"participantId":2,"name":"동행","personalInformationStatus":true,"notificationPhoneNumber":"01012345678"}]""",
-        )
-
-        userClient.getStandardParticipantBriefs(StandardParticipantBriefsReqDto("expo-1", listOf(1, 2))) shouldBe
-            listOf(
-                StandardParticipantBriefResDto(1, "대표", "01012345678", true, null),
-                StandardParticipantBriefResDto(2, "동행", null, true, "01012345678"),
-            )
-
-        received[0].let { it.method to it.path } shouldBe ("POST" to "/internal/standard-participants/details")
-        received[0].token shouldBe USER_INTERNAL_TOKEN
-        received[0].body.tree() shouldBe """{"expoId":"expo-1","participantIds":[1,2]}""".tree()
-
-        notFoundPaths += "/internal/standard-participants/details"
-        assertThrows<FeignException.NotFound> {
-            userClient.getStandardParticipantBriefs(
-                StandardParticipantBriefsReqDto("expo-1", listOf(9)),
-            )
-        }
     }
 
     @Test
