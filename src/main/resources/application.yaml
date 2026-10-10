@@ -42,3 +42,5 @@ entry-retry:
 qr-entry-review:
   enabled: ${QR_ENTRY_REVIEW_ENABLED:true}
   interval-ms: ${QR_ENTRY_REVIEW_INTERVAL_MS:300000}
+expo-period-cache:
+  ttl-seconds: ${EXPO_PERIOD_CACHE_TTL_SECONDS:30}
