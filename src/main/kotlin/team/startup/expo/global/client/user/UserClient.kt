@@ -33,4 +33,10 @@ interface UserClient {
     fun verifyStandardParticipant(
         @RequestBody request: VerifyStandardParticipantReqDto,
     )
+
+    /** 참가자 ID와 code가 맞으면 연결된 연수자 ID를 돌려준다. 없는 참가자, 다른 박람회, code 불일치, 연결 없음은 구분 없이 404다. */
+    @PostMapping("/internal/standard-participants/trainee")
+    fun resolveTraineeByParticipant(
+        @RequestBody request: ResolveTraineeByParticipantReqDto,
+    ): ResolveTraineeByParticipantResDto
 }
