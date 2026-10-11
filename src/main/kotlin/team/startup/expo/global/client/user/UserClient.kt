@@ -39,4 +39,13 @@ interface UserClient {
     fun resolveTraineeByParticipant(
         @RequestBody request: ResolveTraineeByParticipantReqDto,
     ): ResolveTraineeByParticipantResDto
+
+    /**
+     * 대표자의 일행(대표자 본인 포함)인 참가자의 QR `code`를 돌려준다(제안, Expo-User-Server#95). 없는 참가자, 다른 박람회,
+     * 다른 대표자의 일행은 구분 없이 404이고 아무것도 기록하지 않는다.
+     */
+    @PostMapping("/internal/standard-participants/qr")
+    fun getParticipantQr(
+        @RequestBody request: ParticipantQrReqDto,
+    ): ParticipantQrResDto
 }
