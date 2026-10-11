@@ -42,7 +42,9 @@ Verified against the other services' `develop` code. Change a contract by openin
 | Application | `POST /internal/program-attendances/summary` `{programs:[{programType, programId}]}` (max 500) → `[{programType, programId, attendeeCount, firstEntryTime, lastEntryTime}]` in request order, 0/null when nobody attended. We do not know which expo a program belongs to, so the caller checks that; entry counts are owned by User, not here (#80) | admin attendance status (Application #46) |
 | Gateway clients | `PATCH /attendance/{expoId}`, `PATCH /attendance/{standard\|training}/{programId}`, `PATCH /attendance/qr/{expoId}`, `POST /qr-tokens/{expoId}` (`ROLE_ADMIN`) |
 
-**Config**: `INTERNAL_TOKEN`, `USER_INTERNAL_TOKEN`, `EXPO_INTERNAL_TOKEN`, `APPLICATION_INTERNAL_TOKEN` must be 32+ characters or the service will not start (see `README.md`).
+**API docs**: springdoc serves Swagger UI at `/attendance/swagger-ui.html` and the spec at `/attendance/v3/api-docs` (under the gateway's `/attendance` prefix, which it forwards unchanged), only when `SWAGGER_ENABLED=true` (default `false`; SecurityConfig opens `GET` on the docs paths only then). `/internal/**` is left out of the docs unless `SWAGGER_INCLUDE_INTERNAL=true` (default `false`), which also documents the `X-Internal-Token` header. The gateway needs `publicPaths` entries for `GET /attendance/v3/api-docs` and `GET /attendance/swagger-ui` (and their sub-paths) to expose them. Document each endpoint's real error statuses with `@ApiError(status, reason)` and every DTO field with `@field:Schema`.
+
+**Config**: `INTERNAL_TOKEN`, `USER_INTERNAL_TOKEN`, `EXPO_INTERNAL_TOKEN`, `APPLICATION_INTERNAL_TOKEN` must be 32+ characters or the service will not start (see `README.md`). `SWAGGER_ENABLED` and `SWAGGER_INCLUDE_INTERNAL` are optional.
 
 ## Auth
 
