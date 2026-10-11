@@ -17,6 +17,15 @@ interface TrainingProgramAttendanceRepository : JpaRepository<TrainingProgramAtt
 
     fun findAllByTrainingProgramId(trainingProgramId: Long): List<TrainingProgramAttendance>
 
+    /** 프로그램별 [프로그램 ID, 출석 인원, 가장 이른 입실, 가장 늦은 입실]. 출석이 없는 프로그램은 행이 없다. */
+    @Query(
+        "SELECT a.trainingProgramId, COUNT(a), MIN(a.entryTime), MAX(a.entryTime) FROM TrainingProgramAttendance a " +
+            "WHERE a.trainingProgramId IN :programIds GROUP BY a.trainingProgramId",
+    )
+    fun summarize(
+        @Param("programIds") programIds: Collection<Long>,
+    ): List<Array<Any>>
+
     /** 처음 스캔이면 입실을 기록한다. 반환값 0이면 이미 입실한 사람이다. */
     @Transactional
     @Modifying
