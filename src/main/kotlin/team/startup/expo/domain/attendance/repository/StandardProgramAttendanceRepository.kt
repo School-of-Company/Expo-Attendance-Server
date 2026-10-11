@@ -17,6 +17,8 @@ interface StandardProgramAttendanceRepository : JpaRepository<StandardProgramAtt
 
     fun findAllByStandardProgramId(standardProgramId: Long): List<StandardProgramAttendance>
 
+    fun existsByParticipantId(participantId: Long): Boolean
+
     /** 프로그램별 [프로그램 ID, 출석 인원, 가장 이른 입실, 가장 늦은 입실]. 출석이 없는 프로그램은 행이 없다. */
     @Query(
         "SELECT a.standardProgramId, COUNT(a), MIN(a.entryTime), MAX(a.entryTime) FROM StandardProgramAttendance a " +

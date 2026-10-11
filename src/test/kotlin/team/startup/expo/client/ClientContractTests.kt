@@ -18,6 +18,8 @@ import team.startup.expo.global.client.expo.PreregisterSessionResDto
 import team.startup.expo.global.client.expo.StandardProgramResDto
 import team.startup.expo.global.client.expo.TrainingProgramBatchReqDto
 import team.startup.expo.global.client.expo.TrainingProgramResDto
+import team.startup.expo.global.client.user.CancellationStatusReqDto
+import team.startup.expo.global.client.user.CancellationStatusResDto
 import team.startup.expo.global.client.user.ParticipantQrReqDto
 import team.startup.expo.global.client.user.ParticipantQrResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
@@ -195,6 +197,24 @@ class ClientContractTests : IntegrationTestSupport() {
         assertThrows<FeignException.NotFound> {
             userClient.resolveTraineeByParticipant(ResolveTraineeByParticipantReqDto("expo-1", 7, "wrong"))
         }
+    }
+
+    @Test
+    fun `유저 서비스 취소 상태 조회는 본문과 토큰을 맞추고 미연결을 null로 읽으며 404는 NotFound로 던진다`() {
+        respond(
+            "/internal/standard-participants/cancellation-status",
+            """{"participantId":7,"representative":false,"entered":true,"traineeLinked":false,"linkedTraineeId":null}""",
+        )
+
+        userClient.getCancellationStatus(CancellationStatusReqDto("expo-1", "01012345678", 7)) shouldBe
+            CancellationStatusResDto(7, false, true, false, null)
+
+        received[0].let { it.method to it.path } shouldBe ("POST" to "/internal/standard-participants/cancellation-status")
+        received[0].token shouldBe USER_INTERNAL_TOKEN
+        received[0].body.tree() shouldBe """{"expoId":"expo-1","phoneNumber":"01012345678","participantId":7}""".tree()
+
+        notFoundPaths += "/internal/standard-participants/cancellation-status"
+        assertThrows<FeignException.NotFound> { userClient.getCancellationStatus(CancellationStatusReqDto("expo-1", "01012345678", 8)) }
     }
 
     @Test

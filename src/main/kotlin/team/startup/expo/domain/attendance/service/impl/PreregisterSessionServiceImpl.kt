@@ -8,6 +8,7 @@ import team.startup.expo.domain.attendance.entity.PreregisterSessionStatus
 import team.startup.expo.domain.attendance.presentation.dto.request.AssignPreregisterSessionReqDto
 import team.startup.expo.domain.attendance.presentation.dto.request.CancelPreregisterSessionReqDto
 import team.startup.expo.domain.attendance.repository.PreregisterSessionRepository
+import team.startup.expo.domain.attendance.service.CancellationGuardService
 import team.startup.expo.domain.attendance.service.PreregisterSessionService
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.global.exception.ExpectedException
@@ -18,6 +19,7 @@ import java.time.LocalDateTime
 class PreregisterSessionServiceImpl(
     private val preregisterSessionRepository: PreregisterSessionRepository,
     private val deletedExpoRepository: DeletedExpoRepository,
+    private val cancellationGuardService: CancellationGuardService,
     private val clock: Clock,
 ) : PreregisterSessionService {
     @Transactional
@@ -34,15 +36,20 @@ class PreregisterSessionServiceImpl(
         val now = LocalDateTime.now(clock)
         val revision = reqDto.revision
         if (revision == null) {
+            // 재신청으로 회차가 다시 기록되면 확정된 취소 보호를 지워 다시 입장할 수 있게 한다
+            cancellationGuardService.releaseCommitted(expoId, participantId)
             preregisterSessionRepository.upsertActive(expoId, participantId, reqDto.sessionId, now)
             return
         }
         val applied = preregisterSessionRepository.upsertActiveIfNewer(expoId, participantId, reqDto.sessionId, revision, now)
         if (applied == 0) {
+            // 오래된 요청은 상태를 바꾸지 않으므로 취소 보호도 풀지 않는다
             rejectIfConflict(expoId, participantId, revision) {
                 it.status == PreregisterSessionStatus.ACTIVE &&
                     it.sessionId == reqDto.sessionId
             }
+        } else {
+            cancellationGuardService.releaseCommitted(expoId, participantId)
         }
     }
 
