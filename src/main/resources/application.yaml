@@ -44,3 +44,14 @@ qr-entry-review:
   interval-ms: ${QR_ENTRY_REVIEW_INTERVAL_MS:300000}
 expo-period-cache:
   ttl-seconds: ${EXPO_PERIOD_CACHE_TTL_SECONDS:30}
+swagger:
+  enabled: ${SWAGGER_ENABLED:false}
+  include-internal: ${SWAGGER_INCLUDE_INTERNAL:false}
+springdoc:
+  # 게이트웨이가 /attendance 접두사로 이 서비스에 보내므로 문서도 그 아래에 둔다. swagger.enabled가 꺼져 있으면 제공하지 않는다
+  api-docs:
+    enabled: ${swagger.enabled}
+    path: /attendance/v3/api-docs
+  swagger-ui:
+    enabled: ${swagger.enabled}
+    path: /attendance/swagger-ui.html
