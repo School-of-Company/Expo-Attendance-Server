@@ -121,4 +121,44 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
     fun deleteByExpoId(
         @Param("expoId") expoId: String,
     ): Int
+
+    /** 중단된 작업으로 기록한다. 이미 기록되어 있으면 아무것도 하지 않는다. */
+    @Transactional
+    @Modifying
+    @Query(
+        nativeQuery = true,
+        value = """
+            INSERT INTO tb_cancellation_aborted (expo_id, participant_id, operation_id, created_at)
+            VALUES (:expoId, :participantId, :operationId, :now)
+            ON CONFLICT DO NOTHING
+        """,
+    )
+    fun insertAborted(
+        @Param("expoId") expoId: String,
+        @Param("participantId") participantId: Long,
+        @Param("operationId") operationId: String,
+        @Param("now") now: LocalDateTime,
+    ): Int
+
+    @Query(
+        nativeQuery = true,
+        value = """
+            SELECT EXISTS (
+                SELECT 1 FROM tb_cancellation_aborted
+                WHERE expo_id = :expoId AND participant_id = :participantId AND operation_id = :operationId
+            )
+        """,
+    )
+    fun existsAborted(
+        @Param("expoId") expoId: String,
+        @Param("participantId") participantId: Long,
+        @Param("operationId") operationId: String,
+    ): Boolean
+
+    @Transactional
+    @Modifying
+    @Query(nativeQuery = true, value = "DELETE FROM tb_cancellation_aborted WHERE expo_id = :expoId")
+    fun deleteAbortedByExpoId(
+        @Param("expoId") expoId: String,
+    ): Int
 }

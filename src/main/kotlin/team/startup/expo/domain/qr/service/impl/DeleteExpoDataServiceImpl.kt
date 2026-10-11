@@ -30,5 +30,6 @@ class DeleteExpoDataServiceImpl(
         qrTokenRepository.deleteByExpoId(expoId)
         preregisterSessionRepository.deleteByExpoId(expoId)
         cancellationGuardRepository.deleteByExpoId(expoId)
+        cancellationGuardRepository.deleteAbortedByExpoId(expoId)
     }
 }

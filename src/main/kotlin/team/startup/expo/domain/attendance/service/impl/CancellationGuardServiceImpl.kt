@@ -47,6 +47,10 @@ class CancellationGuardServiceImpl(
             exclusive(expoId, participantId) {
                 deletedExpoRepository.lockExpo(expoId)
                 if (deletedExpoRepository.existsById(expoId)) throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
+                // 이미 중단된 작업의 지연된 acquire가 보호를 다시 걸지 못하게 한다. 새 operationId로 다시 시작해야 한다
+                if (cancellationGuardRepository.existsAborted(expoId, participantId, operationId)) {
+                    throw ExpectedException(HttpStatus.CONFLICT, "이미 중단된 취소 작업입니다. 새 operationId로 다시 시도해 주세요.")
+                }
                 val existing = cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId)
                 if (existing == null) {
                     cancellationGuardRepository.insertHeldIfAbsent(expoId, participantId, operationId, LocalDateTime.now(clock))
@@ -108,12 +112,15 @@ class CancellationGuardServiceImpl(
         operationId: String,
     ) {
         exclusive(expoId, participantId) {
-            val existing = cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId) ?: return@exclusive
-            if (existing.operationId != operationId) return@exclusive
-            if (existing.state == CancellationGuardState.COMMITTED) {
+            val existing = cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId)
+            if (existing != null && existing.operationId == operationId && existing.state == CancellationGuardState.COMMITTED) {
                 throw ExpectedException(HttpStatus.CONFLICT, "이미 확정된 취소 작업은 중단할 수 없습니다.")
             }
-            cancellationGuardRepository.deleteHeld(expoId, participantId, operationId)
+            // 보호를 걸었든 아직 acquire가 도착하지 않았든 이 작업은 끝난 것으로 기록해, 지연된 acquire를 거절하고 같은 abort는 멱등으로 둔다
+            cancellationGuardRepository.insertAborted(expoId, participantId, operationId, LocalDateTime.now(clock))
+            if (existing != null && existing.operationId == operationId) {
+                cancellationGuardRepository.deleteHeld(expoId, participantId, operationId)
+            }
         }
     }
 
