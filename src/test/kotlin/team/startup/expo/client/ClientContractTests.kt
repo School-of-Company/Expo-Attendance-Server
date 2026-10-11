@@ -18,6 +18,8 @@ import team.startup.expo.global.client.expo.PreregisterSessionResDto
 import team.startup.expo.global.client.expo.StandardProgramResDto
 import team.startup.expo.global.client.expo.TrainingProgramBatchReqDto
 import team.startup.expo.global.client.expo.TrainingProgramResDto
+import team.startup.expo.global.client.user.ParticipantQrReqDto
+import team.startup.expo.global.client.user.ParticipantQrResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.ResolveTraineeByParticipantReqDto
@@ -193,6 +195,20 @@ class ClientContractTests : IntegrationTestSupport() {
         assertThrows<FeignException.NotFound> {
             userClient.resolveTraineeByParticipant(ResolveTraineeByParticipantReqDto("expo-1", 7, "wrong"))
         }
+    }
+
+    @Test
+    fun `유저 서비스 참가자 QR 조회는 본문과 토큰을 맞추고 404는 NotFound로 던진다`() {
+        respond("/internal/standard-participants/qr", """{"participantId":7,"code":"codeCCCCCCCCCCCCCCCCCC"}""")
+
+        userClient.getParticipantQr(ParticipantQrReqDto("expo-1", 5, 7)) shouldBe ParticipantQrResDto(7, "codeCCCCCCCCCCCCCCCCCC")
+
+        received[0].let { it.method to it.path } shouldBe ("POST" to "/internal/standard-participants/qr")
+        received[0].token shouldBe USER_INTERNAL_TOKEN
+        received[0].body.tree() shouldBe """{"expoId":"expo-1","representativeId":5,"participantId":7}""".tree()
+
+        notFoundPaths += "/internal/standard-participants/qr"
+        assertThrows<FeignException.NotFound> { userClient.getParticipantQr(ParticipantQrReqDto("expo-1", 5, 8)) }
     }
 
     @Test
