@@ -33,6 +33,9 @@ class CancellationGuard(
     @field:Enumerated(EnumType.STRING)
     @field:Column(name = "state", nullable = false, length = 20)
     val state: CancellationGuardState,
+    /** 취소를 확정할 때 받은 회차 revision. 없으면 revision 없는 취소다. */
+    @field:Column(name = "cancel_revision")
+    val cancelRevision: Long? = null,
     @field:Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime,
     @field:Column(name = "updated_at", nullable = false)
