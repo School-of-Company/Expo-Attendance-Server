@@ -48,18 +48,18 @@ class ScanTrainingProgramServiceImpl(
         }
         expoPeriodValidator.checkInProgress(reqDto.expoId)
 
-        val applied =
-            applicationCircuitBreaker.callService(
-                "신청",
-            ) { applicationClient.checkTrainingApplication(programId, traineeId) }
-        if (!applied.applied) {
-            throw ExpectedException(HttpStatus.NOT_FOUND, "연수 프로그램을 참가 중인 유저를 찾지 못 했습니다.")
-        }
-
         // 분 단위로 기록한다(v1과 같음)
         val now = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES)
+        // 신청 확인과 기록을 같은 취소 보호 락 안에서 한다(#88)
         val result =
             cancellationGuardGate.scanning(reqDto.expoId, participantId = reqDto.participantId, traineeId = traineeId) {
+                val applied =
+                    applicationCircuitBreaker.callService(
+                        "신청",
+                    ) { applicationClient.checkTrainingApplication(programId, traineeId) }
+                if (!applied.applied) {
+                    throw ExpectedException(HttpStatus.NOT_FOUND, "연수 프로그램을 참가 중인 유저를 찾지 못 했습니다.")
+                }
                 recordProgramAttendanceService.record(ProgramType.TRAINING, programId, traineeId, LocalDate.now(clock), now)
             }
         when (result) {

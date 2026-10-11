@@ -78,7 +78,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
     @BeforeEach
     fun setUp() {
         jdbcTemplate.execute(
-            "TRUNCATE TABLE tb_cancellation_guard, tb_preregister_session, tb_deleted_expo, " +
+            "TRUNCATE TABLE tb_cancellation_guard, tb_cancellation_aborted, tb_preregister_session, tb_deleted_expo, " +
                 "tb_standard_program_attendance, tb_training_program_attendance RESTART IDENTITY CASCADE",
         )
         reset(userClient, expoClient, applicationClient)
@@ -267,6 +267,73 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
         acquire().andExpect(status().isNotFound)
     }
+
+    @Test
+    fun `중단된 작업의 지연된 acquire는 보호를 다시 걸지 못하고 새 operationId는 걸 수 있다`() {
+        // acquire가 도착하기 전에 abort가 먼저 끝난 경우
+        abort().andExpect(status().isNoContent)
+        acquire().andExpect(status().isConflict)
+        entryScan().andExpect(status().isOk)
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
+
+        // 보호를 걸었다가 중단한 뒤 같은 acquire가 다시 도착한 경우, 같은 abort를 다시 보내도 같다
+        acquire(OTHER_OPERATION).andExpect(status().isNoContent)
+        abort(OTHER_OPERATION).andExpect(status().isNoContent)
+        abort(OTHER_OPERATION).andExpect(status().isNoContent)
+        acquire(OTHER_OPERATION).andExpect(status().isConflict)
+        entryScan().andExpect(status().isOk)
+
+        acquire("op-0003").andExpect(status().isNoContent)
+        entryScan().andExpect(status().isConflict)
+    }
+
+    @Test
+    fun `프로그램 스캔이 신청 확인과 기록을 마칠 때까지 취소 보호가 기다리고 그 뒤에는 출석이 있어 거절된다`() {
+        val checking = CountDownLatch(1)
+        val proceed = CountDownLatch(1)
+        doReturn(StandardProgramResDto(3101, "프로그램")).`when`(expoClient).getStandardProgram(EXPO, 3101)
+        doAnswer {
+            checking.countDown()
+            proceed.await(10, TimeUnit.SECONDS)
+            ProgramApplicationResDto(true)
+        }.`when`(applicationClient).checkStandardApplication(3101, PARTICIPANT)
+
+        val executor = Executors.newFixedThreadPool(2)
+        val scan = executor.submit<Int> { programScanRequest().andReturn().response.status }
+        // 스캔이 applied=true를 읽는 도중에 취소가 acquire를 시도한다
+        checking.await(10, TimeUnit.SECONDS) shouldBe true
+        val acquiring = executor.submit<Int> { acquire().andReturn().response.status }
+
+        Thread.sleep(500)
+        acquiring.isDone shouldBe false
+        proceed.countDown()
+
+        scan.get(10, TimeUnit.SECONDS) shouldBe 200
+        // 스캔이 끝난 뒤 acquire는 이미 출석한 참가자라 취소를 막는다
+        acquiring.get(10, TimeUnit.SECONDS) shouldBe 409
+        standardRepository.findAllByStandardProgramId(3101).size shouldBe 1
+        executor.shutdown()
+    }
+
+    @Test
+    fun `취소가 끝난 뒤 들어온 프로그램 스캔은 최신 신청 상태를 읽어 출석을 기록하지 않는다`() {
+        acquire().andExpect(status().isNoContent)
+        // 로컬 신청 취소가 끝난 뒤 abort로 보호를 풀면 신청 확인은 false다
+        abort().andExpect(status().isNoContent)
+        doReturn(StandardProgramResDto(3101, "프로그램")).`when`(expoClient).getStandardProgram(EXPO, 3101)
+        doReturn(ProgramApplicationResDto(false)).`when`(applicationClient).checkStandardApplication(3101, PARTICIPANT)
+
+        programScanRequest().andExpect(status().isNotFound)
+
+        standardRepository.findAllByStandardProgramId(3101).isEmpty() shouldBe true
+    }
+
+    private fun programScanRequest(): ResultActions =
+        mockMvc.perform(
+            patch("/attendance/standard/3101")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"expoId":"$EXPO","participantId":$PARTICIPANT,"code":"$CODE"}"""),
+        )
 
     private fun status(
         entered: Boolean,
