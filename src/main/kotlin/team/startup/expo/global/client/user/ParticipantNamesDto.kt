@@ -59,3 +59,18 @@ data class CancellationStatusResDto(
     val traineeLinked: Boolean,
     val linkedTraineeId: Long?,
 )
+
+/** 유저 서비스 `POST /internal/standard-participants/qr` 요청(제안, Expo-User-Server#95). */
+data class ParticipantQrReqDto(
+    val expoId: String,
+    val representativeId: Long,
+    val participantId: Long,
+)
+
+/** QR `code`는 로그에 남지 않도록 `toString`에서 뺀다. */
+data class ParticipantQrResDto(
+    val participantId: Long,
+    val code: String,
+) {
+    override fun toString() = "ParticipantQrResDto(participantId=$participantId)"
+}
