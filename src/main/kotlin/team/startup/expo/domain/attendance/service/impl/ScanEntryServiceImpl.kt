@@ -8,6 +8,7 @@ import team.startup.expo.domain.attendance.presentation.dto.request.EntryAuthori
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanEntryReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.BadgeResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ScanEntryResDto
+import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
 import team.startup.expo.domain.attendance.service.RecentEntryResponses
@@ -35,6 +36,7 @@ class ScanEntryServiceImpl(
     private val expoPeriodValidator: ExpoPeriodValidator,
     private val preregisterSessionValidator: PreregisterSessionValidator,
     private val recentEntryResponses: RecentEntryResponses,
+    private val cancellationGuardGate: CancellationGuardGate,
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
 ) : ScanEntryService {
@@ -59,7 +61,13 @@ class ScanEntryServiceImpl(
             }
         }
 
-        val entry = recordEntry(expoId, reqDto)
+        // 참가자 ID와 코드로 들어온 입장은 신청 취소와 겹치지 않게 취소 보호를 확인하며 기록한다(전화번호 입장은 참가자를 미리 알 수 없어 대상이 아니다)
+        val entry =
+            if (reqDto.authority == EntryAuthority.ROLE_STANDARD && reqDto.participantId != null && !reqDto.code.isNullOrBlank()) {
+                cancellationGuardGate.scanning(expoId, participantId = reqDto.participantId) { recordEntry(expoId, reqDto) }
+            } else {
+                recordEntry(expoId, reqDto)
+            }
 
         return toResponse(entry, reqDto).also { recentEntryResponses.remember(expoId, reqDto, scannerId, it) }
     }

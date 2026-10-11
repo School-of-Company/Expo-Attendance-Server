@@ -37,9 +37,11 @@ class PreregisterSessionValidator(
             throw ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청의 QR입니다.")
         }
 
-        // 회차가 없어졌다는 404는 있을 수 없는 상태라 "없음"이 아니라 호출 실패(503)로 본다
+        // 확정 상태인데 회차가 없거나, 회차가 없어졌다는 404는 있을 수 없는 상태라 "없음"이 아니라 호출 실패(503)로 본다
+        val sessionId =
+            assignment.sessionId ?: throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "신청한 회차를 확인할 수 없습니다.")
         val session =
-            expoCircuitBreaker.callService("박람회") { expoClient.getPreregisterSession(expoId, assignment.sessionId) }
+            expoCircuitBreaker.callService("박람회") { expoClient.getPreregisterSession(expoId, sessionId) }
 
         val now = clock.instant()
         val opensAt = session.startedAt.minus(Duration.ofMinutes(properties.leadMinutes))

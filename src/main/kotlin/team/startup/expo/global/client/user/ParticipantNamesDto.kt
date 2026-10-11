@@ -42,3 +42,35 @@ data class ResolveTraineeByParticipantReqDto(
 data class ResolveTraineeByParticipantResDto(
     val traineeId: Long,
 )
+
+/** 유저 서비스 `POST /internal/standard-participants/cancellation-status` 요청. 전화번호는 로그에 남지 않도록 `toString`에서 뺀다. */
+data class CancellationStatusReqDto(
+    val expoId: String,
+    val phoneNumber: String,
+    val participantId: Long,
+) {
+    override fun toString() = "CancellationStatusReqDto(expoId=$expoId, participantId=$participantId)"
+}
+
+data class CancellationStatusResDto(
+    val participantId: Long,
+    val representative: Boolean,
+    val entered: Boolean,
+    val traineeLinked: Boolean,
+    val linkedTraineeId: Long?,
+)
+
+/** 유저 서비스 `POST /internal/standard-participants/qr` 요청(제안, Expo-User-Server#95). */
+data class ParticipantQrReqDto(
+    val expoId: String,
+    val representativeId: Long,
+    val participantId: Long,
+)
+
+/** QR `code`는 로그에 남지 않도록 `toString`에서 뺀다. */
+data class ParticipantQrResDto(
+    val participantId: Long,
+    val code: String,
+) {
+    override fun toString() = "ParticipantQrResDto(participantId=$participantId)"
+}

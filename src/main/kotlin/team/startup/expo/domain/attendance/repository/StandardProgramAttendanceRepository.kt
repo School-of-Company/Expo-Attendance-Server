@@ -17,6 +17,17 @@ interface StandardProgramAttendanceRepository : JpaRepository<StandardProgramAtt
 
     fun findAllByStandardProgramId(standardProgramId: Long): List<StandardProgramAttendance>
 
+    fun existsByParticipantId(participantId: Long): Boolean
+
+    /** 프로그램별 [프로그램 ID, 출석 인원, 가장 이른 입실, 가장 늦은 입실]. 출석이 없는 프로그램은 행이 없다. */
+    @Query(
+        "SELECT a.standardProgramId, COUNT(a), MIN(a.entryTime), MAX(a.entryTime) FROM StandardProgramAttendance a " +
+            "WHERE a.standardProgramId IN :programIds GROUP BY a.standardProgramId",
+    )
+    fun summarize(
+        @Param("programIds") programIds: Collection<Long>,
+    ): List<Array<Any>>
+
     /** 처음 스캔이면 입실을 기록한다. 반환값 0이면 이미 입실한 사람이다. */
     @Transactional
     @Modifying

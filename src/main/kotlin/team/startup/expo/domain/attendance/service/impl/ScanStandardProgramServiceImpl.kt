@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanStandardProgramReqDto
+import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
 import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
@@ -38,6 +39,7 @@ class ScanStandardProgramServiceImpl(
     @Qualifier("applicationCircuitBreaker") private val applicationCircuitBreaker: CircuitBreaker,
     private val expoPeriodValidator: ExpoPeriodValidator,
     private val recordProgramAttendanceService: RecordProgramAttendanceService,
+    private val cancellationGuardGate: CancellationGuardGate,
     private val properties: ProgramAttendanceProperties,
     private val clock: Clock,
 ) : ScanStandardProgramService {
@@ -80,7 +82,11 @@ class ScanStandardProgramServiceImpl(
 
         // 분 단위로 기록한다(v1과 같음)
         val now = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES)
-        when (recordProgramAttendanceService.record(ProgramType.STANDARD, programId, reqDto.participantId, LocalDate.now(clock), now)) {
+        val result =
+            cancellationGuardGate.scanning(reqDto.expoId, participantId = reqDto.participantId) {
+                recordProgramAttendanceService.record(ProgramType.STANDARD, programId, reqDto.participantId, LocalDate.now(clock), now)
+            }
+        when (result) {
             ProgramAttendanceResult.ENTERED, ProgramAttendanceResult.ALREADY_ENTERED -> Unit
             ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, "일반 프로그램을 찾지 못 했습니다.")
         }
