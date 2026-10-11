@@ -72,18 +72,19 @@ class ScanStandardProgramServiceImpl(
         }
         expoPeriodValidator.checkInProgress(reqDto.expoId)
 
-        val applied =
-            applicationCircuitBreaker.callService(
-                "신청",
-            ) { applicationClient.checkStandardApplication(programId, reqDto.participantId) }
-        if (!applied.applied) {
-            throw ExpectedException(HttpStatus.NOT_FOUND, "일반 프로그램을 참가 중인 유저를 찾지 못 했습니다.")
-        }
-
         // 분 단위로 기록한다(v1과 같음)
         val now = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES)
+        // 신청 확인과 기록을 같은 취소 보호 락 안에서 한다. 이미 락 안에 있는 스캔은 신청 취소(acquire)가 기다리고, 취소가 끝난 뒤 들어온
+        // 스캔은 최신 신청 상태를 읽는다(#88).
         val result =
             cancellationGuardGate.scanning(reqDto.expoId, participantId = reqDto.participantId) {
+                val applied =
+                    applicationCircuitBreaker.callService(
+                        "신청",
+                    ) { applicationClient.checkStandardApplication(programId, reqDto.participantId) }
+                if (!applied.applied) {
+                    throw ExpectedException(HttpStatus.NOT_FOUND, "일반 프로그램을 참가 중인 유저를 찾지 못 했습니다.")
+                }
                 recordProgramAttendanceService.record(ProgramType.STANDARD, programId, reqDto.participantId, LocalDate.now(clock), now)
             }
         when (result) {
