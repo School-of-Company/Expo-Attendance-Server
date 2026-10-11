@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController
 import team.startup.expo.domain.attendance.presentation.dto.request.AssignPreregisterSessionReqDto
 import team.startup.expo.domain.attendance.presentation.dto.request.CancelPreregisterSessionReqDto
 import team.startup.expo.domain.attendance.service.PreregisterSessionService
+import team.startup.expo.global.swagger.ApiError
 
 /** 신청 서비스 전용이다. `X-Internal-Token`이 필요하며 gateway에 라우팅하지 않는다. */
 @RestController
@@ -28,6 +29,9 @@ class InternalPreregisterSessionController(
                 "취소된 참가자가 재신청해 확정되면 다시 입장할 수 있습니다. " +
                 "revision을 보내면 더 오래된 요청은 상태를 바꾸지 않고 204이며, 같은 revision에 다른 내용이면 409입니다.",
     )
+    @ApiError(400, "요청 값이 올바르지 않다.")
+    @ApiError(404, "삭제된 박람회다.")
+    @ApiError(409, "같은 revision에 다른 내용의 요청이 이미 반영되었다.")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PutMapping
     fun assign(
@@ -43,6 +47,8 @@ class InternalPreregisterSessionController(
                 "revision을 보내면 기록이 없어도 취소를 남기고, 더 오래된 요청은 상태를 바꾸지 않고 204이며, " +
                 "같은 revision에 다른 내용이면 409입니다.",
     )
+    @ApiError(400, "요청 값이 올바르지 않다.")
+    @ApiError(409, "같은 revision에 다른 내용의 요청이 이미 반영되었다.")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @DeleteMapping
     fun cancel(

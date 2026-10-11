@@ -12,13 +12,18 @@ import org.springframework.web.bind.annotation.RestController
 import team.startup.expo.domain.qr.presentation.dto.request.IssueQrTokensReqDto
 import team.startup.expo.domain.qr.presentation.dto.response.IssueQrTokensResDto
 import team.startup.expo.domain.qr.service.IssueQrTokensService
+import team.startup.expo.global.swagger.ApiError
 
 @RestController
 @RequestMapping("/qr-tokens")
 class QrTokenController(
     private val issueQrTokensService: IssueQrTokensService,
 ) {
-    @Operation(summary = "종이 QR 토큰 발급", description = "박람회의 종이 QR 토큰을 count개(1~1000) 발급한다.")
+    @Operation(summary = "종이 QR 토큰 발급", description = "박람회의 종이 QR 토큰을 count개(1~1000) 발급한다. 관리자(`ROLE_ADMIN`) 전용이다.")
+    @ApiError(400, "요청 값이 올바르지 않거나 박람회 ID 형식(소문자 UUID)이 아니다.")
+    @ApiError(401, "관리자 역할 헤더(`X-User-Id`, `X-User-Role`)가 없다.")
+    @ApiError(403, "`X-User-Role`이 `ROLE_ADMIN`이 아니다.")
+    @ApiError(404, "삭제된 박람회다.")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/{expoId}")
     fun issue(

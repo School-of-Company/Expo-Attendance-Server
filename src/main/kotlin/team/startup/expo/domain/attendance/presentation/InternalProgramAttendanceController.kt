@@ -19,6 +19,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.TrainingPro
 import team.startup.expo.domain.attendance.service.DeleteProgramAttendancesService
 import team.startup.expo.domain.attendance.service.GetProgramAttendanceSummaryService
 import team.startup.expo.domain.attendance.service.GetProgramAttendancesService
+import team.startup.expo.global.swagger.ApiError
 
 /** 박람회 서비스가 프로그램 신청자 목록에 출석 시간을 합칠 때 부른다. 출석하지 않은 사람은 목록에 없다. */
 @RestController
@@ -46,6 +47,7 @@ class InternalProgramAttendanceController(
             "프로그램(유형+ID) 목록의 출석 인원과 입실 시각 범위를 요청 순서대로 돌려줍니다(최대 500개, 중복은 한 번). " +
                 "출석이 없으면 0과 null입니다. 프로그램이 어느 박람회 소속인지는 이 서비스가 모르므로 부르는 쪽이 확인합니다.",
     )
+    @ApiError(400, "요청 값이 올바르지 않다(프로그램 목록이 비었거나 500개를 넘음 등).")
     @PostMapping("/summary")
     fun summarize(
         @Valid @RequestBody reqDto: ProgramAttendanceSummaryReqDto,
