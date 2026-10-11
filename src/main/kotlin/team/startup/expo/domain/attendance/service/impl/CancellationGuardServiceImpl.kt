@@ -8,8 +8,11 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import team.startup.expo.domain.attendance.entity.CancellationGuardState
+import team.startup.expo.domain.attendance.entity.PreregisterSessionStatus
 import team.startup.expo.domain.attendance.presentation.dto.request.AcquireCancellationGuardReqDto
+import team.startup.expo.domain.attendance.presentation.dto.request.CommitCancellationGuardReqDto
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
+import team.startup.expo.domain.attendance.repository.PreregisterSessionRepository
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
 import team.startup.expo.domain.attendance.service.AcquireCancellationGuardResult
@@ -27,6 +30,7 @@ import java.time.LocalDateTime
 class CancellationGuardServiceImpl(
     transactionManager: PlatformTransactionManager,
     private val cancellationGuardRepository: CancellationGuardRepository,
+    private val preregisterSessionRepository: PreregisterSessionRepository,
     private val standardProgramAttendanceRepository: StandardProgramAttendanceRepository,
     private val trainingProgramAttendanceRepository: TrainingProgramAttendanceRepository,
     private val deletedExpoRepository: DeletedExpoRepository,
@@ -94,6 +98,7 @@ class CancellationGuardServiceImpl(
         expoId: String,
         participantId: Long,
         operationId: String,
+        reqDto: CommitCancellationGuardReqDto?,
     ) {
         exclusive(expoId, participantId) {
             val existing = cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId)
@@ -101,7 +106,18 @@ class CancellationGuardServiceImpl(
                 throw ExpectedException(HttpStatus.CONFLICT, "이 작업의 취소 보호가 없습니다. 먼저 보호를 걸어야 합니다.")
             }
             if (existing.state == CancellationGuardState.HELD) {
-                cancellationGuardRepository.commit(expoId, participantId, operationId, LocalDateTime.now(clock))
+                val revision = reqDto?.revision
+                val session = preregisterSessionRepository.findByExpoIdAndParticipantId(expoId, participantId)
+                if (revision != null && session != null && session.status == PreregisterSessionStatus.ACTIVE &&
+                    session.revision > revision
+                ) {
+                    // 보호가 걸려 있는 동안 이 취소보다 새로운 신청의 회차 PUT이 먼저 적용되었다. 이 취소는 밀려났으므로 보호를 확정하지 않고
+                    // 끝난 작업으로 기록해 새 신청이 출석할 수 있게 한다.
+                    cancellationGuardRepository.insertAborted(expoId, participantId, operationId, LocalDateTime.now(clock))
+                    cancellationGuardRepository.deleteHeld(expoId, participantId, operationId)
+                } else {
+                    cancellationGuardRepository.commit(expoId, participantId, operationId, revision, LocalDateTime.now(clock))
+                }
             }
         }
     }
@@ -127,8 +143,9 @@ class CancellationGuardServiceImpl(
     override fun releaseCommitted(
         expoId: String,
         participantId: Long,
+        revision: Long?,
     ) {
-        exclusive(expoId, participantId) { cancellationGuardRepository.deleteCommitted(expoId, participantId) }
+        exclusive(expoId, participantId) { cancellationGuardRepository.deleteCommitted(expoId, participantId, revision) }
     }
 
     private fun blocked(

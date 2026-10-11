@@ -76,7 +76,7 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
     @Query(
         nativeQuery = true,
         value = """
-            UPDATE tb_cancellation_guard SET state = 'COMMITTED', updated_at = :now
+            UPDATE tb_cancellation_guard SET state = 'COMMITTED', cancel_revision = :cancelRevision, updated_at = :now
             WHERE expo_id = :expoId AND participant_id = :participantId AND operation_id = :operationId AND state = 'HELD'
         """,
     )
@@ -84,6 +84,7 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
         @Param("expoId") expoId: String,
         @Param("participantId") participantId: Long,
         @Param("operationId") operationId: String,
+        @Param("cancelRevision") cancelRevision: Long?,
         @Param("now") now: LocalDateTime,
     ): Int
 
@@ -103,16 +104,24 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
         @Param("operationId") operationId: String,
     ): Int
 
-    /** 재신청으로 회차가 다시 기록되면 확정된 취소 보호를 지운다. */
+    /**
+     * 재신청으로 회차가 다시 기록되면 확정된 취소 보호를 지운다. 회차 revision이 있으면 취소를 확정할 때 받은 revision보다 **새로운**
+     * 요청일 때만 지운다(오래된 PUT이 늦게 도착해 확정된 취소를 풀지 못하게). 어느 한쪽에 revision이 없으면 기존처럼 지운다.
+     */
     @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
-        value = "DELETE FROM tb_cancellation_guard WHERE expo_id = :expoId AND participant_id = :participantId AND state = 'COMMITTED'",
+        value = """
+            DELETE FROM tb_cancellation_guard
+            WHERE expo_id = :expoId AND participant_id = :participantId AND state = 'COMMITTED'
+              AND (CAST(:revision AS BIGINT) IS NULL OR cancel_revision IS NULL OR CAST(:revision AS BIGINT) > cancel_revision)
+        """,
     )
     fun deleteCommitted(
         @Param("expoId") expoId: String,
         @Param("participantId") participantId: Long,
+        @Param("revision") revision: Long?,
     ): Int
 
     @Transactional

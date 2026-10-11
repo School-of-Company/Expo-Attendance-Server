@@ -37,7 +37,7 @@ class PreregisterSessionServiceImpl(
         val revision = reqDto.revision
         if (revision == null) {
             // 재신청으로 회차가 다시 기록되면 확정된 취소 보호를 지워 다시 입장할 수 있게 한다
-            cancellationGuardService.releaseCommitted(expoId, participantId)
+            cancellationGuardService.releaseCommitted(expoId, participantId, null)
             preregisterSessionRepository.upsertActive(expoId, participantId, reqDto.sessionId, now)
             return
         }
@@ -49,7 +49,7 @@ class PreregisterSessionServiceImpl(
                     it.sessionId == reqDto.sessionId
             }
         } else {
-            cancellationGuardService.releaseCommitted(expoId, participantId)
+            cancellationGuardService.releaseCommitted(expoId, participantId, revision)
         }
     }
 
