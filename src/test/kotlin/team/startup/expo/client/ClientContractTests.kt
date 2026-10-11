@@ -20,6 +20,8 @@ import team.startup.expo.global.client.expo.TrainingProgramBatchReqDto
 import team.startup.expo.global.client.expo.TrainingProgramResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
+import team.startup.expo.global.client.user.ResolveTraineeByParticipantReqDto
+import team.startup.expo.global.client.user.ResolveTraineeByParticipantResDto
 import team.startup.expo.global.client.user.StandardParticipantNameResDto
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.TraineeNameResDto
@@ -173,6 +175,23 @@ class ClientContractTests : IntegrationTestSupport() {
             userClient.verifyStandardParticipant(
                 VerifyStandardParticipantReqDto("expo-1", 7, "wrong"),
             )
+        }
+    }
+
+    @Test
+    fun `유저 서비스 참가자의 연수자 조회는 본문과 토큰을 맞추고 404는 NotFound로 던진다`() {
+        respond("/internal/standard-participants/trainee", """{"traineeId":701}""")
+
+        userClient.resolveTraineeByParticipant(ResolveTraineeByParticipantReqDto("expo-1", 7, "codeCCCCCCCCCCCCCCCCCC")) shouldBe
+            ResolveTraineeByParticipantResDto(701)
+
+        received[0].let { it.method to it.path } shouldBe ("POST" to "/internal/standard-participants/trainee")
+        received[0].token shouldBe USER_INTERNAL_TOKEN
+        received[0].body.tree() shouldBe """{"expoId":"expo-1","participantId":7,"code":"codeCCCCCCCCCCCCCCCCCC"}""".tree()
+
+        notFoundPaths += "/internal/standard-participants/trainee"
+        assertThrows<FeignException.NotFound> {
+            userClient.resolveTraineeByParticipant(ResolveTraineeByParticipantReqDto("expo-1", 7, "wrong"))
         }
     }
 
