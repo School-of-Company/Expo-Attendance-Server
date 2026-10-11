@@ -227,6 +227,84 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `늦게 도착한 오래된 취소는 재신청 확정을 되돌리지 못한다`() {
+        assign(SESSION, revision = 1).andExpect(status().isNoContent)
+        cancel(revision = 2).andExpect(status().isNoContent)
+        assign(SESSION, revision = 3).andExpect(status().isNoContent)
+
+        // 타임아웃됐던 revision 2 취소가 뒤늦게 다시 도착한다
+        cancel(revision = 2).andExpect(status().isNoContent)
+
+        stored() shouldBe ("ACTIVE" to 3L)
+        sessionAt(start = now, end = now.plus(Duration.ofHours(3)))
+        scan().andExpect(status().isOk)
+    }
+
+    @Test
+    fun `늦게 도착한 오래된 확정은 취소를 되돌리지 못한다`() {
+        assign(SESSION, revision = 1).andExpect(status().isNoContent)
+        cancel(revision = 2).andExpect(status().isNoContent)
+
+        assign(SESSION, revision = 1).andExpect(status().isNoContent)
+
+        stored() shouldBe ("CANCELLED" to 2L)
+        scan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("취소된 신청의 QR입니다."))
+    }
+
+    @Test
+    fun `같은 revision의 같은 내용은 멱등이고 다른 내용은 409이다`() {
+        assign(SESSION, revision = 5).andExpect(status().isNoContent)
+        assign(SESSION, revision = 5).andExpect(status().isNoContent)
+        assign(OTHER_SESSION, revision = 5).andExpect(status().isConflict)
+        cancel(revision = 5).andExpect(status().isConflict)
+        stored() shouldBe ("ACTIVE" to 5L)
+
+        cancel(revision = 6).andExpect(status().isNoContent)
+        cancel(revision = 6).andExpect(status().isNoContent)
+        assign(SESSION, revision = 6).andExpect(status().isConflict)
+        stored() shouldBe ("CANCELLED" to 6L)
+    }
+
+    @Test
+    fun `revision이 있는 취소는 확정 기록이 없어도 남겨 뒤늦은 확정이 되살리지 못한다`() {
+        cancel(revision = 2).andExpect(status().isNoContent)
+        stored() shouldBe ("CANCELLED" to 2L)
+
+        assign(SESSION, revision = 1).andExpect(status().isNoContent)
+        stored() shouldBe ("CANCELLED" to 2L)
+
+        // 더 새로운 확정은 취소 기록을 되살린다
+        assign(SESSION, revision = 3).andExpect(status().isNoContent)
+        stored() shouldBe ("ACTIVE" to 3L)
+    }
+
+    @Test
+    fun `revision 없이 보내는 이전 방식은 그대로 마지막 요청이 이긴다`() {
+        assign(SESSION, revision = 4).andExpect(status().isNoContent)
+        cancel().andExpect(status().isNoContent)
+        stored() shouldBe ("CANCELLED" to 4L)
+
+        assign(OTHER_SESSION).andExpect(status().isNoContent)
+        stored() shouldBe ("ACTIVE" to 4L)
+    }
+
+    @Test
+    fun `revision은 양수여야 하고 삭제된 박람회에는 취소 기록을 만들지 않는다`() {
+        mockMvc
+            .perform(
+                put(PATH)
+                    .header("X-Internal-Token", INTERNAL_TOKEN)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"sessionId":$SESSION,"revision":0}"""),
+            ).andExpect(status().isBadRequest)
+        cancel(revision = 0).andExpect(status().isBadRequest)
+
+        deleteExpoDataService.delete(EXPO)
+        cancel(revision = 1).andExpect(status().isNoContent)
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_preregister_session", Long::class.java) shouldBe 0L
+    }
+
+    @Test
     fun `박람회를 삭제하면 그 박람회의 회차 기록도 지운다`() {
         assign(SESSION).andExpect(status().isNoContent)
         jdbcTemplate.update(
@@ -252,14 +330,25 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
                 .content("""{"authority":"ROLE_STANDARD","participantId":$PARTICIPANT,"code":"$code"}"""),
         )
 
-    private fun assign(sessionId: Long): ResultActions =
-        mockMvc.perform(
-            put(
-                PATH,
-            ).header("X-Internal-Token", INTERNAL_TOKEN).contentType(MediaType.APPLICATION_JSON).content("""{"sessionId":$sessionId}"""),
-        )
+    private fun assign(
+        sessionId: Long,
+        revision: Long? = null,
+    ): ResultActions {
+        val body = if (revision == null) """{"sessionId":$sessionId}""" else """{"sessionId":$sessionId,"revision":$revision}"""
+        return mockMvc.perform(put(PATH).header("X-Internal-Token", INTERNAL_TOKEN).contentType(MediaType.APPLICATION_JSON).content(body))
+    }
 
-    private fun cancel(): ResultActions = mockMvc.perform(delete(PATH).header("X-Internal-Token", INTERNAL_TOKEN))
+    private fun cancel(revision: Long? = null): ResultActions =
+        mockMvc.perform(delete(if (revision == null) PATH else "$PATH?revision=$revision").header("X-Internal-Token", INTERNAL_TOKEN))
+
+    private fun stored(): Pair<String, Long>? =
+        jdbcTemplate
+            .query(
+                "SELECT status, revision FROM tb_preregister_session WHERE expo_id = ? AND participant_id = ?",
+                { rs, _ -> rs.getString("status") to rs.getLong("revision") },
+                EXPO,
+                PARTICIPANT,
+            ).firstOrNull()
 
     private fun entry(id: Long) = RecordEntryResDto(id, "홍길동", "01012345678", true, "STANDARD", "STUDENT", null)
 

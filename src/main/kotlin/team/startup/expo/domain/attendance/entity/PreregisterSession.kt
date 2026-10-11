@@ -25,11 +25,15 @@ class PreregisterSession(
     val expoId: String,
     @field:Column(name = "participant_id", nullable = false)
     val participantId: Long,
-    @field:Column(name = "session_id", nullable = false)
-    val sessionId: Long,
+    /** 확정 기록 없이 취소만 먼저 도착한 참가자는 회차가 없다. */
+    @field:Column(name = "session_id")
+    val sessionId: Long?,
     @field:Enumerated(EnumType.STRING)
     @field:Column(name = "status", nullable = false, length = 20)
     val status: PreregisterSessionStatus,
+    /** 신청 서비스가 보낸 가장 새로운 revision. revision 없이 보낸 요청만 있었다면 0이다. */
+    @field:Column(name = "revision", nullable = false)
+    val revision: Long = 0,
     @field:Column(name = "updated_at", nullable = false)
     val updatedAt: LocalDateTime,
 )

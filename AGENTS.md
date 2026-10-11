@@ -36,7 +36,7 @@ Verified against the other services' `develop` code. Change a contract by openin
 | Caller | Endpoint |
 |---|---|
 | Expo | `GET /internal/program-attendances/{standard\|training}/{programId}` → `[{participantId\|traineeId, entryTime "HH:mm", leaveTime null}]`; `DELETE` of the same path and `DELETE /internal/expos/{expoId}` clean up (204, idempotent) |
-| Application | `PUT /internal/expos/{expoId}/participants/{participantId}/preregister-session` `{sessionId}` → 204 (confirmed/promoted, also revives a cancelled one; idempotent); `DELETE` of the same path → 204 (cancelled, idempotent, no-op if unknown) | session-time check on entry (proposed, see #40) |
+| Application | `PUT /internal/expos/{expoId}/participants/{participantId}/preregister-session` `{sessionId, revision?}` → 204 (confirmed/promoted, also revives a cancelled one; idempotent); `DELETE` of the same path (`?revision=`) → 204 (cancelled, idempotent, no-op if unknown unless `revision` is sent). With `revision` (per participant, increasing) a request not newer than the stored one changes nothing and still answers 204; the same revision with different content is 409. Without it the last request wins (#75) | session-time check on entry (see #40) |
 | Gateway clients | `PATCH /attendance/{expoId}`, `PATCH /attendance/{standard\|training}/{programId}`, `PATCH /attendance/qr/{expoId}`, `POST /qr-tokens/{expoId}` (`ROLE_ADMIN`) |
 
 **Config**: `INTERNAL_TOKEN`, `USER_INTERNAL_TOKEN`, `EXPO_INTERNAL_TOKEN`, `APPLICATION_INTERNAL_TOKEN` must be 32+ characters or the service will not start (see `README.md`).
