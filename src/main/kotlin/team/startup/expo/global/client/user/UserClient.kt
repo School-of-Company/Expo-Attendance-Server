@@ -39,4 +39,13 @@ interface UserClient {
     fun resolveTraineeByParticipant(
         @RequestBody request: ResolveTraineeByParticipantReqDto,
     ): ResolveTraineeByParticipantResDto
+
+    /**
+     * 신청 취소를 판단할 참가자의 소유·입장·연수 연결 상태를 읽는다(User 취소 권한 계약, Expo-User-Server#97). 박람회 전체의 입장
+     * 기록 유무를 돌려주고 아무것도 만들거나 잠그지 않는다. 없는 참가자, 다른 박람회, 다른 대표자의 참가자, 미등록 번호는 구분 없이 404다.
+     */
+    @PostMapping("/internal/standard-participants/cancellation-status")
+    fun getCancellationStatus(
+        @RequestBody request: CancellationStatusReqDto,
+    ): CancellationStatusResDto
 }

@@ -17,6 +17,8 @@ interface TrainingProgramAttendanceRepository : JpaRepository<TrainingProgramAtt
 
     fun findAllByTrainingProgramId(trainingProgramId: Long): List<TrainingProgramAttendance>
 
+    fun existsByTraineeId(traineeId: Long): Boolean
+
     /** 처음 스캔이면 입실을 기록한다. 반환값 0이면 이미 입실한 사람이다. */
     @Transactional
     @Modifying

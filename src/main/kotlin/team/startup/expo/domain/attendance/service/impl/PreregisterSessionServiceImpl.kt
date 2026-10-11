@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.presentation.dto.request.AssignPreregisterSessionReqDto
 import team.startup.expo.domain.attendance.repository.PreregisterSessionRepository
+import team.startup.expo.domain.attendance.service.CancellationGuardService
 import team.startup.expo.domain.attendance.service.PreregisterSessionService
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.global.exception.ExpectedException
@@ -15,6 +16,7 @@ import java.time.LocalDateTime
 class PreregisterSessionServiceImpl(
     private val preregisterSessionRepository: PreregisterSessionRepository,
     private val deletedExpoRepository: DeletedExpoRepository,
+    private val cancellationGuardService: CancellationGuardService,
     private val clock: Clock,
 ) : PreregisterSessionService {
     @Transactional
@@ -28,6 +30,8 @@ class PreregisterSessionServiceImpl(
         if (deletedExpoRepository.existsById(expoId)) {
             throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
         }
+        // 재신청으로 회차가 다시 기록되면 확정된 취소 보호를 지워 다시 입장할 수 있게 한다
+        cancellationGuardService.releaseCommitted(expoId, participantId)
         preregisterSessionRepository.upsertActive(expoId, participantId, reqDto.sessionId, LocalDateTime.now(clock))
     }
 
