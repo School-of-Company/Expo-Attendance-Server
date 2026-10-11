@@ -31,6 +31,8 @@ import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.expo.StandardProgramResDto
 import team.startup.expo.global.client.expo.TrainingProgramBatchReqDto
 import team.startup.expo.global.client.expo.TrainingProgramResDto
+import team.startup.expo.global.client.user.ResolveTraineeByParticipantReqDto
+import team.startup.expo.global.client.user.ResolveTraineeByParticipantResDto
 import team.startup.expo.global.client.user.StandardParticipantNameResDto
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.TraineeNameResDto
@@ -95,6 +97,49 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
         again.leaveTime shouldBe null
         again.entryTime shouldBe entered.entryTime
         standardRepository.findAllByStandardProgramId(1001).size shouldBe 1
+    }
+
+    @Test
+    fun `연수 프로그램은 참가자 ID와 code로도 연결된 연수자를 찾아 입실을 기록한다`() {
+        trainingAllowed("expo-pc", 2301, 701)
+        doReturn(ResolveTraineeByParticipantResDto(701))
+            .`when`(userClient)
+            .resolveTraineeByParticipant(ResolveTraineeByParticipantReqDto("expo-pc", 801, CODE))
+
+        mockMvc
+            .perform(rawTraining(2301, """{"expoId": "expo-pc", "participantId": 801, "code": "$CODE"}"""))
+            .andExpect(status().isOk)
+
+        trainingRepository.findAllByTrainingProgramId(2301).map { it.traineeId } shouldBe listOf(701L)
+        // 참가자 경로는 연수자 이름 확인을 따로 부르지 않는다
+        verify(userClient, never()).getTraineeNames(TraineeNamesReqDto("expo-pc", listOf(701)))
+    }
+
+    @Test
+    fun `연수 프로그램의 참가자 code가 틀리거나 연결이 없으면 같은 404이고 기록하지 않는다`() {
+        trainingAllowed("expo-pc2", 2302, 702)
+        doThrow(feignException(404))
+            .`when`(userClient)
+            .resolveTraineeByParticipant(ResolveTraineeByParticipantReqDto("expo-pc2", 802, "wrongWrongWrongWrongWr"))
+
+        mockMvc
+            .perform(rawTraining(2302, """{"expoId": "expo-pc2", "participantId": 802, "code": "wrongWrongWrongWrongWr"}"""))
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.message").value("연수자를 찾지 못 했습니다."))
+        trainingRepository.findAllByTrainingProgramId(2302).isEmpty() shouldBe true
+    }
+
+    @Test
+    fun `연수 프로그램의 참가자 경로는 ID와 code 중 하나만 오면 400이고 유저 서비스 장애는 503이다`() {
+        mockMvc.perform(rawTraining(2303, """{"expoId": "expo-pc3", "participantId": 803}""")).andExpect(status().isBadRequest)
+        mockMvc.perform(rawTraining(2303, """{"expoId": "expo-pc3", "code": "$CODE"}""")).andExpect(status().isBadRequest)
+
+        doThrow(feignException(500))
+            .`when`(userClient)
+            .resolveTraineeByParticipant(ResolveTraineeByParticipantReqDto("expo-pc3", 803, CODE))
+        mockMvc
+            .perform(rawTraining(2303, """{"expoId": "expo-pc3", "participantId": 803, "code": "$CODE"}"""))
+            .andExpect(status().isServiceUnavailable)
     }
 
     @Test

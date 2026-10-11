@@ -28,3 +28,17 @@ data class VerifyStandardParticipantReqDto(
     val participantId: Long,
     val code: String,
 )
+
+/**
+ * 유저 서비스 `POST /internal/standard-participants/trainee` 요청(제안, Expo-User-Server#79). 참가자 ID와 code가 맞으면 그 참가자에
+ * 연결된 연수자를 돌려준다. 입장·출석을 기록하지 않는다.
+ */
+data class ResolveTraineeByParticipantReqDto(
+    val expoId: String,
+    val participantId: Long,
+    val code: String,
+)
+
+data class ResolveTraineeByParticipantResDto(
+    val traineeId: Long,
+)
