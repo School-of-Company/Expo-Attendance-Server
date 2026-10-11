@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import team.startup.expo.domain.attendance.presentation.dto.request.AcquireCancellationGuardReqDto
+import team.startup.expo.domain.attendance.presentation.dto.request.CommitCancellationGuardReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.CancellationGuardBlockedResDto
 import team.startup.expo.domain.attendance.service.AcquireCancellationGuardResult
 import team.startup.expo.domain.attendance.service.CancellationGuardService
@@ -65,7 +66,13 @@ class InternalCancellationGuardController(
         }
     }
 
-    @Operation(summary = "신청 취소 확정", description = "취소를 확정합니다. 재신청으로 회차가 다시 기록될 때까지 스캔을 계속 막습니다. 같은 operationId는 멱등입니다.")
+    @Operation(
+        summary = "신청 취소 확정",
+        description =
+            "취소를 확정합니다. 재신청으로 회차가 다시 기록될 때까지 스캔을 계속 막습니다. 같은 operationId는 멱등입니다. " +
+                "본문의 revision(선택)은 이 취소의 회차 DELETE revision이고, " +
+                "더 새로운 회차 PUT이 이미 적용되었으면 보호를 확정하지 않고 풉니다.",
+    )
     @ApiError(400, "operationId 형식이 올바르지 않다.")
     @ApiError(409, "이 operationId의 취소 보호가 없다. 먼저 보호를 걸어야 한다.")
     @ApiError(503, "진행 중인 스캔이 끝나지 않아 잠시 후 다시 시도해야 한다.")
@@ -75,9 +82,10 @@ class InternalCancellationGuardController(
         @PathVariable expoId: String,
         @PathVariable participantId: Long,
         @PathVariable operationId: String,
+        @Valid @RequestBody(required = false) reqDto: CommitCancellationGuardReqDto?,
     ) {
         checkOperationId(operationId)
-        cancellationGuardService.commit(expoId, participantId, operationId)
+        cancellationGuardService.commit(expoId, participantId, operationId, reqDto)
     }
 
     @Operation(summary = "신청 취소 중단", description = "취소를 중단하고 스캔을 다시 허용합니다. 없는 작업은 204이고 이미 확정된 작업은 409입니다.")

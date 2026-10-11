@@ -30,6 +30,7 @@ import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.application.ProgramApplicationResDto
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
+import team.startup.expo.global.client.expo.PreregisterSessionResDto
 import team.startup.expo.global.client.expo.StandardProgramResDto
 import team.startup.expo.global.client.expo.TrainingProgramBatchReqDto
 import team.startup.expo.global.client.expo.TrainingProgramResDto
@@ -42,6 +43,7 @@ import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.concurrent.CountDownLatch
@@ -328,6 +330,124 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         standardRepository.findAllByStandardProgramId(3101).isEmpty() shouldBe true
     }
 
+    @Test
+    fun `취소 확정 전에 더 새로운 회차 PUT이 먼저 적용되면 확정 대신 보호를 풀어 새 신청이 입장한다`() {
+        sessionValid()
+        acquire().andExpect(status().isNoContent)
+        // 취소 DELETE(revision 4)보다 새로운 재신청 PUT(revision 5)이 보호 중에 먼저 도착한다
+        putSession(5).andExpect(status().isNoContent)
+        entryScan().andExpect(status().isConflict)
+
+        commit(revision = 4).andExpect(status().isNoContent)
+
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
+        entryScan().andExpect(status().isOk)
+        // 밀려난 취소의 지연된 acquire는 거절된다
+        acquire().andExpect(status().isConflict)
+    }
+
+    @Test
+    fun `취소가 확정된 뒤 늦게 도착한 오래된 PUT은 보호를 풀지 못하고 더 새로운 PUT만 푼다`() {
+        sessionValid()
+        acquire().andExpect(status().isNoContent)
+        commit(revision = 4).andExpect(status().isNoContent)
+
+        // 취소보다 오래된(또는 같은) revision의 PUT이 늦게 도착한다
+        putSession(3).andExpect(status().isNoContent)
+        putSession(4).andExpect(status().isNoContent)
+        entryScan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("취소된 신청입니다."))
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard WHERE state = 'COMMITTED'", Long::class.java) shouldBe 1L
+
+        putSession(5).andExpect(status().isNoContent)
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
+    }
+
+    @Test
+    fun `revision 없이 확정한 취소는 기존처럼 새 회차 PUT이 오면 풀린다`() {
+        sessionValid()
+        acquire().andExpect(status().isNoContent)
+        commit().andExpect(status().isNoContent)
+
+        putSession(2).andExpect(status().isNoContent)
+
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
+    }
+
+    @Test
+    fun `취소 상태 조회는 읽기 전용으로 입장·프로그램 출석·보호 상태를 돌려주고 아무것도 바꾸지 않는다`() {
+        status(entered = false, traineeId = TRAINEE)
+        cancellationStatus()
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.participantId").value(PARTICIPANT))
+            .andExpect(jsonPath("$.entered").value(false))
+            .andExpect(jsonPath("$.programAttended").value(false))
+            .andExpect(jsonPath("$.traineeLinked").value(true))
+            .andExpect(jsonPath("$.linkedTraineeId").value(TRAINEE))
+            .andExpect(jsonPath("$.guardState").doesNotExist())
+
+        // 연결된 연수자의 연수 출석도 참가자의 프로그램 출석으로 센다
+        trainingRepository.insertEntryIfAbsent(3201, TRAINEE, today, LocalTime.of(10, 0))
+        cancellationStatus().andExpect(jsonPath("$.programAttended").value(true))
+        trainingRepository.deleteAll()
+
+        status(entered = true, traineeId = null)
+        cancellationStatus().andExpect(jsonPath("$.entered").value(true)).andExpect(jsonPath("$.traineeLinked").value(false))
+
+        status(entered = false, traineeId = null)
+        standardRepository.insertEntryIfAbsent(3101, PARTICIPANT, today, LocalTime.of(10, 0))
+        cancellationStatus().andExpect(jsonPath("$.programAttended").value(true))
+
+        acquire().andExpect(status().isConflict)
+        standardRepository.deleteAll()
+        acquire().andExpect(status().isNoContent)
+        cancellationStatus().andExpect(jsonPath("$.guardState").value("HELD"))
+        commit().andExpect(status().isNoContent)
+        cancellationStatus().andExpect(jsonPath("$.guardState").value("COMMITTED"))
+
+        // 조회는 보호를 만들거나 바꾸지 않는다
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 1L
+    }
+
+    @Test
+    fun `취소 상태 조회는 유저가 모르는 쌍은 404, 장애는 503이고 내부 토큰과 전화번호가 필요하다`() {
+        doThrow(feignException(404)).`when`(userClient).getCancellationStatus(CancellationStatusReqDto(EXPO, PHONE, PARTICIPANT))
+        cancellationStatus().andExpect(status().isNotFound)
+
+        doThrow(feignException(500)).`when`(userClient).getCancellationStatus(CancellationStatusReqDto(EXPO, PHONE, PARTICIPANT))
+        cancellationStatus().andExpect(status().isServiceUnavailable)
+
+        mockMvc
+            .perform(post(STATUS_PATH).contentType(MediaType.APPLICATION_JSON).content("""{"phoneNumber":"$PHONE"}"""))
+            .andExpect(status().isUnauthorized)
+        listOf("""{}""", """{"phoneNumber":""}""", """{"phoneNumber":"${"1".repeat(21)}"}""").forEach {
+            mockMvc
+                .perform(post(STATUS_PATH).header("X-Internal-Token", INTERNAL_TOKEN).contentType(MediaType.APPLICATION_JSON).content(it))
+                .andExpect(status().isBadRequest)
+        }
+    }
+
+    private fun sessionValid() {
+        doReturn(PreregisterSessionResDto(SESSION, Instant.now(clock), Instant.now(clock).plusSeconds(3 * 3600)))
+            .`when`(expoClient)
+            .getPreregisterSession(EXPO, SESSION)
+    }
+
+    private fun putSession(revision: Long): ResultActions =
+        mockMvc.perform(
+            put("/internal/expos/$EXPO/participants/$PARTICIPANT/preregister-session")
+                .header("X-Internal-Token", INTERNAL_TOKEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"sessionId":$SESSION,"revision":$revision}"""),
+        )
+
+    private fun cancellationStatus(): ResultActions =
+        mockMvc.perform(
+            post(STATUS_PATH)
+                .header("X-Internal-Token", INTERNAL_TOKEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"phoneNumber":"$PHONE"}"""),
+        )
+
     private fun programScanRequest(): ResultActions =
         mockMvc.perform(
             patch("/attendance/standard/3101")
@@ -358,11 +478,17 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
                 .content("""{"phoneNumber":"$PHONE"}"""),
         )
 
-    private fun commit(operationId: String = OPERATION): ResultActions =
-        mockMvc.perform(
+    private fun commit(
+        operationId: String = OPERATION,
+        revision: Long? = null,
+    ): ResultActions {
+        val request =
             post("/internal/expos/$EXPO/participants/$PARTICIPANT/cancellation-guard/$operationId/commit")
-                .header("X-Internal-Token", INTERNAL_TOKEN),
+                .header("X-Internal-Token", INTERNAL_TOKEN)
+        return mockMvc.perform(
+            if (revision == null) request else request.contentType(MediaType.APPLICATION_JSON).content("""{"revision":$revision}"""),
         )
+    }
 
     private fun abort(operationId: String = OPERATION): ResultActions =
         mockMvc.perform(
@@ -421,5 +547,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         const val OPERATION = "op-0001"
         const val OTHER_OPERATION = "op-0002"
         const val PATH = "/internal/expos/$EXPO/participants/$PARTICIPANT/cancellation-guard/$OPERATION"
+        const val STATUS_PATH = "/internal/expos/$EXPO/participants/$PARTICIPANT/cancellation-status"
+        const val SESSION = 11L
     }
 }
