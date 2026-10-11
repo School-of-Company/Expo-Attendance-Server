@@ -16,7 +16,8 @@ data class ScanTrainingProgramReqDto(
     val traineeId: Long? = null,
     @field:Positive
     val participantId: Long? = null,
-    @field:Size(max = 64)
+    // 유저 서비스의 참가자 code(22자)와 맞춘다. 더 길면 유저 서비스가 400으로 거절하고 우리는 그것을 503으로 바꾸게 된다.
+    @field:Size(max = 22)
     val code: String? = null,
 ) {
     // 참가자 코드는 QR에 담기는 값이라 로그에 남지 않게 한다

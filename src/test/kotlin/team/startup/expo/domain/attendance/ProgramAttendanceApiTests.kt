@@ -130,6 +130,23 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `참가자 code가 22자를 넘으면 유저 서비스를 부르지 않고 400이다`() {
+        val tooLong = "c".repeat(23)
+
+        mockMvc
+            .perform(
+                rawTraining(2304, """{"expoId": "expo-long", "participantId": 804, "code": "$tooLong"}"""),
+            ).andExpect(status().isBadRequest)
+        mockMvc
+            .perform(
+                rawStandard(2305, """{"expoId": "expo-long", "participantId": 805, "code": "$tooLong"}"""),
+            ).andExpect(status().isBadRequest)
+
+        verify(userClient, never()).resolveTraineeByParticipant(ResolveTraineeByParticipantReqDto("expo-long", 804, tooLong))
+        verify(userClient, never()).verifyStandardParticipant(VerifyStandardParticipantReqDto("expo-long", 805, tooLong))
+    }
+
+    @Test
     fun `연수 프로그램의 참가자 경로는 ID와 code 중 하나만 오면 400이고 유저 서비스 장애는 503이다`() {
         mockMvc.perform(rawTraining(2303, """{"expoId": "expo-pc3", "participantId": 803}""")).andExpect(status().isBadRequest)
         mockMvc.perform(rawTraining(2303, """{"expoId": "expo-pc3", "code": "$CODE"}""")).andExpect(status().isBadRequest)
