@@ -1,4 +1,10 @@
+server:
+  # 배포·재기동 때 처리 중인 스캔을 마친 뒤 종료한다(#103). 새 요청은 받지 않는다
+  shutdown: graceful
 spring:
+  lifecycle:
+    # 스캔 한 건의 최대 소요 시간(다른 서비스 호출 읽기 3초 몇 번 + 락 대기 5초)보다 길게 둔다
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:20s}
   application:
     name: expo-attention-server
   cloud:
@@ -55,3 +61,22 @@ springdoc:
   swagger-ui:
     enabled: ${swagger.enabled}
     path: /attendance/swagger-ui.html
+management:
+  server:
+    # 기본은 서비스 포트와 같다(배포 헬스체크 경로를 바꾸지 않는다). 공통 메트릭 규약의 분리 포트(9464)를 쓰려면 METRICS_PORT를 지정한다
+    port: ${METRICS_PORT:${server.port:8080}}
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+eureka:
+  instance:
+    # 공용 Prometheus(Expo-Monitoring)가 Eureka로 이 인스턴스를 찾아 긁는다. 게이트웨이는 /actuator를 라우팅하지 않는다(#101)
+    metadata-map:
+      "[prometheus.scrape]": "true"
+      "[prometheus.port]": ${METRICS_PORT:${server.port:8080}}
+      "[prometheus.path]": /actuator/prometheus
