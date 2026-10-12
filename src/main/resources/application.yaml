@@ -18,6 +18,15 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/expo_attention}
     username: ${DB_USERNAME:expo_attention}
     password: ${DB_PASSWORD}
+    hikari:
+      # 입구 스캔은 취소 보호 락 안에서 다른 서비스를 부르는 동안 커넥션 하나를 쥔다. 기본값(10개)이면 다른 서비스가 느릴 때 동시 스캔 수가
+      # 풀 크기에서 막혀 지연이 커진다. 부하 측정은 load-test/README.md(#102)
+      maximum-pool-size: ${DB_POOL_SIZE:30}
+      # 커넥션을 못 얻으면 기본 30초가 아니라 3초 안에 실패해, 스캐너가 오래 매달리지 않고 곧바로 다시 찍을 수 있게 한다
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:3000}
+  transaction:
+    # 락과 커넥션을 쥐는 트랜잭션의 상한. 다른 서비스 호출 읽기 3초와 락 대기 5초를 합친 최악의 스캔보다 길게 둔다
+    default-timeout: ${TRANSACTION_TIMEOUT:15s}
   jpa:
     open-in-view: false
     hibernate:

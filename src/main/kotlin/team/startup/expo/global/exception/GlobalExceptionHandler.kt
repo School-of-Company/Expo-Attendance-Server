@@ -1,9 +1,13 @@
 package team.startup.expo.global.exception
 
+import org.springframework.dao.DataAccessResourceFailureException
+import org.springframework.dao.QueryTimeoutException
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
 import org.springframework.http.ResponseEntity
+import org.springframework.transaction.CannotCreateTransactionException
+import org.springframework.transaction.TransactionTimedOutException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.context.request.WebRequest
@@ -14,6 +18,21 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
     @ExceptionHandler(ExpectedException::class)
     fun handleExpectedException(exception: ExpectedException): ResponseEntity<ErrorResponse> =
         errorResponse(exception.status, exception.message)
+
+    /**
+     * DB 커넥션을 제때 얻지 못했거나(풀 고갈, `connection-timeout`), 트랜잭션·쿼리가 시간 안에 끝나지 않았거나, DB에 닿지 못한 경우다(#102).
+     * 서버 버그가 아니라 잠시 뒤에 다시 하면 되는 상황이라 500이 아니라 503으로 알린다. 입구 스캐너가 곧바로 다시 찍을 수 있다.
+     */
+    @ExceptionHandler(
+        CannotCreateTransactionException::class,
+        DataAccessResourceFailureException::class,
+        TransactionTimedOutException::class,
+        QueryTimeoutException::class,
+    )
+    fun handleTemporaryDatabaseFailure(exception: Exception): ResponseEntity<ErrorResponse> {
+        logger.warn("DB 일시 장애로 요청을 처리하지 못했습니다: ${exception.javaClass.simpleName}")
+        return errorResponse(HttpStatus.SERVICE_UNAVAILABLE, "요청이 몰려 잠시 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.")
+    }
 
     @ExceptionHandler(Exception::class)
     fun handleUnexpected(exception: Exception): ResponseEntity<ErrorResponse> {
