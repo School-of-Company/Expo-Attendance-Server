@@ -44,7 +44,7 @@ class SwaggerEnabledTests : IntegrationTestSupport() {
             .andExpect(jsonPath("$.paths['/internal/expos/{expoId}']").doesNotExist())
             .andExpect(content().string(not(containsString("\"/internal/"))))
             .andExpect(content().string(not(containsString("ParticipantQrResDto"))))
-            .andExpect(jsonPath("$.components.securitySchemes").doesNotExist())
+            .andExpect(jsonPath("$.components.securitySchemes.internalToken").doesNotExist())
     }
 
     @Test
@@ -72,6 +72,31 @@ class SwaggerEnabledTests : IntegrationTestSupport() {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.components.schemas.ScanEntryReqDto.properties.authority.description").exists())
             .andExpect(jsonPath("$.components.schemas.ScanQrTokenReqDto.properties.token.example").value("sample-token-not-real"))
+    }
+
+    @Test
+    fun `servers는 요청 Host가 아니라 게이트웨이 기준 상대 경로로 고정된다`() {
+        mockMvc
+            .perform(get("/attendance/v3/api-docs").header("Host", "10.0.0.7:18081"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.servers.length()").value(1))
+            .andExpect(jsonPath("$.servers[0].url").value("/"))
+            .andExpect(content().string(not(containsString("10.0.0.7"))))
+    }
+
+    @Test
+    fun `게이트웨이 JWT용 bearerAuth가 선언되고 공개 경로가 아닌 operation에 붙는다`() {
+        mockMvc
+            .perform(get("/attendance/v3/api-docs"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
+            .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
+            .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"))
+            .andExpect(jsonPath("$.paths['/attendance/{expoId}'].patch.security[0].bearerAuth").exists())
+            .andExpect(jsonPath("$.paths['/attendance/standard/{programId}'].patch.security[0].bearerAuth").exists())
+            .andExpect(jsonPath("$.paths['/attendance/training/{programId}'].patch.security[0].bearerAuth").exists())
+            .andExpect(jsonPath("$.paths['/attendance/qr/{expoId}'].patch.security[0].bearerAuth").exists())
+            .andExpect(jsonPath("$.paths['/qr-tokens/{expoId}'].post.security[0].bearerAuth").exists())
     }
 
     @Test
