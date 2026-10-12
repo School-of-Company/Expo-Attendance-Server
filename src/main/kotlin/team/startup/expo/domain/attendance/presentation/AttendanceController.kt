@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanEntryReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ScanEntryResDto
 import team.startup.expo.domain.attendance.service.ScanEntryService
+import team.startup.expo.global.logging.RequestContext
 import team.startup.expo.global.swagger.ApiError
 
 @RestController
@@ -37,5 +38,8 @@ class AttendanceController(
         @PathVariable expoId: String,
         @Valid @RequestBody reqDto: ScanEntryReqDto,
         @RequestHeader(name = "X-User-Id", required = false) scannerId: String?,
-    ): ScanEntryResDto = scanEntryService.scan(expoId, reqDto, scannerId)
+    ): ScanEntryResDto {
+        RequestContext.bindScan(expoId, reqDto.participantId)
+        return scanEntryService.scan(expoId, reqDto, scannerId)
+    }
 }

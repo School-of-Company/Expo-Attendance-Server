@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import team.startup.expo.domain.qr.presentation.dto.request.ScanQrTokenReqDto
 import team.startup.expo.domain.qr.service.ScanQrTokenService
+import team.startup.expo.global.logging.RequestContext
 import team.startup.expo.global.swagger.ApiError
 
 @RestController
@@ -26,5 +27,8 @@ class QrAttendanceController(
     fun scan(
         @PathVariable expoId: String,
         @Valid @RequestBody reqDto: ScanQrTokenReqDto,
-    ) = scanQrTokenService.scan(expoId, reqDto)
+    ) {
+        RequestContext.bindScan(expoId, null)
+        scanQrTokenService.scan(expoId, reqDto)
+    }
 }

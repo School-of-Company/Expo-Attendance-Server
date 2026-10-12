@@ -31,6 +31,19 @@ interface CancellationGuardService {
     ): AcquireCancellationGuardResult
 
     /**
+     * 관리자 취소용 acquire(#116). 참가자 본인 전화 인증 없이, 신청 서비스가 관리자 쓰기 권한을 검증했다는 전제에서 같은 보호를 건다.
+     * 입장 여부와 연결된 연수자는 유저의 소유 확인 없는 조회로 읽고, 나머지 의미(`operationId` 멱등, 이미 입장·출석이면 409와
+     * 보호를 남기지 않음, 다른 작업이 걸려 있으면 409, 유저가 모르면 404, 유저 장애는 503과 보호 유지)는 [acquire]와 같다.
+     * 프로그램 신청 하나만 취소하는 관리자 흐름은 acquire → 로컬 취소 → **abort**로 끝낸다. commit은 참가자의 모든 스캔을 재신청 전까지 막으므로
+     * 프로그램 취소에는 쓰지 않는다.
+     */
+    fun acquireForAdmin(
+        expoId: String,
+        participantId: Long,
+        operationId: String,
+    ): AcquireCancellationGuardResult
+
+    /**
      * 취소를 확정한다. 재신청으로 회차가 다시 기록될 때까지 스캔을 계속 막는다. 같은 `operationId`는 멱등이다.
      * `reqDto.revision`은 이 취소의 사전등록 회차 DELETE revision이다. 이미 그보다 새로운 회차 PUT이 적용되었다면 이 취소는 새 신청에
      * 밀린 것이라 보호를 확정하지 않고 풀며, 아니면 이 revision을 기억해 더 오래된 PUT이 보호를 풀지 못하게 한다(#92).

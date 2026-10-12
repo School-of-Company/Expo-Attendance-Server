@@ -18,6 +18,15 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/expo_attention}
     username: ${DB_USERNAME:expo_attention}
     password: ${DB_PASSWORD}
+    hikari:
+      # 입구 스캔은 취소 보호 락 안에서 다른 서비스를 부르는 동안 커넥션 하나를 쥔다. 기본값(10개)이면 다른 서비스가 느릴 때 동시 스캔 수가
+      # 풀 크기에서 막혀 지연이 커진다. 부하 측정은 load-test/README.md(#102)
+      maximum-pool-size: ${DB_POOL_SIZE:30}
+      # 커넥션을 못 얻으면 기본 30초가 아니라 3초 안에 실패해, 스캐너가 오래 매달리지 않고 곧바로 다시 찍을 수 있게 한다
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:3000}
+  transaction:
+    # 락과 커넥션을 쥐는 트랜잭션의 상한. 다른 서비스 호출 읽기 3초와 락 대기 5초를 합친 최악의 스캔보다 길게 둔다
+    default-timeout: ${TRANSACTION_TIMEOUT:15s}
   jpa:
     open-in-view: false
     hibernate:
@@ -48,6 +57,9 @@ entry-retry:
 qr-entry-review:
   enabled: ${QR_ENTRY_REVIEW_ENABLED:true}
   interval-ms: ${QR_ENTRY_REVIEW_INTERVAL_MS:300000}
+cancellation-aborted-retention:
+  # 중단된 취소 작업 기록(tb_cancellation_aborted)을 이 일수가 지나면 지운다. 0이면 지우지 않는다(기본)
+  days: ${CANCELLATION_ABORTED_RETENTION_DAYS:0}
 expo-period-cache:
   ttl-seconds: ${EXPO_PERIOD_CACHE_TTL_SECONDS:30}
 swagger:
@@ -65,6 +77,18 @@ management:
   server:
     # 기본은 서비스 포트와 같다(배포 헬스체크 경로를 바꾸지 않는다). 공통 메트릭 규약의 분리 포트(9464)를 쓰려면 METRICS_PORT를 지정한다
     port: ${METRICS_PORT:${server.port:8080}}
+  endpoint:
+    health:
+      # 배포 헬스체크의 /actuator/health는 그대로 두고 /actuator/health/liveness, /actuator/health/readiness를 더한다.
+      # 준비 상태에는 DB만 넣는다(Flyway는 기동 중에 끝나야 트래픽을 받는다). 유저·박람회·신청 서비스는 넣지 않는다:
+      # 다른 서비스 장애로 이 서비스가 트래픽에서 빠지면 안 된다. 생존 상태는 프로세스 상태만 본다
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
   endpoints:
     web:
       exposure:
@@ -80,3 +104,16 @@ eureka:
       "[prometheus.scrape]": "true"
       "[prometheus.port]": ${METRICS_PORT:${server.port:8080}}
       "[prometheus.path]": /actuator/prometheus
+logging:
+  # 요청 상관 ID(X-Request-Id)를 모든 로그 줄에 붙인다(#104). 나머지 형식은 Spring Boot 기본을 따른다
+  pattern:
+    level: "%5p [%X{requestId:-}]"
+  level:
+    root: ${LOG_LEVEL_ROOT:info}
+    # 다른 서비스 호출 실패 원인(DEBUG로 올리면 회로가 열려 차단된 호출도 호출마다 남는다). 임시로 LOG_LEVEL_CLIENT=debug
+    team.startup.expo.global.client: ${LOG_LEVEL_CLIENT:info}
+    # 입구에서 시끄러우면 warn으로 올려 스캔 거절 로그를 끈다
+    team.startup.expo.global.logging.ScanRejection: ${LOG_LEVEL_SCAN_REJECTION:info}
+    feign: warn
+    com.zaxxer.hikari: info
+    org.flywaydb: info
