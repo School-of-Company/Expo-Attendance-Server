@@ -61,6 +61,7 @@ Verified against the other services' `develop` code. Change a contract by openin
 ## Workflow
 
 - Run `./gradlew ktlintCheck build` before every commit. The context test uses Testcontainers, so Docker must be running.
+- Tests: service logic that needs no DB is a Kotest `BehaviorSpec` (`*Spec.kt`) with MockK collaborators, and runs without Docker (locally: `./gradlew test --tests "<package>.*"`). Tests that need the real stack (Spring context, JPA, SQL) stay on Testcontainers (`IntegrationTestSupport`).
 - Branch from `origin/develop`; never commit to `main` or `develop`.
 - Open PRs with the `write-pr` skill and commit with the `git-commit` skill. The PR title format `[scope] description` is enforced by CI (`ci.yml`).
 - No AI co-author trailer on commits or PRs.
