@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "team.startup"
-version = "0.2.4"
+version = "0.2.5"
 
 java {
     toolchain {
@@ -34,6 +34,7 @@ dependencies {
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     testImplementation("io.kotest:kotest-runner-junit5:5.9.1")
     testImplementation("io.kotest:kotest-assertions-core:5.9.1")
+    testImplementation("io.mockk:mockk:1.14.5")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")

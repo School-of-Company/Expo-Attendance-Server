@@ -51,6 +51,7 @@ Verified against the other services' `develop` code. Change a contract by openin
 
 - The gateway verifies the JWT and forwards `X-User-Id` and, when the token has a role, `X-User-Role` (it strips any client-sent copies). Do not parse tokens or trust those headers outside the gateway path: admin-only routes check `X-User-Role` (`GatewayRoleAuthenticationFilter`), so the service must be reachable only through the gateway. Service-to-service calls bypass the gateway and use `X-Internal-Token` on `/internal/**`.
 - Never commit keys or secrets.
+- Stability: `server.shutdown=graceful` (`SHUTDOWN_TIMEOUT`, default 20s) so a deploy finishes in-flight scans; `/actuator/prometheus` is exposed on the service port (the gateway routes no `/actuator`; `METRICS_PORT` moves it to a separate internal port) and the Eureka metadata `prometheus.scrape/port/path` lets the shared Prometheus find it; circuit breaker state is exported as `attendance.circuit.breaker.*` gauges (#101, #103).
 
 ## Conventions
 
@@ -61,6 +62,7 @@ Verified against the other services' `develop` code. Change a contract by openin
 ## Workflow
 
 - Run `./gradlew ktlintCheck build` before every commit. The context test uses Testcontainers, so Docker must be running.
+- Tests: service logic that needs no DB is a Kotest `BehaviorSpec` (`*Spec.kt`) with MockK collaborators, and runs without Docker (locally: `./gradlew test --tests "<package>.*"`). Tests that need the real stack (Spring context, JPA, SQL) stay on Testcontainers (`IntegrationTestSupport`).
 - Branch from `origin/develop`; never commit to `main` or `develop`.
 - Open PRs with the `write-pr` skill and commit with the `git-commit` skill. The PR title format `[scope] description` is enforced by CI (`ci.yml`).
 - No AI co-author trailer on commits or PRs.
