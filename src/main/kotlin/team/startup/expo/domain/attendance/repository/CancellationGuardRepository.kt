@@ -164,6 +164,14 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
         @Param("operationId") operationId: String,
     ): Boolean
 
+    /** [cutoff]보다 먼저 기록된 중단 기록을 지운다(보관 기간 정리). */
+    @Transactional
+    @Modifying
+    @Query(nativeQuery = true, value = "DELETE FROM tb_cancellation_aborted WHERE created_at < :cutoff")
+    fun deleteAbortedCreatedBefore(
+        @Param("cutoff") cutoff: LocalDateTime,
+    ): Int
+
     @Transactional
     @Modifying
     @Query(nativeQuery = true, value = "DELETE FROM tb_cancellation_aborted WHERE expo_id = :expoId")
