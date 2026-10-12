@@ -9,50 +9,64 @@ import team.startup.expo.domain.qr.entity.QrEntryPeriodCheck
 import team.startup.expo.domain.qr.repository.PendingQrEntry
 import team.startup.expo.domain.qr.repository.QrEntryRepository
 import team.startup.expo.global.exception.ExpectedException
+import team.startup.expo.global.lock.AdvisoryJobLock
 
 /**
  * 박람회 서비스가 응답하지 못해 기간 확인 없이 기록한 종이 QR 입장(`PENDING`)을 다시 확인한다. 입장한 날이 박람회 기간 안이면
  * `VERIFIED`, 밖이면 `OUT_OF_PERIOD`, 박람회가 없으면 `EXPO_NOT_FOUND`로 바꾼다. 입장 기록 자체는 지우지 않는다(운영이 보고 판단).
  * 박람회 서비스가 아직 응답하지 못하면 그 박람회의 입장은 `PENDING`으로 남겨 다음 주기에 다시 시도한다(박람회별로 처리하므로 한 박람회가 막혀도 다른 박람회는 진행된다). 토큰 값은 로그에 남기지 않는다.
+ *
+ * 인스턴스가 여러 개여도 같은 박람회를 동시에 처리하지 않는다. 박람회마다 DB 어드바이저리 락을 잡고, 다른 인스턴스가 쥐고 있으면
+ * 그 박람회는 건너뛴다(그 인스턴스가 처리한다).
  */
 @Service
 class QrEntryPeriodReviewService(
     private val qrEntryRepository: QrEntryRepository,
     private val expoPeriodValidator: ExpoPeriodValidator,
+    private val jobLock: AdvisoryJobLock,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     /**
      * 박람회마다 따로 처리하고 상태를 바꾼 건수를 돌려준다. 박람회 서비스가 응답하지 못하는 박람회는 한 번만 시도하고 넘어가므로,
-     * 그 박람회의 입장이 아무리 많아도 다른 박람회의 확인을 막지 않는다.
+     * 그 박람회의 입장이 아무리 많아도 다른 박람회의 확인을 막지 않는다. 다른 인스턴스가 처리 중인 박람회는 건수에 넣지 않고 건너뛴다.
      */
     fun reviewPending(): Int {
         var changed = 0
         qrEntryRepository.findExpoIdsByPeriodCheck(QrEntryPeriodCheck.PENDING).forEach { expoId ->
-            val period =
-                try {
-                    expoPeriodValidator.period(expoId)
-                } catch (e: ExpectedException) {
-                    if (e.status == HttpStatus.NOT_FOUND) {
-                        val count = markAll(expoId) { _ -> QrEntryPeriodCheck.EXPO_NOT_FOUND }
-                        changed += count
-                        logger.warn("기간 확인을 기다리던 종이 QR 입장의 박람회가 없습니다: expoId={}, 건수={}", expoId, count)
-                    }
-                    return@forEach
-                }
-
-            var outOfPeriod = 0
-            changed +=
-                markAll(expoId) { entry ->
-                    if (entry.attendanceDate >= period.first && entry.attendanceDate <= period.second) {
-                        QrEntryPeriodCheck.VERIFIED
-                    } else {
-                        outOfPeriod++
-                        QrEntryPeriodCheck.OUT_OF_PERIOD
-                    }
-                }
-            if (outOfPeriod > 0) logger.warn("박람회 기간 밖에 기록된 종이 QR 입장이 있습니다: expoId={}, 건수={}", expoId, outOfPeriod)
+            val reviewed = jobLock.runIfAcquired("$LOCK_KEY_PREFIX$expoId") { reviewExpo(expoId) }
+            if (reviewed == null) {
+                logger.debug("다른 인스턴스가 재확인 중이라 건너뜁니다: expoId={}", expoId)
+            } else {
+                changed += reviewed
+            }
         }
+        return changed
+    }
+
+    /** 한 박람회의 대기 입장을 확인하고 상태를 바꾼 건수를 돌려준다. 박람회 서비스가 응답하지 못하면 0으로 끝내고 `PENDING`으로 남긴다. */
+    private fun reviewExpo(expoId: String): Int {
+        val period =
+            try {
+                expoPeriodValidator.period(expoId)
+            } catch (e: ExpectedException) {
+                if (e.status != HttpStatus.NOT_FOUND) return 0
+                val count = markAll(expoId) { _ -> QrEntryPeriodCheck.EXPO_NOT_FOUND }
+                logger.warn("기간 확인을 기다리던 종이 QR 입장의 박람회가 없습니다: expoId={}, 건수={}", expoId, count)
+                return count
+            }
+
+        var outOfPeriod = 0
+        val changed =
+            markAll(expoId) { entry ->
+                if (entry.attendanceDate >= period.first && entry.attendanceDate <= period.second) {
+                    QrEntryPeriodCheck.VERIFIED
+                } else {
+                    outOfPeriod++
+                    QrEntryPeriodCheck.OUT_OF_PERIOD
+                }
+            }
+        if (outOfPeriod > 0) logger.warn("박람회 기간 밖에 기록된 종이 QR 입장이 있습니다: expoId={}, 건수={}", expoId, outOfPeriod)
         return changed
     }
 
@@ -73,5 +87,6 @@ class QrEntryPeriodReviewService(
 
     private companion object {
         const val BATCH_SIZE = 200
+        const val LOCK_KEY_PREFIX = "qr-entry-review:"
     }
 }
