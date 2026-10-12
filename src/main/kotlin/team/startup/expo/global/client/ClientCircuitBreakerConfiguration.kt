@@ -31,19 +31,20 @@ class ClientCircuitBreakerConfiguration {
      * 바로 실패한다. 느린 호출 기준(2초)은 Feign 읽기 제한(3초)보다 짧아, 응답은 오지만 느린 상대도 감지한다.
      */
     private fun circuitBreaker(name: String): CircuitBreaker =
-        CircuitBreaker.of(
-            name,
-            CircuitBreakerConfig
-                .custom()
-                .slidingWindowSize(WINDOW_SIZE)
-                .minimumNumberOfCalls(MIN_CALLS)
-                .failureRateThreshold(FAILURE_RATE_THRESHOLD)
-                .slowCallDurationThreshold(Duration.ofMillis(SLOW_CALL_MILLIS))
-                .slowCallRateThreshold(SLOW_CALL_RATE_THRESHOLD)
-                .waitDurationInOpenState(Duration.ofSeconds(OPEN_SECONDS))
-                .ignoreExceptions(FeignException.NotFound::class.java, FeignException.Conflict::class.java)
-                .build(),
-        )
+        CircuitBreaker
+            .of(
+                name,
+                CircuitBreakerConfig
+                    .custom()
+                    .slidingWindowSize(WINDOW_SIZE)
+                    .minimumNumberOfCalls(MIN_CALLS)
+                    .failureRateThreshold(FAILURE_RATE_THRESHOLD)
+                    .slowCallDurationThreshold(Duration.ofMillis(SLOW_CALL_MILLIS))
+                    .slowCallRateThreshold(SLOW_CALL_RATE_THRESHOLD)
+                    .waitDurationInOpenState(Duration.ofSeconds(OPEN_SECONDS))
+                    .ignoreExceptions(FeignException.NotFound::class.java, FeignException.Conflict::class.java)
+                    .build(),
+            ).logStateTransitions()
 
     private companion object {
         const val WINDOW_SIZE = 20
