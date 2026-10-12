@@ -9,6 +9,7 @@ import team.startup.expo.domain.attendance.entity.CancellationGuard
 import team.startup.expo.domain.attendance.entity.CancellationGuardState
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
 import team.startup.expo.global.exception.ExpectedException
+import team.startup.expo.global.metrics.AttendanceMetrics
 
 /**
  * 입장·프로그램 스캔이 취소 보호와 겹치지 않게 하는 관문이다. 스캔은 참가자(연수는 연수자) 단위 공유 락을 잡은 채 취소 보호를 확인하고
@@ -35,11 +36,11 @@ class CancellationGuardGate(
                 transaction.execute {
                     cancellationGuardRepository.setLockTimeout(LOCK_TIMEOUT)
                     if (participantId != null) {
-                        cancellationGuardRepository.lockShared(participantKey(expoId, participantId))
+                        timedLock { cancellationGuardRepository.lockShared(participantKey(expoId, participantId)) }
                         cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId)?.let { reject(it) }
                     }
                     if (traineeId != null) {
-                        cancellationGuardRepository.lockShared(traineeKey(expoId, traineeId))
+                        timedLock { cancellationGuardRepository.lockShared(traineeKey(expoId, traineeId)) }
                         cancellationGuardRepository.findByExpoIdAndTraineeId(expoId, traineeId)?.let { reject(it) }
                     }
                     block()
@@ -47,6 +48,16 @@ class CancellationGuardGate(
             )
         } catch (e: CannotAcquireLockException) {
             throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "취소 처리와 겹쳐 잠시 후 다시 시도해 주세요.")
+        }
+    }
+
+    /** 락을 얻기까지 기다린 시간을 `attendance.guard.lock.wait{kind=scan}`으로 기록한다. 락을 못 얻어 실패해도 기다린 시간은 남는다. */
+    private fun timedLock(acquire: () -> Unit) {
+        val start = System.nanoTime()
+        try {
+            acquire()
+        } finally {
+            AttendanceMetrics.recordLockWait("scan", System.nanoTime() - start)
         }
     }
 
