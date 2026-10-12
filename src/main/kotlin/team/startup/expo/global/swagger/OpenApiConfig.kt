@@ -7,6 +7,7 @@ import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.info.Info
 import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.oas.models.security.SecurityScheme
+import io.swagger.v3.oas.models.servers.Server
 import org.springdoc.core.customizers.OpenApiCustomizer
 import org.springdoc.core.customizers.OperationCustomizer
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -31,7 +32,10 @@ class OpenApiConfig(
                 Info()
                     .title("Expo Attendance Server API")
                     .description(DESCRIPTION),
-            ).components(Components())
+                // 게이트웨이가 프록시할 때 Host를 인스턴스 주소로 바꾸므로 서버 주소를 요청 Host로 만들지 않고 게이트웨이 기준 상대 경로로 고정한다.
+                // 문서 경로가 이미 `/{접두사}/...`라 통합 문서 화면(Try it out)이 게이트웨이 주소로 호출한다.
+            ).servers(listOf(Server().url("/")))
+            .components(Components())
 
     @Bean
     fun apiErrorOperationCustomizer(): OperationCustomizer = ApiErrorOperationCustomizer()
@@ -43,12 +47,35 @@ class OpenApiConfig(
             ModelConverters.getInstance().readAll(ErrorResponse::class.java).forEach { (name, schema) ->
                 components.addSchemas(name, schema)
             }
+            documentGatewayJwt(openApi, components)
             if (properties.includeInternal) {
                 documentInternalToken(openApi, components)
             } else {
                 excludeInternal(openApi, components)
             }
         }
+
+    /**
+     * 게이트웨이가 JWT를 요구하는 엔드포인트(`/internal` 하위가 아닌 모든 엔드포인트, 이 서비스는 게이트웨이 `publicPaths`에 공개 경로가 없다)에
+     * `bearerAuth`를 선언한다. 이 서비스는 토큰을 직접 검증하지 않고 게이트웨이가 검증한 뒤 `X-User-Id`/`X-User-Role`을 넘긴다. 문서 선언만 한다.
+     */
+    private fun documentGatewayJwt(
+        openApi: OpenAPI,
+        components: Components,
+    ) {
+        components.addSecuritySchemes(
+            BEARER_SCHEME,
+            SecurityScheme()
+                .type(SecurityScheme.Type.HTTP)
+                .scheme("bearer")
+                .bearerFormat("JWT")
+                .description("게이트웨이가 검증하는 액세스 토큰. 이 서비스는 토큰을 직접 확인하지 않는다."),
+        )
+        openApi.paths
+            ?.filterKeys { !it.startsWith(INTERNAL_PREFIX) }
+            ?.values
+            ?.forEach { item -> item.readOperations().forEach { it.addSecurityItem(SecurityRequirement().addList(BEARER_SCHEME)) } }
+    }
 
     private fun documentInternalToken(
         openApi: OpenAPI,
@@ -90,6 +117,7 @@ class OpenApiConfig(
     private companion object {
         const val INTERNAL_PREFIX = "/internal/"
         const val INTERNAL_TOKEN_SCHEME = "internalToken"
+        const val BEARER_SCHEME = "bearerAuth"
         val SCHEMA_REF = Regex("#/components/schemas/([^\"]+)\"")
 
         const val DESCRIPTION = """박람회 MSA의 참여(출석) 서비스 API입니다. 박람회 입장 스캔, 일반·연수 프로그램 출석 스캔, 현장 종이 QR 발급과 입구 스캔을 다룹니다.
