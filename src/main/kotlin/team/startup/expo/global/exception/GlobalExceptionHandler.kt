@@ -1,5 +1,6 @@
 package team.startup.expo.global.exception
 
+import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
@@ -8,12 +9,18 @@ import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.context.request.WebRequest
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
+import team.startup.expo.global.logging.logRejection
 
 @RestControllerAdvice
 class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
     @ExceptionHandler(ExpectedException::class)
-    fun handleExpectedException(exception: ExpectedException): ResponseEntity<ErrorResponse> =
-        errorResponse(exception.status, exception.message)
+    fun handleExpectedException(
+        exception: ExpectedException,
+        request: HttpServletRequest,
+    ): ResponseEntity<ErrorResponse> {
+        logRejection(request, exception.status, exception.message)
+        return errorResponse(exception.status, exception.message)
+    }
 
     @ExceptionHandler(Exception::class)
     fun handleUnexpected(exception: Exception): ResponseEntity<ErrorResponse> {

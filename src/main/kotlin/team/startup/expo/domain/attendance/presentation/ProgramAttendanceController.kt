@@ -11,6 +11,7 @@ import team.startup.expo.domain.attendance.presentation.dto.request.ScanStandard
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanTrainingProgramReqDto
 import team.startup.expo.domain.attendance.service.ScanStandardProgramService
 import team.startup.expo.domain.attendance.service.ScanTrainingProgramService
+import team.startup.expo.global.logging.RequestContext
 import team.startup.expo.global.swagger.ApiError
 
 @RestController
@@ -31,7 +32,10 @@ class ProgramAttendanceController(
     fun scanStandard(
         @PathVariable programId: Long,
         @Valid @RequestBody reqDto: ScanStandardProgramReqDto,
-    ) = scanStandardProgramService.scan(programId, reqDto)
+    ) {
+        RequestContext.bindScan(reqDto.expoId, reqDto.participantId)
+        scanStandardProgramService.scan(programId, reqDto)
+    }
 
     @Operation(
         summary = "연수 프로그램 출석 스캔",
@@ -48,5 +52,8 @@ class ProgramAttendanceController(
     fun scanTraining(
         @PathVariable programId: Long,
         @Valid @RequestBody reqDto: ScanTrainingProgramReqDto,
-    ) = scanTrainingProgramService.scan(programId, reqDto)
+    ) {
+        RequestContext.bindScan(reqDto.expoId, reqDto.participantId)
+        scanTrainingProgramService.scan(programId, reqDto)
+    }
 }

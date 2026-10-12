@@ -58,6 +58,7 @@ Verified against the other services' `develop` code. Change a contract by openin
 - Follow the `kotlin-spring-arch` and `api-design` skills in `.claude/skills/`.
 - Entities follow Expo-Expo-Server style: `@field:` annotations, `Long? = null` ids.
 - Throw `ExpectedException(status, message)` directly; no subclasses.
+- Logs: never write request/response bodies, phone numbers, participant codes, tokens or URLs with ids. Every request carries `X-Request-Id` (MDC `requestId`; the gateway does not set one, we accept a safe client value or generate it) and Feign calls forward it. Turn on `LOG_LEVEL_CLIENT=debug` temporarily to see circuit-open calls.
 
 ## Workflow
 
