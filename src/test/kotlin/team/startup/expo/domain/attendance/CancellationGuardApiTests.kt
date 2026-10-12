@@ -34,6 +34,8 @@ import team.startup.expo.global.client.expo.PreregisterSessionResDto
 import team.startup.expo.global.client.expo.StandardProgramResDto
 import team.startup.expo.global.client.expo.TrainingProgramBatchReqDto
 import team.startup.expo.global.client.expo.TrainingProgramResDto
+import team.startup.expo.global.client.user.AdminCancellationStatusReqDto
+import team.startup.expo.global.client.user.AdminCancellationStatusResDto
 import team.startup.expo.global.client.user.CancellationStatusReqDto
 import team.startup.expo.global.client.user.CancellationStatusResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
@@ -448,6 +450,89 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
                 .content("""{"phoneNumber":"$PHONE"}"""),
         )
 
+    @Test
+    fun `관리자 취소 보호는 전화번호 없이 걸리고 스캔을 막으며 abort로 풀린다`() {
+        adminStatus(entered = false, traineeId = null)
+
+        adminAcquire().andExpect(status().isNoContent)
+        entryScan().andExpect(status().isConflict).andExpect(jsonPath("$.message").value("신청 취소를 처리 중입니다."))
+        standardProgramScan().andExpect(status().isConflict)
+
+        // 프로그램 신청 하나만 취소하는 흐름: 로컬 취소 뒤 abort로 끝낸다(commit하지 않는다)
+        abort().andExpect(status().isNoContent)
+        entryScan().andExpect(status().isOk)
+        // 중단된 operationId의 지연된 acquire는 거절되고, 새 operationId는 다시 걸 수 있다
+        adminAcquire().andExpect(status().isConflict)
+        adminAcquire("op-0009").andExpect(status().isNoContent)
+    }
+
+    @Test
+    fun `관리자 취소 보호도 이미 입장했거나 출석했으면 409이고 보호를 남기지 않는다`() {
+        adminStatus(entered = true, traineeId = null)
+        adminAcquire().andExpect(status().isConflict).andExpect(jsonPath("$.entered").value(true))
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
+
+        adminStatus(entered = false, traineeId = TRAINEE)
+        trainingRepository.insertEntryIfAbsent(3201, TRAINEE, today, LocalTime.of(10, 0))
+        adminAcquire().andExpect(status().isConflict).andExpect(jsonPath("$.programAttended").value(true))
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
+    }
+
+    @Test
+    fun `관리자 취소 보호는 유저가 모르면 404, 장애면 503이고 내부 토큰과 operationId를 검증한다`() {
+        doThrow(feignException(404)).`when`(userClient).getAdminCancellationStatus(AdminCancellationStatusReqDto(EXPO, PARTICIPANT))
+        adminAcquire().andExpect(status().isNotFound)
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
+
+        doThrow(feignException(500)).`when`(userClient).getAdminCancellationStatus(AdminCancellationStatusReqDto(EXPO, PARTICIPANT))
+        adminAcquire().andExpect(status().isServiceUnavailable)
+        entryScan().andExpect(status().isConflict)
+
+        mockMvc.perform(put(ADMIN_PATH)).andExpect(status().isUnauthorized)
+        adminAcquire(operationId = "bad id!").andExpect(status().isBadRequest)
+    }
+
+    @Test
+    fun `관리자 취소 보호는 진행 중인 입장 스캔이 끝난 뒤에 걸린다`() {
+        adminStatus(entered = false, traineeId = null)
+        val entering = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        doAnswer {
+            entering.countDown()
+            release.await(10, TimeUnit.SECONDS)
+            RecordEntryResDto(PARTICIPANT, "홍길동", "01012345678", true, "STANDARD", "STUDENT", null)
+        }.`when`(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+
+        val executor = Executors.newFixedThreadPool(2)
+        val scan = executor.submit<Int> { entryScan().andReturn().response.status }
+        entering.await(10, TimeUnit.SECONDS) shouldBe true
+        val acquiring = executor.submit<Int> { adminAcquire().andReturn().response.status }
+
+        Thread.sleep(500)
+        acquiring.isDone shouldBe false
+        release.countDown()
+
+        scan.get(10, TimeUnit.SECONDS) shouldBe 200
+        acquiring.get(10, TimeUnit.SECONDS) shouldBe 204
+        executor.shutdown()
+        entryScan().andExpect(status().isConflict)
+    }
+
+    private fun adminStatus(
+        entered: Boolean,
+        traineeId: Long?,
+    ) {
+        doReturn(AdminCancellationStatusResDto(PARTICIPANT, entered, traineeId != null, traineeId))
+            .`when`(userClient)
+            .getAdminCancellationStatus(AdminCancellationStatusReqDto(EXPO, PARTICIPANT))
+    }
+
+    private fun adminAcquire(operationId: String = OPERATION): ResultActions =
+        mockMvc.perform(
+            put("/internal/expos/$EXPO/participants/$PARTICIPANT/admin-cancellation-guard/$operationId")
+                .header("X-Internal-Token", INTERNAL_TOKEN),
+        )
+
     private fun programScanRequest(): ResultActions =
         mockMvc.perform(
             patch("/attendance/standard/3101")
@@ -547,6 +632,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         const val OPERATION = "op-0001"
         const val OTHER_OPERATION = "op-0002"
         const val PATH = "/internal/expos/$EXPO/participants/$PARTICIPANT/cancellation-guard/$OPERATION"
+        const val ADMIN_PATH = "/internal/expos/$EXPO/participants/$PARTICIPANT/admin-cancellation-guard/$OPERATION"
         const val STATUS_PATH = "/internal/expos/$EXPO/participants/$PARTICIPANT/cancellation-status"
         const val SESSION = 11L
     }

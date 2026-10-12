@@ -74,3 +74,16 @@ data class ParticipantQrResDto(
 ) {
     override fun toString() = "ParticipantQrResDto(participantId=$participantId)"
 }
+
+/** 유저 서비스 `POST /internal/standard-participants/admin-cancellation-status` 요청(제안, Expo-User-Server#117). 소유 확인용 번호가 없다. */
+data class AdminCancellationStatusReqDto(
+    val expoId: String,
+    val participantId: Long,
+)
+
+data class AdminCancellationStatusResDto(
+    val participantId: Long,
+    val entered: Boolean,
+    val traineeLinked: Boolean,
+    val linkedTraineeId: Long?,
+)
