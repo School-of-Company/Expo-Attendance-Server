@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="참여 서비스 입구 스캔 부하(#102)" enabled="true">
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="사용자 정의 변수" enabled="true">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="EXPO_ID" elementType="Argument">
+            <stringProp name="Argument.name">EXPO_ID</stringProp>
+            <stringProp name="Argument.value">${__P(expoId,0b1f6c3e-52a4-4d6e-9d57-4b7a1e5c9a10)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+        </collectionProp>
+      </elementProp>
+    </TestPlan>
+    <hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="스캐너" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <intProp name="LoopController.loops">-1</intProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${__P(scanners,20)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(rampup,2)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">${__P(duration,30)}</stringProp>
+        <stringProp name="ThreadGroup.delay"></stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </ThreadGroup>
+      <hashTree>
+<ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP 기본값" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" enabled="true">
+    <collectionProp name="Arguments.arguments"/>
+  </elementProp>
+  <stringProp name="HTTPSampler.domain">${__P(host,127.0.0.1)}</stringProp>
+  <stringProp name="HTTPSampler.port">${__P(port,18080)}</stringProp>
+  <stringProp name="HTTPSampler.protocol">http</stringProp>
+  <stringProp name="HTTPSampler.connect_timeout">5000</stringProp>
+  <stringProp name="HTTPSampler.response_timeout">30000</stringProp>
+</ConfigTestElement>
+<hashTree/>
+<HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON" enabled="true">
+  <collectionProp name="HeaderManager.headers">
+      <elementProp name="" elementType="Header">
+        <stringProp name="Header.name">Content-Type</stringProp>
+        <stringProp name="Header.value">application/json</stringProp>
+      </elementProp>
+  </collectionProp>
+</HeaderManager>
+<hashTree/>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="scenario=entry" enabled="true">
+  <stringProp name="IfController.condition">${__jexl3("${__P(scenario,entry)}" == "entry")}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="entry" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+        <boolProp name="HTTPArgument.always_encode">false</boolProp>
+        <stringProp name="Argument.value">{"authority":"ROLE_STANDARD","participantId":${pid},"code":"sample-code-not-real"}</stringProp>
+        <stringProp name="Argument.metadata">=</stringProp>
+      </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/attendance/${EXPO_ID}</stringProp>
+  <stringProp name="HTTPSampler.method">PATCH</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree>
+<JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="참가자 ID(서로 다른 참가자)" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters"></stringProp>
+  <stringProp name="filename"></stringProp>
+  <stringProp name="cacheKey">true</stringProp>
+  <stringProp name="script">int n = ((vars.get("iter") ?: "0") as int) + 1; vars.put("iter", n.toString()); long t = ctx.getThreadNum() + 1; vars.put("pid", (t * 1000000L + n).toString())</stringProp>
+</JSR223PreProcessor>
+<hashTree/>
+<ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="입장 200" enabled="true">
+  <collectionProp name="Asserion.test_strings">
+    <stringProp name="1">^200$</stringProp>
+  </collectionProp>
+  <stringProp name="Assertion.custom_message"></stringProp>
+  <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+  <boolProp name="Assertion.assume_success">true</boolProp>
+  <intProp name="Assertion.test_type">1</intProp>
+</ResponseAssertion>
+<hashTree/>
+</hashTree>
+</hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="scenario=entry-duplicate" enabled="true">
+  <stringProp name="IfController.condition">${__jexl3("${__P(scenario,entry)}" == "entry-duplicate")}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="entry-duplicate" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+        <boolProp name="HTTPArgument.always_encode">false</boolProp>
+        <stringProp name="Argument.value">{"authority":"ROLE_STANDARD","participantId":${pid},"code":"sample-code-not-real"}</stringProp>
+        <stringProp name="Argument.metadata">=</stringProp>
+      </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/attendance/${EXPO_ID}</stringProp>
+  <stringProp name="HTTPSampler.method">PATCH</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree>
+<JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="참가자 ID(스캐너마다 같은 참가자)" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters"></stringProp>
+  <stringProp name="filename"></stringProp>
+  <stringProp name="cacheKey">true</stringProp>
+  <stringProp name="script">int n = ((vars.get("iter") ?: "0") as int) + 1; vars.put("iter", n.toString()); long t = ctx.getThreadNum() + 1; vars.put("pid", t.toString())</stringProp>
+</JSR223PreProcessor>
+<hashTree/>
+<ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="입장 200 또는 400" enabled="true">
+  <collectionProp name="Asserion.test_strings">
+    <stringProp name="1">^(200|400)$</stringProp>
+  </collectionProp>
+  <stringProp name="Assertion.custom_message"></stringProp>
+  <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+  <boolProp name="Assertion.assume_success">true</boolProp>
+  <intProp name="Assertion.test_type">1</intProp>
+</ResponseAssertion>
+<hashTree/>
+</hashTree>
+</hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="scenario=program" enabled="true">
+  <stringProp name="IfController.condition">${__jexl3("${__P(scenario,entry)}" == "program")}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="program" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+        <boolProp name="HTTPArgument.always_encode">false</boolProp>
+        <stringProp name="Argument.value">{"expoId":"${EXPO_ID}","participantId":${pid},"code":"sample-code-not-real"}</stringProp>
+        <stringProp name="Argument.metadata">=</stringProp>
+      </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/attendance/standard/1</stringProp>
+  <stringProp name="HTTPSampler.method">PATCH</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree>
+<JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="참가자 ID(서로 다른 참가자)" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters"></stringProp>
+  <stringProp name="filename"></stringProp>
+  <stringProp name="cacheKey">true</stringProp>
+  <stringProp name="script">int n = ((vars.get("iter") ?: "0") as int) + 1; vars.put("iter", n.toString()); long t = ctx.getThreadNum() + 1; vars.put("pid", (t * 1000000L + n).toString())</stringProp>
+</JSR223PreProcessor>
+<hashTree/>
+<ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="출석 200" enabled="true">
+  <collectionProp name="Asserion.test_strings">
+    <stringProp name="1">^200$</stringProp>
+  </collectionProp>
+  <stringProp name="Assertion.custom_message"></stringProp>
+  <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+  <boolProp name="Assertion.assume_success">true</boolProp>
+  <intProp name="Assertion.test_type">1</intProp>
+</ResponseAssertion>
+<hashTree/>
+</hashTree>
+</hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="scenario=mixed" enabled="true">
+  <stringProp name="IfController.condition">${__jexl3("${__P(scenario,entry)}" == "mixed")}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<ThroughputController guiclass="ThroughputControllerGui" testclass="ThroughputController" testname="스캔 80%" enabled="true">
+  <intProp name="ThroughputController.style">1</intProp>
+  <boolProp name="ThroughputController.perThread">true</boolProp>
+  <intProp name="ThroughputController.maxThroughput">1</intProp>
+  <FloatProperty>
+    <name>ThroughputController.percentThroughput</name>
+    <value>80.0</value>
+    <savedValue>0.0</savedValue>
+  </FloatProperty>
+</ThroughputController>
+<hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="mixed-program-scan" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+        <boolProp name="HTTPArgument.always_encode">false</boolProp>
+        <stringProp name="Argument.value">{"expoId":"${EXPO_ID}","participantId":${pid},"code":"sample-code-not-real"}</stringProp>
+        <stringProp name="Argument.metadata">=</stringProp>
+      </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/attendance/standard/1</stringProp>
+  <stringProp name="HTTPSampler.method">PATCH</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree>
+<JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="참가자 ID(1~50)" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters"></stringProp>
+  <stringProp name="filename"></stringProp>
+  <stringProp name="cacheKey">true</stringProp>
+  <stringProp name="script">int n = ((vars.get("iter") ?: "0") as int) + 1; vars.put("iter", n.toString()); long t = ctx.getThreadNum() + 1; vars.put("pid", ((n % 50) + 1).toString())</stringProp>
+</JSR223PreProcessor>
+<hashTree/>
+<ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="출석 200 또는 409" enabled="true">
+  <collectionProp name="Asserion.test_strings">
+    <stringProp name="1">^(200|409)$</stringProp>
+  </collectionProp>
+  <stringProp name="Assertion.custom_message"></stringProp>
+  <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+  <boolProp name="Assertion.assume_success">true</boolProp>
+  <intProp name="Assertion.test_type">1</intProp>
+</ResponseAssertion>
+<hashTree/>
+</hashTree>
+</hashTree>
+<ThroughputController guiclass="ThroughputControllerGui" testclass="ThroughputController" testname="취소 보호 20%" enabled="true">
+  <intProp name="ThroughputController.style">1</intProp>
+  <boolProp name="ThroughputController.perThread">true</boolProp>
+  <intProp name="ThroughputController.maxThroughput">1</intProp>
+  <FloatProperty>
+    <name>ThroughputController.percentThroughput</name>
+    <value>20.0</value>
+    <savedValue>0.0</savedValue>
+  </FloatProperty>
+</ThroughputController>
+<hashTree>
+<HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="내부 토큰" enabled="true">
+  <collectionProp name="HeaderManager.headers">
+      <elementProp name="" elementType="Header">
+        <stringProp name="Header.name">X-Internal-Token</stringProp>
+        <stringProp name="Header.value">${__P(internalToken,)}</stringProp>
+      </elementProp>
+  </collectionProp>
+</HeaderManager>
+<hashTree/>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="mixed-guard-acquire" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+        <boolProp name="HTTPArgument.always_encode">false</boolProp>
+        <stringProp name="Argument.value">{"phoneNumber":"010-0000-0000"}</stringProp>
+        <stringProp name="Argument.metadata">=</stringProp>
+      </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/internal/expos/${EXPO_ID}/participants/${pid}/cancellation-guard/op-${__threadNum}-${iter}</stringProp>
+  <stringProp name="HTTPSampler.method">PUT</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree>
+<JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="참가자 ID(1~50)" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters"></stringProp>
+  <stringProp name="filename"></stringProp>
+  <stringProp name="cacheKey">true</stringProp>
+  <stringProp name="script">int n = ((vars.get("iter") ?: "0") as int) + 1; vars.put("iter", n.toString()); long t = ctx.getThreadNum() + 1; vars.put("pid", ((n % 50) + 1).toString())</stringProp>
+</JSR223PreProcessor>
+<hashTree/>
+<ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="acquire 204 또는 409" enabled="true">
+  <collectionProp name="Asserion.test_strings">
+    <stringProp name="1">^(204|409)$</stringProp>
+  </collectionProp>
+  <stringProp name="Assertion.custom_message"></stringProp>
+  <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+  <boolProp name="Assertion.assume_success">true</boolProp>
+  <intProp name="Assertion.test_type">1</intProp>
+</ResponseAssertion>
+<hashTree/>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="acquire 결과 저장" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters"></stringProp>
+  <stringProp name="filename"></stringProp>
+  <stringProp name="cacheKey">true</stringProp>
+  <stringProp name="script">vars.put("acq", prev.getResponseCode())</stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+</hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="acquire가 204면 abort" enabled="true">
+  <stringProp name="IfController.condition">${__jexl3("${acq}" == "204")}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="mixed-guard-abort" enabled="true">
+  <stringProp name="HTTPSampler.path">/internal/expos/${EXPO_ID}/participants/${pid}/cancellation-guard/op-${__threadNum}-${iter}</stringProp>
+  <stringProp name="HTTPSampler.method">DELETE</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree>
+<ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="abort 204" enabled="true">
+  <collectionProp name="Asserion.test_strings">
+    <stringProp name="1">^204$</stringProp>
+  </collectionProp>
+  <stringProp name="Assertion.custom_message"></stringProp>
+  <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+  <boolProp name="Assertion.assume_success">true</boolProp>
+  <intProp name="Assertion.test_type">1</intProp>
+</ResponseAssertion>
+<hashTree/>
+</hashTree>
+</hashTree>
+</hashTree>
+</hashTree>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

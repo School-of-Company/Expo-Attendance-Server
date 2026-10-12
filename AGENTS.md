@@ -51,6 +51,7 @@ Verified against the other services' `develop` code. Change a contract by openin
 
 - The gateway verifies the JWT and forwards `X-User-Id` and, when the token has a role, `X-User-Role` (it strips any client-sent copies). Do not parse tokens or trust those headers outside the gateway path: admin-only routes check `X-User-Role` (`GatewayRoleAuthenticationFilter`), so the service must be reachable only through the gateway. Service-to-service calls bypass the gateway and use `X-Internal-Token` on `/internal/**`.
 - Never commit keys or secrets.
+- Load: entry scans hold a DB connection while they call other services under the guard lock, so throughput is pool size ÷ downstream latency. `DB_POOL_SIZE` (30), `DB_POOL_CONNECTION_TIMEOUT_MS` (3000) and `TRANSACTION_TIMEOUT` (15s) bound it; a saturated pool or timed-out transaction answers 503, not 500. Reproduce the numbers with `load-test/` (JMeter + stub services, see its README; #102).
 - Stability: `server.shutdown=graceful` (`SHUTDOWN_TIMEOUT`, default 20s) so a deploy finishes in-flight scans; `/actuator/prometheus` is exposed on the service port (the gateway routes no `/actuator`; `METRICS_PORT` moves it to a separate internal port) and the Eureka metadata `prometheus.scrape/port/path` lets the shared Prometheus find it; circuit breaker state is exported as `attendance.circuit.breaker.*` gauges (#101, #103).
 
 ## Conventions
