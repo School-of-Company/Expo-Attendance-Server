@@ -1,5 +1,6 @@
 package team.startup.expo.global.exception
 
+import jakarta.servlet.http.HttpServletRequest
 import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.dao.QueryTimeoutException
 import org.springframework.http.HttpHeaders
@@ -12,12 +13,18 @@ import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.context.request.WebRequest
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
+import team.startup.expo.global.logging.logRejection
 
 @RestControllerAdvice
 class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
     @ExceptionHandler(ExpectedException::class)
-    fun handleExpectedException(exception: ExpectedException): ResponseEntity<ErrorResponse> =
-        errorResponse(exception.status, exception.message)
+    fun handleExpectedException(
+        exception: ExpectedException,
+        request: HttpServletRequest,
+    ): ResponseEntity<ErrorResponse> {
+        logRejection(request, exception.status, exception.message)
+        return errorResponse(exception.status, exception.message)
+    }
 
     /**
      * DB 커넥션을 제때 얻지 못했거나(풀 고갈, `connection-timeout`), 트랜잭션·쿼리가 시간 안에 끝나지 않았거나, DB에 닿지 못한 경우다(#102).

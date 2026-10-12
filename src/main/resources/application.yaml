@@ -104,3 +104,16 @@ eureka:
       "[prometheus.scrape]": "true"
       "[prometheus.port]": ${METRICS_PORT:${server.port:8080}}
       "[prometheus.path]": /actuator/prometheus
+logging:
+  # 요청 상관 ID(X-Request-Id)를 모든 로그 줄에 붙인다(#104). 나머지 형식은 Spring Boot 기본을 따른다
+  pattern:
+    level: "%5p [%X{requestId:-}]"
+  level:
+    root: ${LOG_LEVEL_ROOT:info}
+    # 다른 서비스 호출 실패 원인(DEBUG로 올리면 회로가 열려 차단된 호출도 호출마다 남는다). 임시로 LOG_LEVEL_CLIENT=debug
+    team.startup.expo.global.client: ${LOG_LEVEL_CLIENT:info}
+    # 입구에서 시끄러우면 warn으로 올려 스캔 거절 로그를 끈다
+    team.startup.expo.global.logging.ScanRejection: ${LOG_LEVEL_SCAN_REJECTION:info}
+    feign: warn
+    com.zaxxer.hikari: info
+    org.flywaydb: info
