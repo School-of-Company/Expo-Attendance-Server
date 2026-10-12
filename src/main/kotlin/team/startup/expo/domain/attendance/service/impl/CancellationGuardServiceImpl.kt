@@ -20,6 +20,7 @@ import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.CancellationGuardService
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.global.client.callService
+import team.startup.expo.global.client.user.AdminCancellationStatusReqDto
 import team.startup.expo.global.client.user.CancellationStatusReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.exception.ExpectedException
@@ -46,6 +47,33 @@ class CancellationGuardServiceImpl(
         participantId: Long,
         operationId: String,
         reqDto: AcquireCancellationGuardReqDto,
+    ): AcquireCancellationGuardResult =
+        acquireWith(expoId, participantId, operationId) {
+            val status = userClient.getCancellationStatus(CancellationStatusReqDto(expoId, reqDto.phoneNumber, participantId))
+            ReadStatus(status.entered, status.linkedTraineeId)
+        }
+
+    override fun acquireForAdmin(
+        expoId: String,
+        participantId: Long,
+        operationId: String,
+    ): AcquireCancellationGuardResult =
+        acquireWith(expoId, participantId, operationId) {
+            val status = userClient.getAdminCancellationStatus(AdminCancellationStatusReqDto(expoId, participantId))
+            ReadStatus(status.entered, status.linkedTraineeId)
+        }
+
+    /** 유저 서비스에서 읽은 취소 판단 재료. 본인 확인 방식(전화번호, 관리자 권한)과 무관하게 둘만 필요하다. */
+    private data class ReadStatus(
+        val entered: Boolean,
+        val linkedTraineeId: Long?,
+    )
+
+    private fun acquireWith(
+        expoId: String,
+        participantId: Long,
+        operationId: String,
+        readStatus: () -> ReadStatus,
     ): AcquireCancellationGuardResult {
         // 1) 진행 중인 입장·프로그램 스캔이 끝나기를 기다린 뒤 보호를 건다. 이 뒤의 스캔은 거절된다.
         val alreadyCommitted =
@@ -70,7 +98,7 @@ class CancellationGuardServiceImpl(
         val status =
             try {
                 userCircuitBreaker.callService("유저", ExpectedException(HttpStatus.NOT_FOUND, "참가자를 찾지 못 했습니다.")) {
-                    userClient.getCancellationStatus(CancellationStatusReqDto(expoId, reqDto.phoneNumber, participantId))
+                    readStatus()
                 }
             } catch (e: ExpectedException) {
                 // 404는 취소할 수 있는 참가자가 아니라는 뜻이라 보호를 풀고, 그 밖의 실패(503)는 보호를 둔 채 같은 작업의 재시도를 기다린다
