@@ -23,6 +23,7 @@ import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.CancellationStatusReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.exception.ExpectedException
+import team.startup.expo.global.metrics.AttendanceMetrics
 import java.time.Clock
 import java.time.LocalDateTime
 
@@ -185,7 +186,12 @@ class CancellationGuardServiceImpl(
             return requireNotNull(
                 transaction.execute {
                     cancellationGuardRepository.setLockTimeout(CancellationGuardGate.LOCK_TIMEOUT)
-                    cancellationGuardRepository.lockExclusive(key)
+                    val start = System.nanoTime()
+                    try {
+                        cancellationGuardRepository.lockExclusive(key)
+                    } finally {
+                        AttendanceMetrics.recordLockWait("cancel", System.nanoTime() - start)
+                    }
                     block()
                 },
             )
