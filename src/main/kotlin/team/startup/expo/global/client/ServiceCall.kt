@@ -1,10 +1,12 @@
 package team.startup.expo.global.client
 
 import feign.FeignException
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import team.startup.expo.global.exception.ExpectedException
+import team.startup.expo.global.metrics.AttendanceMetrics
 
 private val logger = LoggerFactory.getLogger("team.startup.expo.global.client.ServiceCall")
 
@@ -18,16 +20,28 @@ fun <T> CircuitBreaker.callService(
     notFound: ExpectedException? = null,
     onConflict: (() -> Nothing)? = null,
     block: () -> T,
-): T =
+): T {
+    val start = System.nanoTime()
+    var outcome = "success"
     try {
-        executeSupplier(block)
+        return executeSupplier(block)
     } catch (e: FeignException.NotFound) {
+        outcome = "not_found"
         throw notFound ?: unavailable(service, e)
     } catch (e: FeignException.Conflict) {
-        onConflict?.invoke() ?: throw unavailable(service, e)
-    } catch (e: Exception) {
+        outcome = "conflict"
+        return onConflict?.invoke() ?: throw unavailable(service, e)
+    } catch (e: CallNotPermittedException) {
+        outcome = "circuit_open"
         throw unavailable(service, e)
+    } catch (e: Exception) {
+        outcome = "failure"
+        throw unavailable(service, e)
+    } finally {
+        // 호출 한 번의 소요 시간과 결과만 기록한다. 요청·응답 내용은 남기지 않는다
+        AttendanceMetrics.recordDownstream(service, outcome, System.nanoTime() - start)
     }
+}
 
 private fun unavailable(
     service: String,

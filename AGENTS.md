@@ -53,6 +53,13 @@ Verified against the other services' `develop` code. Change a contract by openin
 - Never commit keys or secrets.
 - Load: entry scans hold a DB connection while they call other services under the guard lock, so throughput is pool size ÷ downstream latency. `DB_POOL_SIZE` (30), `DB_POOL_CONNECTION_TIMEOUT_MS` (3000) and `TRANSACTION_TIMEOUT` (15s) bound it; a saturated pool or timed-out transaction answers 503, not 500. Reproduce the numbers with `load-test/` (JMeter + stub services, see its README; #102).
 - Stability: `server.shutdown=graceful` (`SHUTDOWN_TIMEOUT`, default 20s) so a deploy finishes in-flight scans; `/actuator/prometheus` is exposed on the service port (the gateway routes no `/actuator`; `METRICS_PORT` moves it to a separate internal port) and the Eureka metadata `prometheus.scrape/port/path` lets the shared Prometheus find it; circuit breaker state is exported as `attendance.circuit.breaker.*` gauges (#101, #103).
+- Stability: `server.shutdown=graceful` (`SHUTDOWN_TIMEOUT`, default 20s) so a deploy finishes in-flight scans; `/actuator/prometheus` is exposed on the service port (the gateway routes no `/actuator`; `METRICS_PORT` moves it to a separate internal port) and the Eureka metadata `prometheus.scrape/port/path` lets the shared Prometheus find it; circuit breaker state is exported as `attendance.circuit.breaker.*` gauges, every call to another service is timed in `attendance.downstream.calls{service,outcome}` (inside `callService`), guard lock waits in `attendance.guard.lock.wait{kind=scan|cancel}`, and `attendance.qr.entry.pending` counts paper QR entries still waiting for the period re-check. Tags carry only the service name and outcome, never IDs, phone numbers or bodies. Alert rules live in Expo-Monitoring (#101, #103).
+
+## Operations (#105)
+
+- Periodic jobs take a PostgreSQL advisory lock (`AdvisoryJobLock`, `pg_try_advisory_xact_lock`) so several instances do not run the same work: the paper QR re-check locks per expo and skips an expo another instance is processing. The lock lives as long as the transaction, so a crashed instance releases it. Do not add ShedLock for this.
+- `CANCELLATION_ABORTED_RETENTION_DAYS` (default 0 = off) deletes `tb_cancellation_aborted` rows older than N days. Nothing else is deleted by age; the retention proposal for the rest is in `docs/data-retention.md` (open questions, not decided).
+- Health: `/actuator/health/liveness` and `/actuator/health/readiness` are public GET. Readiness includes only `readinessState` and `db`; never add User/Expo/Application to it. Rollback notes are in `README.md`.
 
 ## Conventions
 

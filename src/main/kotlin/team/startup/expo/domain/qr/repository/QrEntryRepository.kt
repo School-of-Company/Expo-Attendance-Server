@@ -35,6 +35,10 @@ interface QrEntryRepository : JpaRepository<QrEntry, Long> {
         @Param("periodCheck") periodCheck: String,
     ): Int
 
+    /** 박람회 서비스 장애 중 기간 확인 없이 기록되어 아직 다시 확인하지 못한 입장 수. 부분 인덱스(`period_check = 'PENDING'`)를 탄다. */
+    @Query(nativeQuery = true, value = "SELECT count(*) FROM tb_qr_entry WHERE period_check = 'PENDING'")
+    fun countPending(): Long
+
     /** 기간 확인을 기다리는 입장이 있는 박람회 ID. 박람회 ID는 토큰에서 가져온다. */
     @Query("SELECT DISTINCT t.expoId FROM QrEntry e JOIN QrToken t ON t.token = e.token WHERE e.periodCheck = :status")
     fun findExpoIdsByPeriodCheck(
