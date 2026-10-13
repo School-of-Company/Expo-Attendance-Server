@@ -12,10 +12,12 @@ import io.mockk.verify
 import org.springframework.http.HttpStatus
 import team.startup.expo.domain.attendance.entity.CancellationGuard
 import team.startup.expo.domain.attendance.entity.CancellationGuardState
+import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.presentation.dto.request.EntryAuthority
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanEntryReqDto
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
 import team.startup.expo.domain.attendance.service.CancellationGuardGate
+import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
 import team.startup.expo.domain.attendance.service.RecentEntryResponses
@@ -38,6 +40,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
     private val expoPeriodValidator = mockk<ExpoPeriodValidator>()
     private val preregisterSessionValidator = mockk<PreregisterSessionValidator>()
     private val guardRepository = mockk<CancellationGuardRepository>(relaxed = true)
+    private val entryLogService = mockk<EntryLogService>(relaxed = true)
     private val clock = UnitTestSupport.fixedClock()
     private val today = LocalDate.now(clock)
 
@@ -49,6 +52,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
             preregisterSessionValidator,
             RecentEntryResponses(EntryRetryProperties(windowSeconds = 300), clock),
             CancellationGuardGate(UnitTestSupport.transactionManager(), guardRepository),
+            entryLogService,
             JsonMapper.builder().build(),
             clock,
         )
@@ -184,6 +188,9 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 then("404 연수자 메시지를 던진다") {
                     shouldFailWith(HttpStatus.NOT_FOUND, "연수자를 찾지 못 했습니다.") { service.scan(expoId, traineeReq) }
                 }
+                then("입장이 실패했으므로 입장 로그를 남기지 않는다") {
+                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any()) }
+                }
             }
 
             `when`("입장에 성공하면") {
@@ -196,6 +203,9 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 then("TRAINEE로 기록하고 연수자 전원에게 traineeId 명찰 QR을 준다") {
                     verify { userClient.recordEntry(RecordEntryReqDto(expoId, "TRAINEE", phoneNumber = "010-3333-4444")) }
                     res.badge?.qrCode shouldBe """{"traineeId":31,"phoneNumber":"010-3333-4444"}"""
+                }
+                then("입장 로그를 TRAINEE와 연수자 ID로 남긴다") {
+                    verify(exactly = 1) { entryLogService.recordEntry(expoId, EntrySubjectType.TRAINEE, "31") }
                 }
             }
         }
@@ -216,6 +226,9 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 then("사전등록 회차 확인을 요청하고 명찰 QR에는 코드를 담는다") {
                     verify(exactly = 1) { preregisterSessionValidator.check(expoId, 55L, any()) }
                     res.badge?.qrCode shouldBe """{"participantId":55,"code":"code-abc"}"""
+                }
+                then("입장 로그를 STANDARD와 참가자 ID로 남기고 코드는 남기지 않는다") {
+                    verify(exactly = 1) { entryLogService.recordEntry(expoId, EntrySubjectType.STANDARD, "55") }
                 }
             }
 

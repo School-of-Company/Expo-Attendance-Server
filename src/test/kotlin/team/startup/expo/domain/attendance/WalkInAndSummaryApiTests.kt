@@ -1,0 +1,228 @@
+package team.startup.expo.domain.attendance
+
+import feign.FeignException
+import feign.Request
+import feign.RequestTemplate
+import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers.anyString
+import org.mockito.Mockito.doReturn
+import org.mockito.Mockito.doThrow
+import org.mockito.Mockito.reset
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.MediaType
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.test.context.bean.override.mockito.MockitoBean
+import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.ResultActions
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import team.startup.expo.domain.qr.service.DeleteExpoDataService
+import team.startup.expo.global.client.expo.ExpoClient
+import team.startup.expo.global.client.expo.ExpoPeriodResDto
+import team.startup.expo.global.client.user.RecordEntryReqDto
+import team.startup.expo.global.client.user.RecordEntryResDto
+import team.startup.expo.global.client.user.UserClient
+import team.startup.expo.support.IntegrationTestSupport
+import java.time.Clock
+import java.time.LocalDate
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
+
+class WalkInAndSummaryApiTests : IntegrationTestSupport() {
+    @Autowired
+    private lateinit var mockMvc: MockMvc
+
+    @Autowired
+    private lateinit var jdbcTemplate: JdbcTemplate
+
+    @Autowired
+    private lateinit var clock: Clock
+
+    @Autowired
+    private lateinit var deleteExpoDataService: DeleteExpoDataService
+
+    @MockitoBean
+    private lateinit var userClient: UserClient
+
+    @MockitoBean
+    private lateinit var expoClient: ExpoClient
+
+    private val today get() = LocalDate.now(clock)
+
+    @BeforeEach
+    fun setUp() {
+        jdbcTemplate.execute(
+            "TRUNCATE TABLE tb_walk_in_log, tb_entry_log, tb_qr_entry, tb_qr_token, tb_deleted_expo RESTART IDENTITY CASCADE",
+        )
+        reset(userClient, expoClient)
+        doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString())).`when`(expoClient).getPeriod(anyString())
+    }
+
+    @Test
+    fun `간편입장을 구분별로 세고 취소하며 0 아래로 내려가지 않는다`() {
+        repeat(3) { walkIn("""{"category":"ADULT"}""").andExpect(status().isOk) }
+        walkIn("""{"category":"STUDENT","action":"ADD"}""").andExpect(status().isOk)
+
+        walkIn("""{"category":"ADULT","action":"UNDO"}""")
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.counts[?(@.category=='ADULT')].count").value(2))
+            .andExpect(jsonPath("$.counts[?(@.category=='STUDENT')].count").value(1))
+            .andExpect(jsonPath("$.total").value(3))
+
+        // 어린이·학생은 하나뿐이라 두 번째 취소는 거절한다
+        walkIn("""{"category":"STUDENT","action":"UNDO"}""").andExpect(status().isOk)
+        walkIn("""{"category":"STUDENT","action":"UNDO"}""")
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.message").value("더 줄일 수 없습니다. 오늘 이 구분의 집계가 없습니다."))
+    }
+
+    @Test
+    fun `같은 requestId의 재전송은 한 번만 센다`() {
+        val body = """{"category":"ADULT","requestId":"req-0001"}"""
+        walkIn(body).andExpect(status().isOk).andExpect(jsonPath("$.total").value(1))
+        walkIn(body).andExpect(status().isOk).andExpect(jsonPath("$.total").value(1))
+        walkIn("""{"category":"ADULT","requestId":"req-0002"}""").andExpect(jsonPath("$.total").value(2))
+    }
+
+    @Test
+    fun `여러 스캐너가 동시에 눌러도 유실 없이 센다`() {
+        val executor = Executors.newFixedThreadPool(10)
+        val tasks = List(40) { Callable { walkIn("""{"category":"STUDENT"}""").andReturn().response.status } }
+        executor.invokeAll(tasks).map { it.get() }.toSet() shouldBe setOf(200)
+        executor.shutdown()
+
+        walkInGet().andExpect(jsonPath("$.counts[?(@.category=='STUDENT')].count").value(40)).andExpect(jsonPath("$.total").value(40))
+    }
+
+    @Test
+    fun `관리자만 쓸 수 있고 입력을 검증한다`() {
+        mockMvc
+            .perform(
+                post("/walk-in-counts/$EXPO").contentType(MediaType.APPLICATION_JSON).content("""{"category":"ADULT"}"""),
+            ).andExpect(status().isUnauthorized)
+        mockMvc
+            .perform(
+                post("/walk-in-counts/$EXPO")
+                    .header("X-User-Id", "2")
+                    .header("X-User-Role", "ROLE_USER")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"category":"ADULT"}"""),
+            ).andExpect(status().isForbidden)
+
+        listOf(
+            """{}""",
+            """{"category":"ELDER"}""",
+            """{"category":"ADULT","action":"X"}""",
+            """{"category":"ADULT","requestId":"bad id!"}""",
+        ).forEach {
+            walkIn(it).andExpect(status().isBadRequest)
+        }
+        walkIn("""{"category":"ADULT"}""", expo = "NOT-A-UUID").andExpect(status().isBadRequest)
+    }
+
+    @Test
+    fun `기간 밖이면 거절하고 박람회 서비스 장애에는 입구를 막지 않으며 삭제된 박람회는 404이다`() {
+        doReturn(ExpoPeriodResDto(today.plusDays(3).toString(), today.plusDays(5).toString())).`when`(expoClient).getPeriod(anyString())
+        walkIn("""{"category":"ADULT"}""").andExpect(status().isBadRequest)
+
+        doThrow(feignException(500)).`when`(expoClient).getPeriod(anyString())
+        walkIn("""{"category":"ADULT"}""").andExpect(status().isOk).andExpect(jsonPath("$.total").value(1))
+
+        deleteExpoDataService.delete(EXPO)
+        walkIn("""{"category":"ADULT"}""").andExpect(status().isNotFound)
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_walk_in_log", Long::class.java) shouldBe 0L
+    }
+
+    @Test
+    fun `입장 처리 건수는 등록 QR, 종이 QR 구분별, 간편입장을 모아 보여 주고 퇴장을 반영한다`() {
+        // 종이 QR 성인 2명 입장, 한 명은 퇴장. 아이 1명 입장
+        listOf("paper-a1" to "ADULT", "paper-a2" to "ADULT", "paper-c1" to "CHILD").forEach { (token, category) ->
+            jdbcTemplate.update(
+                "INSERT INTO tb_qr_token (token, expo_id, category, created_at) VALUES (?, ?, ?, now())",
+                token,
+                EXPO,
+                category,
+            )
+            mockMvc
+                .perform(patch("/attendance/qr/$EXPO").contentType(MediaType.APPLICATION_JSON).content("""{"token":"$token"}"""))
+                .andExpect(status().isOk)
+        }
+        mockMvc
+            .perform(patch("/attendance/exit/$EXPO").contentType(MediaType.APPLICATION_JSON).content("""{"token":"paper-a1"}"""))
+            .andExpect(status().isOk)
+
+        // 등록 QR 일반 참가자 1명 입장
+        doReturn(RecordEntryResDto(7001, "홍길동", "01012345678", true, "STANDARD", "STUDENT", null))
+            .`when`(userClient)
+            .recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = 7001, code = "codePPPPPPPPPPPPPPPPPP"))
+        mockMvc
+            .perform(
+                patch("/attendance/$EXPO")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"authority":"ROLE_STANDARD","participantId":7001,"code":"codePPPPPPPPPPPPPPPPPP"}"""),
+            ).andExpect(status().isOk)
+
+        walkIn("""{"category":"ADULT"}""")
+        walkIn("""{"category":"ADULT"}""")
+        walkIn("""{"category":"STUDENT"}""")
+
+        summary()
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.registered.standard").value(1))
+            .andExpect(jsonPath("$.registered.trainee").value(0))
+            .andExpect(jsonPath("$.paper[?(@.category=='ADULT')].entered").value(2))
+            .andExpect(jsonPath("$.paper[?(@.category=='ADULT')].exited").value(1))
+            .andExpect(jsonPath("$.paper[?(@.category=='CHILD')].entered").value(1))
+            .andExpect(jsonPath("$.walkIn.total").value(3))
+            .andExpect(jsonPath("$.totals.entered").value(7))
+            .andExpect(jsonPath("$.totals.exited").value(1))
+            .andExpect(jsonPath("$.totals.stillInside").value(3))
+            .andExpect(jsonPath("$.generatedAt").exists())
+
+        // 다른 날짜는 비어 있다
+        summary("${today.minusDays(1)}").andExpect(jsonPath("$.totals.entered").value(0)).andExpect(jsonPath("$.paper.length()").value(0))
+    }
+
+    @Test
+    fun `입장 처리 건수 조회도 관리자만 쓸 수 있고 날짜를 검증한다`() {
+        mockMvc.perform(get("/attendance/summary/$EXPO")).andExpect(status().isUnauthorized)
+        mockMvc
+            .perform(get("/attendance/summary/$EXPO").header("X-User-Id", "2").header("X-User-Role", "ROLE_USER"))
+            .andExpect(status().isForbidden)
+        summary("not-a-date").andExpect(status().isBadRequest)
+        mockMvc.perform(admin(get("/attendance/summary/NOT-A-UUID"))).andExpect(status().isBadRequest)
+    }
+
+    private fun admin(request: MockHttpServletRequestBuilder) = request.header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN")
+
+    private fun walkIn(
+        body: String,
+        expo: String = EXPO,
+    ): ResultActions = mockMvc.perform(admin(post("/walk-in-counts/$expo")).contentType(MediaType.APPLICATION_JSON).content(body))
+
+    private fun walkInGet(): ResultActions = mockMvc.perform(admin(get("/walk-in-counts/$EXPO")))
+
+    private fun summary(date: String? = null): ResultActions =
+        mockMvc.perform(admin(get("/attendance/summary/$EXPO" + (date?.let { "?date=$it" } ?: ""))))
+
+    private fun feignException(status: Int): FeignException =
+        FeignException.errorStatus(
+            "call",
+            feign.Response
+                .builder()
+                .status(status)
+                .request(Request.create(Request.HttpMethod.GET, "http://x", emptyMap(), null, Charsets.UTF_8, RequestTemplate()))
+                .headers(emptyMap())
+                .build(),
+        )
+
+    private companion object {
+        const val EXPO = "0b1f6c3e-52a4-4d6e-9d57-4b7a1e5c9a10"
+    }
+}
