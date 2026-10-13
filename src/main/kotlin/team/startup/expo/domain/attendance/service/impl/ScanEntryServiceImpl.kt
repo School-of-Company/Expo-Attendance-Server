@@ -4,11 +4,13 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.presentation.dto.request.EntryAuthority
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanEntryReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.BadgeResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ScanEntryResDto
 import team.startup.expo.domain.attendance.service.CancellationGuardGate
+import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
 import team.startup.expo.domain.attendance.service.RecentEntryResponses
@@ -37,6 +39,7 @@ class ScanEntryServiceImpl(
     private val preregisterSessionValidator: PreregisterSessionValidator,
     private val recentEntryResponses: RecentEntryResponses,
     private val cancellationGuardGate: CancellationGuardGate,
+    private val entryLogService: EntryLogService,
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
 ) : ScanEntryService {
@@ -68,6 +71,10 @@ class ScanEntryServiceImpl(
             } else {
                 recordEntry(expoId, reqDto)
             }
+
+        // 퇴장 기록과 집계를 위한 입장 로그. 입장은 이미 기록되었으므로 로그 실패가 입장을 막지 않는다(#120)
+        val subjectType = if (entry.participationType == TRAINEE) EntrySubjectType.TRAINEE else EntrySubjectType.STANDARD
+        entryLogService.recordEntry(expoId, subjectType, entry.id.toString())
 
         return toResponse(entry, reqDto).also { recentEntryResponses.remember(expoId, reqDto, scannerId, it) }
     }

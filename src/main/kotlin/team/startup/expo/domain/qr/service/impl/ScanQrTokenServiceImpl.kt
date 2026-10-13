@@ -3,6 +3,8 @@ package team.startup.expo.domain.qr.service.impl
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import team.startup.expo.domain.attendance.entity.EntrySubjectType
+import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.qr.entity.QrEntryPeriodCheck
 import team.startup.expo.domain.qr.presentation.dto.request.ScanQrTokenReqDto
@@ -26,6 +28,7 @@ import java.time.LocalDateTime
 class ScanQrTokenServiceImpl(
     private val qrTokenRepository: QrTokenRepository,
     private val qrEntryRepository: QrEntryRepository,
+    private val entryLogService: EntryLogService,
     private val expoPeriodValidator: ExpoPeriodValidator,
     private val clock: Clock,
 ) : ScanQrTokenService {
@@ -43,6 +46,17 @@ class ScanQrTokenServiceImpl(
             if (periodCheck == QrEntryPeriodCheck.PENDING) {
                 logger.warn("박람회 기간을 확인하지 못한 채 종이 QR 입장을 기록했습니다(나중에 다시 확인): expoId={}", expoId)
             }
+            // 퇴장 기록과 집계를 위한 입장 로그(토큰 구분 포함). 입장은 이미 기록되었으므로 로그 실패가 입장을 막지 않는다(#120)
+            entryLogService.recordEntry(
+                expoId,
+                EntrySubjectType.PAPER_QR,
+                reqDto.token,
+                qrTokenRepository
+                    .findById(reqDto.token)
+                    .orElse(null)
+                    ?.category
+                    ?.name,
+            )
             return
         }
 

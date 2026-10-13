@@ -9,8 +9,11 @@ import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanEntryReqDto
+import team.startup.expo.domain.attendance.presentation.dto.request.ScanExitReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ScanEntryResDto
+import team.startup.expo.domain.attendance.presentation.dto.response.ScanExitResDto
 import team.startup.expo.domain.attendance.service.ScanEntryService
+import team.startup.expo.domain.attendance.service.ScanExitService
 import team.startup.expo.global.logging.RequestContext
 import team.startup.expo.global.swagger.ApiError
 
@@ -18,6 +21,7 @@ import team.startup.expo.global.swagger.ApiError
 @RequestMapping("/attendance")
 class AttendanceController(
     private val scanEntryService: ScanEntryService,
+    private val scanExitService: ScanExitService,
 ) {
     @Operation(
         summary = "박람회 입장 스캔",
@@ -41,5 +45,26 @@ class AttendanceController(
     ): ScanEntryResDto {
         RequestContext.bindScan(expoId, reqDto.participantId)
         return scanEntryService.scan(expoId, reqDto, scannerId)
+    }
+
+    @Operation(
+        summary = "박람회 퇴장 스캔",
+        description =
+            "오늘 입장한 참가자·연수자·종이 QR의 퇴장 시각을 기록한다. 입장하지 않았거나(입장 로그가 생기기 전의 입장 포함) 이미 퇴장했으면 400이다. " +
+                "재입장은 아직 허용하지 않는다(입장은 하루 한 번). 기간이나 회차는 확인하지 않는다.",
+    )
+    @ApiError(400, "참가자 ID와 코드, 연수자 ID, 종이 QR 토큰 중 하나만 보내야 한다.")
+    @ApiError(400, "오늘 입장 기록이 없다.")
+    @ApiError(400, "오늘 이미 퇴장 처리된 QR이다.")
+    @ApiError(404, "참가자(연수자)를 찾지 못했다. 코드가 틀린 경우도 같다.")
+    @ApiError(404, "종이 QR 토큰을 찾을 수 없다(다른 박람회의 토큰 포함).")
+    @ApiError(503, "유저 서비스를 사용할 수 없다.")
+    @PatchMapping("/exit/{expoId}")
+    fun scanExit(
+        @PathVariable expoId: String,
+        @Valid @RequestBody reqDto: ScanExitReqDto,
+    ): ScanExitResDto {
+        RequestContext.bindScan(expoId, reqDto.participantId)
+        return scanExitService.scan(expoId, reqDto)
     }
 }
