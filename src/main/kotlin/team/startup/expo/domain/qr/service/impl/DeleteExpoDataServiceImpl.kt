@@ -5,6 +5,7 @@ import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.repository.PreregisterSessionRepository
+import team.startup.expo.domain.attendance.repository.WalkInLogRepository
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.domain.qr.repository.QrTokenRepository
 import team.startup.expo.domain.qr.service.DeleteExpoDataService
@@ -22,6 +23,7 @@ class DeleteExpoDataServiceImpl(
     private val preregisterSessionRepository: PreregisterSessionRepository,
     private val cancellationGuardRepository: CancellationGuardRepository,
     private val entryLogRepository: EntryLogRepository,
+    private val walkInLogRepository: WalkInLogRepository,
     private val deletedExpoRepository: DeletedExpoRepository,
     private val clock: Clock,
 ) : DeleteExpoDataService {
@@ -34,5 +36,6 @@ class DeleteExpoDataServiceImpl(
         cancellationGuardRepository.deleteByExpoId(expoId)
         cancellationGuardRepository.deleteAbortedByExpoId(expoId)
         entryLogRepository.deleteByExpoId(expoId)
+        walkInLogRepository.deleteByExpoId(expoId)
     }
 }
