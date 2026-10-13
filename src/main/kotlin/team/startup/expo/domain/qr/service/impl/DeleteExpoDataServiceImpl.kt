@@ -3,6 +3,7 @@ package team.startup.expo.domain.qr.service.impl
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
+import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.repository.PreregisterSessionRepository
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.domain.qr.repository.QrTokenRepository
@@ -20,6 +21,7 @@ class DeleteExpoDataServiceImpl(
     private val qrTokenRepository: QrTokenRepository,
     private val preregisterSessionRepository: PreregisterSessionRepository,
     private val cancellationGuardRepository: CancellationGuardRepository,
+    private val entryLogRepository: EntryLogRepository,
     private val deletedExpoRepository: DeletedExpoRepository,
     private val clock: Clock,
 ) : DeleteExpoDataService {
@@ -31,5 +33,6 @@ class DeleteExpoDataServiceImpl(
         preregisterSessionRepository.deleteByExpoId(expoId)
         cancellationGuardRepository.deleteByExpoId(expoId)
         cancellationGuardRepository.deleteAbortedByExpoId(expoId)
+        entryLogRepository.deleteByExpoId(expoId)
     }
 }

@@ -62,6 +62,7 @@ class SecurityConfig {
                         "/attendance/standard/*",
                         "/attendance/training/*",
                         "/attendance/qr/*",
+                        "/attendance/exit/*",
                     ).permitAll()
                     .requestMatchers(InternalTokenAuthenticationFilter.INTERNAL_PATH_MATCHER)
                     .hasAuthority(InternalTokenAuthenticationFilter.SERVICE_AUTHORITY)
