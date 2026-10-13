@@ -57,6 +57,19 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
         @Param("exitedAt") exitedAt: LocalDateTime,
     ): Int
 
+    /** 종류·구분별 [종류, 구분, 입장 수, 퇴장 수]. 구분은 종이 QR에만 있다. */
+    @Query(
+        nativeQuery = true,
+        value = """
+            SELECT subject_type, category, COUNT(*), COUNT(exited_at) FROM tb_entry_log
+            WHERE expo_id = :expoId AND attendance_date = :attendanceDate GROUP BY subject_type, category
+        """,
+    )
+    fun summarize(
+        @Param("expoId") expoId: String,
+        @Param("attendanceDate") attendanceDate: LocalDate,
+    ): List<Array<Any?>>
+
     @Transactional
     @Modifying
     @Query(nativeQuery = true, value = "DELETE FROM tb_entry_log WHERE expo_id = :expoId")
