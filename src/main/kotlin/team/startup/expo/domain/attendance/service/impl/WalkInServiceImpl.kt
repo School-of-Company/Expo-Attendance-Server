@@ -38,6 +38,7 @@ class WalkInServiceImpl(
 
         val delta = reqDto.action.delta
         val category = reqDto.category.name
+        val requestId = reqDto.requestId?.takeIf { it.isNotBlank() }
         // 박람회 서비스 호출은 트랜잭션 밖에서 끝냈다. 여기서는 락과 기록만 한 트랜잭션으로 한다.
         transaction.executeWithoutResult {
             // 삭제와 같은 락을 잡은 뒤 삭제 기록을 확인해, 삭제된 박람회의 집계가 되살아나지 않게 한다
@@ -45,11 +46,13 @@ class WalkInServiceImpl(
             if (deletedExpoRepository.existsById(expoId)) throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
 
             walkInLogRepository.lock("walk-in:$expoId:$today:$category")
+            // 이미 처리한 requestId의 재전송은 줄일 수 있는지 따지기 전에 현재 합계로 답한다(응답이 유실된 마지막 UNDO의 재시도가 400이 되지 않게)
+            if (requestId != null && walkInLogRepository.existsRequest(expoId, requestId)) return@executeWithoutResult
             if (delta < 0 && walkInLogRepository.count(expoId, today, category) < 1) {
                 throw ExpectedException(HttpStatus.BAD_REQUEST, "더 줄일 수 없습니다. 오늘 이 구분의 집계가 없습니다.")
             }
             // 같은 requestId의 재전송이면 0건이라 한 번만 세고, 응답은 현재 합계를 그대로 돌려준다
-            walkInLogRepository.insert(expoId, today, category, delta, reqDto.requestId?.takeIf { it.isNotBlank() }, now)
+            walkInLogRepository.insert(expoId, today, category, delta, requestId, now)
         }
         return counts(expoId, today)
     }
