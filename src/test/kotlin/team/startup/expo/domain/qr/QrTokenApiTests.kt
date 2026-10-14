@@ -91,7 +91,7 @@ class QrTokenApiTests : IntegrationTestSupport() {
                 .andReturn()
                 .response.contentAsString
 
-        val tokens = Regex("\"([A-Za-z0-9_-]{22})\"").findAll(response).map { it.groupValues[1] }.toList()
+        val tokens = Regex("\"token\":\"([A-Za-z0-9_-]{22})\"").findAll(response).map { it.groupValues[1] }.toList()
         tokens shouldHaveSize 50
         tokens.toSet() shouldHaveSize 50
         qrTokenRepository.findAllById(tokens).map { it.category }.toSet() shouldBe setOf(QrCategory.ELEMENTARY_STUDENT)

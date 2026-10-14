@@ -91,6 +91,14 @@ class WalkInAndSummaryApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `집계를 0으로 만든 UNDO의 재전송은 오류 없이 현재 합계를 돌려준다`() {
+        walkIn("""{"category":"ADULT"}""").andExpect(status().isOk)
+        val undo = """{"category":"ADULT","action":"UNDO","requestId":"req-undo-1"}"""
+        walkIn(undo).andExpect(status().isOk).andExpect(jsonPath("$.total").value(0))
+        walkIn(undo).andExpect(status().isOk).andExpect(jsonPath("$.total").value(0))
+    }
+
+    @Test
     fun `여러 스캐너가 동시에 눌러도 유실 없이 센다`() {
         val executor = Executors.newFixedThreadPool(10)
         val tasks = List(40) { Callable { walkIn("""{"category":"STUDENT"}""").andReturn().response.status } }

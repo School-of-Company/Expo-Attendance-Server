@@ -11,5 +11,6 @@ interface ScanExitService {
     fun scan(
         expoId: String,
         reqDto: ScanExitReqDto,
+        scannerName: String? = null,
     ): ScanExitResDto
 }

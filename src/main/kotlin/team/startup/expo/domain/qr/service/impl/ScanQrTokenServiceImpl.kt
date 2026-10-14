@@ -37,6 +37,7 @@ class ScanQrTokenServiceImpl(
     override fun scan(
         expoId: String,
         reqDto: ScanQrTokenReqDto,
+        scannerName: String?,
     ) {
         val now = LocalDateTime.now(clock)
         val periodCheck = checkPeriod(expoId, now.toLocalDate())
@@ -56,12 +57,16 @@ class ScanQrTokenServiceImpl(
                     .orElse(null)
                     ?.category
                     ?.name,
+                scannerName,
             )
             return
         }
 
         if (!qrTokenRepository.existsByTokenAndExpoId(reqDto.token, expoId)) {
             throw ExpectedException(HttpStatus.NOT_FOUND, "QR 토큰을 찾을 수 없습니다.")
+        }
+        if (qrTokenRepository.existsByTokenAndExpoIdAndRevokedAtIsNotNull(reqDto.token, expoId)) {
+            throw ExpectedException(HttpStatus.BAD_REQUEST, "사용이 중지된 QR입니다.")
         }
         throw ExpectedException(HttpStatus.BAD_REQUEST, "오늘 이미 입장한 QR입니다.")
     }
