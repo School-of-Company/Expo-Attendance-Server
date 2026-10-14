@@ -4,8 +4,10 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.qr.entity.QrToken
+import team.startup.expo.domain.qr.entity.QrTokenCode
 import team.startup.expo.domain.qr.presentation.dto.request.IssueQrTokensReqDto
 import team.startup.expo.domain.qr.presentation.dto.response.IssueQrTokensResDto
+import team.startup.expo.domain.qr.presentation.dto.response.QrTokenItemResDto
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.domain.qr.repository.QrTokenRepository
 import team.startup.expo.domain.qr.service.IssueQrTokensService
@@ -42,13 +44,27 @@ class IssueQrTokensServiceImpl(
         }
 
         val now = LocalDateTime.now(clock)
-        val tokens = List(reqDto.count) { generateToken() }
+        // 같은 박람회 락 안이라 구분별 연번이 겹치지 않는다. 무효화한 토큰의 연번도 다시 쓰지 않는다.
+        val firstSerial = qrTokenRepository.findMaxSerial(expoId, reqDto.category) + 1
+        val issued =
+            List(reqDto.count) { index ->
+                val serial = firstSerial + index
+                QrToken(
+                    token = generateToken(),
+                    expoId = expoId,
+                    category = reqDto.category,
+                    createdAt = now,
+                    serial = serial,
+                    code = QrTokenCode.of(reqDto.category, serial),
+                )
+            }
 
-        qrTokenRepository.saveAll(
-            tokens.map { QrToken(token = it, expoId = expoId, category = reqDto.category, createdAt = now) },
+        qrTokenRepository.saveAll(issued)
+
+        return IssueQrTokensResDto(
+            tokens = issued.map { it.token },
+            items = issued.map { QrTokenItemResDto.from(it) },
         )
-
-        return IssueQrTokensResDto(tokens)
     }
 
     /** 순번처럼 예측할 수 있으면 남의 QR로 입장·응답할 수 있어서 16바이트 난수를 쓴다(22자). */

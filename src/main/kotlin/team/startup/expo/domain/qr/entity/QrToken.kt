@@ -29,6 +29,15 @@ class QrToken(
     val category: QrCategory,
     @field:Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
+    /** 박람회·구분별 연번. 연번 코드가 생기기 전에 발급한 토큰은 비어 있다. */
+    @field:Column
+    val serial: Int? = null,
+    /** 사람이 읽는 연번 코드([QrTokenCode]). 박람회 안에서 유일하다. */
+    @field:Column(length = 20)
+    val code: String? = null,
+    /** 분실 등으로 사용을 중지한 시각. 비어 있지 않으면 입장 스캔을 거부한다. */
+    @field:Column(name = "revoked_at")
+    val revokedAt: LocalDateTime? = null,
 ) : Persistable<String> {
     @field:jakarta.persistence.Transient
     private var newEntity: Boolean = true

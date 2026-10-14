@@ -14,7 +14,7 @@ import java.time.LocalDateTime
 interface QrEntryRepository : JpaRepository<QrEntry, Long> {
     /**
      * 토큰이 해당 박람회 것이고 그 날짜에 아직 입장하지 않았을 때만 입장을 기록한다.
-     * 반환값이 0이면 이미 입장했거나 없는 토큰이다.
+     * 무효화한 토큰은 기록하지 않는다. 반환값이 0이면 이미 입장했거나 없는 토큰이거나 무효화한 토큰이다.
      */
     @Transactional
     @Modifying
@@ -23,7 +23,7 @@ interface QrEntryRepository : JpaRepository<QrEntry, Long> {
         value = """
             INSERT INTO tb_qr_entry (token, attendance_date, entered_at, period_check)
             SELECT t.token, :attendanceDate, :enteredAt, :periodCheck FROM tb_qr_token t
-            WHERE t.token = :token AND t.expo_id = :expoId
+            WHERE t.token = :token AND t.expo_id = :expoId AND t.revoked_at IS NULL
             ON CONFLICT (token, attendance_date) DO NOTHING
         """,
     )

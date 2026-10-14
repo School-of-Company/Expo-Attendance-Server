@@ -56,6 +56,10 @@ class SecurityConfig {
                     .also { if (swaggerProperties.enabled) it.requestMatchers(HttpMethod.GET, *SWAGGER_PATHS).permitAll() }
                     .requestMatchers(HttpMethod.POST, "/qr-tokens/*")
                     .hasAuthority(GatewayRoleAuthenticationFilter.ADMIN_AUTHORITY)
+                    .requestMatchers(HttpMethod.GET, "/qr-tokens/*", "/qr-tokens/*/summary")
+                    .hasAuthority(GatewayRoleAuthenticationFilter.ADMIN_AUTHORITY)
+                    .requestMatchers(HttpMethod.PATCH, "/qr-tokens/*/revoke")
+                    .hasAuthority(GatewayRoleAuthenticationFilter.ADMIN_AUTHORITY)
                     .requestMatchers(HttpMethod.POST, "/walk-in-counts/*")
                     .hasAuthority(GatewayRoleAuthenticationFilter.ADMIN_AUTHORITY)
                     .requestMatchers(HttpMethod.GET, "/walk-in-counts/*", "/attendance/summary/*")
