@@ -16,6 +16,12 @@ interface WalkInLogRepository : JpaRepository<WalkInLog, Long> {
         @Param("key") key: String,
     ): Int
 
+    @Query(nativeQuery = true, value = "SELECT EXISTS (SELECT 1 FROM tb_walk_in_log WHERE expo_id = :expoId AND request_id = :requestId)")
+    fun existsRequest(
+        @Param("expoId") expoId: String,
+        @Param("requestId") requestId: String,
+    ): Boolean
+
     @Query(
         nativeQuery = true,
         value = """
