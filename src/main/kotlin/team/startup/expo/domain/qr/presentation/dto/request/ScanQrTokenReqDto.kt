@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Size
 
 @Schema(description = "종이 QR 입구 스캔 요청")
 data class ScanQrTokenReqDto(
-    @field:Schema(description = "종이 QR에 담긴 토큰(최대 64자). \"이 종이를 받았다\"는 증명이라 로그에 남기지 않는다", example = "sample-token-not-real")
+    @field:Schema(description = "종이 QR에 담긴 토큰(최대 64자). \"이 종이를 받았다\"는 증명이라 로그에 남기지 않는다", example = "sample-token-not-real", minLength = 1)
     @field:NotBlank
     @field:Size(max = 64)
     val token: String,

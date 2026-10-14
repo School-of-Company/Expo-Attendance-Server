@@ -14,7 +14,7 @@ import jakarta.validation.constraints.Size
             "연수자(`ROLE_TRAINEE`)는 `phoneNumber`를 보낸다.",
 )
 data class ScanEntryReqDto(
-    @field:Schema(description = "입장 대상", example = "ROLE_STANDARD")
+    @field:Schema(description = "입장 대상", example = "ROLE_STANDARD", requiredMode = Schema.RequiredMode.REQUIRED)
     val authority: EntryAuthority,
     @field:Schema(
         description = "전화번호(최대 30자). 연수자는 필수, 일반 참가자는 이전 QR일 때만 사용한다",
