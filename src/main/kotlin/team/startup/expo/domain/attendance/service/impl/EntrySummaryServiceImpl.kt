@@ -9,28 +9,31 @@ import team.startup.expo.domain.attendance.presentation.dto.response.EntryTotals
 import team.startup.expo.domain.attendance.presentation.dto.response.PaperEntryCountResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.RegisteredEntrySummaryResDto
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
+import team.startup.expo.domain.attendance.repository.WalkInLogRepository
+import team.startup.expo.domain.attendance.service.EntryScope
 import team.startup.expo.domain.attendance.service.EntrySummaryService
 import team.startup.expo.domain.attendance.service.WalkInService
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
-import java.time.LocalDate
 import java.time.LocalDateTime
 
 @Service
 class EntrySummaryServiceImpl(
     private val entryLogRepository: EntryLogRepository,
     private val walkInService: WalkInService,
+    private val walkInLogRepository: WalkInLogRepository,
     private val clock: Clock,
 ) : EntrySummaryService {
     override fun get(
         expoId: String,
         reqDto: EntrySummaryReqDto,
     ): EntrySummaryResDto {
-        val date = reqDto.date ?: LocalDate.now(clock)
+        val scope = EntryScope.of(reqDto.date, reqDto.all, clock)
         val generatedAt = LocalDateTime.now(clock)
-        val walkIn = walkInService.get(expoId, date)
+        val walkIn =
+            if (scope.date != null) walkInService.get(expoId, scope.date) else walkInService.getBetween(expoId, scope.from, scope.to)
         val rows =
-            entryLogRepository.summarize(expoId, date).map {
+            entryLogRepository.summarize(expoId, scope.from, scope.to).map {
                 Row(EntrySubjectType.valueOf(it[0] as String), it[1] as String?, (it[2] as Number).toLong(), (it[3] as Number).toLong())
             }
 
@@ -48,13 +51,24 @@ class EntrySummaryServiceImpl(
         val exited = rows.sumOf { it.exited }
         return EntrySummaryResDto(
             expoId = expoId,
-            date = date,
+            date = scope.date,
             generatedAt = generatedAt,
             registered = RegisteredEntrySummaryResDto(standard, trainee),
             paper = paper,
             walkIn = walkIn,
             totals = EntryTotalsResDto(entered = qrEntered + walkIn.total, exited = exited, stillInside = qrEntered - exited),
+            recentEntered10m = recentEntered(expoId, generatedAt),
+            uniqueQr = entryLogRepository.countDistinctSubjects(expoId, scope.from, scope.to),
         )
+    }
+
+    /** 지금부터 10분 전까지의 QR 입장과 간편입장 순증감. 취소가 많아도 0 아래로 내려가지 않게 한다. */
+    private fun recentEntered(
+        expoId: String,
+        now: LocalDateTime,
+    ): Long {
+        val since = now.minusMinutes(RECENT_MINUTES)
+        return (entryLogRepository.countEnteredSince(expoId, since) + walkInLogRepository.sumDeltaSince(expoId, since)).coerceAtLeast(0)
     }
 
     private data class Row(
@@ -63,4 +77,8 @@ class EntrySummaryServiceImpl(
         val entered: Long,
         val exited: Long,
     )
+
+    private companion object {
+        const val RECENT_MINUTES = 10L
+    }
 }

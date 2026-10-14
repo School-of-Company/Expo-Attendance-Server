@@ -12,6 +12,14 @@ interface WalkInService {
     fun record(
         expoId: String,
         reqDto: RecordWalkInReqDto,
+        scannerName: String? = null,
+    ): WalkInCountsResDto
+
+    /** 기간(`from`~`to`) 전체의 구분별 합계. 응답의 `date`는 비어 있다(#131). */
+    fun getBetween(
+        expoId: String,
+        from: LocalDate,
+        to: LocalDate,
     ): WalkInCountsResDto
 
     /** 날짜별 구분별 합계. 날짜가 없으면 오늘이다. */

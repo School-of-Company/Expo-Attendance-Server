@@ -7,11 +7,13 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import team.startup.expo.domain.attendance.presentation.dto.request.RecordWalkInReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.WalkInCountsResDto
+import team.startup.expo.domain.attendance.service.ScannerName
 import team.startup.expo.domain.attendance.service.WalkInService
 import team.startup.expo.global.swagger.ApiError
 import java.time.LocalDate
@@ -37,7 +39,8 @@ class WalkInController(
     fun record(
         @PathVariable expoId: String,
         @Valid @RequestBody reqDto: RecordWalkInReqDto,
-    ): WalkInCountsResDto = walkInService.record(expoId, reqDto)
+        @RequestHeader(name = ScannerName.HEADER, required = false) scannerName: String?,
+    ): WalkInCountsResDto = walkInService.record(expoId, reqDto, scannerName)
 
     @Operation(summary = "간편입장 합계 조회", description = "날짜(없으면 오늘)의 구분별 간편입장 합계다. 관리자 전용이다.")
     @ApiError(400, "박람회 ID 형식(소문자 UUID)이나 날짜 형식이 올바르지 않다.")

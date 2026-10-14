@@ -14,6 +14,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.ScanEntryRe
 import team.startup.expo.domain.attendance.presentation.dto.response.ScanExitResDto
 import team.startup.expo.domain.attendance.service.ScanEntryService
 import team.startup.expo.domain.attendance.service.ScanExitService
+import team.startup.expo.domain.attendance.service.ScannerName
 import team.startup.expo.global.logging.RequestContext
 import team.startup.expo.global.swagger.ApiError
 
@@ -42,9 +43,10 @@ class AttendanceController(
         @PathVariable expoId: String,
         @Valid @RequestBody reqDto: ScanEntryReqDto,
         @RequestHeader(name = "X-User-Id", required = false) scannerId: String?,
+        @RequestHeader(name = ScannerName.HEADER, required = false) scannerName: String?,
     ): ScanEntryResDto {
         RequestContext.bindScan(expoId, reqDto.participantId)
-        return scanEntryService.scan(expoId, reqDto, scannerId)
+        return scanEntryService.scan(expoId, reqDto, scannerId, scannerName)
     }
 
     @Operation(
@@ -63,8 +65,9 @@ class AttendanceController(
     fun scanExit(
         @PathVariable expoId: String,
         @Valid @RequestBody reqDto: ScanExitReqDto,
+        @RequestHeader(name = ScannerName.HEADER, required = false) scannerName: String?,
     ): ScanExitResDto {
         RequestContext.bindScan(expoId, reqDto.participantId)
-        return scanExitService.scan(expoId, reqDto)
+        return scanExitService.scan(expoId, reqDto, scannerName)
     }
 }

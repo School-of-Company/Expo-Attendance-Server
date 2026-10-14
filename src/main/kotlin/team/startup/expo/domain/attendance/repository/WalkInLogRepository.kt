@@ -40,13 +40,24 @@ interface WalkInLogRepository : JpaRepository<WalkInLog, Long> {
         nativeQuery = true,
         value = """
             SELECT category, COALESCE(SUM(delta), 0) FROM tb_walk_in_log
-            WHERE expo_id = :expoId AND attendance_date = :attendanceDate GROUP BY category
+            WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to GROUP BY category
         """,
     )
     fun countsByCategory(
         @Param("expoId") expoId: String,
-        @Param("attendanceDate") attendanceDate: LocalDate,
+        @Param("from") from: LocalDate,
+        @Param("to") to: LocalDate,
     ): List<Array<Any>>
+
+    /** 이 시각 이후의 간편입장 순증감. */
+    @Query(
+        nativeQuery = true,
+        value = "SELECT COALESCE(SUM(delta), 0) FROM tb_walk_in_log WHERE expo_id = :expoId AND created_at >= :since",
+    )
+    fun sumDeltaSince(
+        @Param("expoId") expoId: String,
+        @Param("since") since: LocalDateTime,
+    ): Long
 
     /** 같은 `request_id`가 이미 있으면 아무것도 하지 않는다(0). */
     @Transactional
@@ -54,8 +65,8 @@ interface WalkInLogRepository : JpaRepository<WalkInLog, Long> {
     @Query(
         nativeQuery = true,
         value = """
-            INSERT INTO tb_walk_in_log (expo_id, attendance_date, category, delta, request_id, created_at)
-            VALUES (:expoId, :attendanceDate, :category, :delta, :requestId, :createdAt)
+            INSERT INTO tb_walk_in_log (expo_id, attendance_date, category, delta, request_id, created_at, scanner)
+            VALUES (:expoId, :attendanceDate, :category, :delta, :requestId, :createdAt, :scanner)
             ON CONFLICT (request_id) DO NOTHING
         """,
     )
@@ -66,6 +77,7 @@ interface WalkInLogRepository : JpaRepository<WalkInLog, Long> {
         @Param("delta") delta: Int,
         @Param("requestId") requestId: String?,
         @Param("createdAt") createdAt: LocalDateTime,
+        @Param("scanner") scanner: String?,
     ): Int
 
     @Transactional

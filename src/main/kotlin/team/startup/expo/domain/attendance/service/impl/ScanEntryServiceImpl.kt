@@ -47,6 +47,7 @@ class ScanEntryServiceImpl(
         expoId: String,
         reqDto: ScanEntryReqDto,
         scannerId: String?,
+        scannerName: String?,
     ): ScanEntryResDto {
         checkIdentifier(reqDto)
         // 방금 성공한 스캔의 재시도(응답 유실)면 처음 응답을 그대로 돌려준다
@@ -74,7 +75,7 @@ class ScanEntryServiceImpl(
 
         // 퇴장 기록과 집계를 위한 입장 로그. 입장은 이미 기록되었으므로 로그 실패가 입장을 막지 않는다(#120)
         val subjectType = if (entry.participationType == TRAINEE) EntrySubjectType.TRAINEE else EntrySubjectType.STANDARD
-        entryLogService.recordEntry(expoId, subjectType, entry.id.toString())
+        entryLogService.recordEntry(expoId, subjectType, entry.id.toString(), scannerName = scannerName)
 
         return toResponse(entry, reqDto).also { recentEntryResponses.remember(expoId, reqDto, scannerId, it) }
     }

@@ -37,6 +37,7 @@ class ScanQrTokenServiceImpl(
     override fun scan(
         expoId: String,
         reqDto: ScanQrTokenReqDto,
+        scannerName: String?,
     ) {
         val now = LocalDateTime.now(clock)
         val periodCheck = checkPeriod(expoId, now.toLocalDate())
@@ -56,6 +57,7 @@ class ScanQrTokenServiceImpl(
                     .orElse(null)
                     ?.category
                     ?.name,
+                scannerName,
             )
             return
         }
