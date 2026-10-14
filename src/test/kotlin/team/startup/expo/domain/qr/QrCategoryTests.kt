@@ -52,7 +52,7 @@ class QrCategoryTests : IntegrationTestSupport() {
                     .andReturn()
                     .response.contentAsString
 
-            val tokens = Regex("\"([A-Za-z0-9_-]{22})\"").findAll(response).map { it.groupValues[1] }.toList()
+            val tokens = Regex("\"token\":\"([A-Za-z0-9_-]{22})\"").findAll(response).map { it.groupValues[1] }.toList()
             tokens.size shouldBe 3
             qrTokenRepository.findAllById(tokens).map { it.category }.toSet() shouldBe setOf(category)
         }
@@ -72,7 +72,7 @@ class QrCategoryTests : IntegrationTestSupport() {
                 .andReturn()
                 .response.contentAsString
 
-        val tokens = Regex("\"([A-Za-z0-9_-]{22})\"").findAll(response).map { it.groupValues[1] }.toList()
+        val tokens = Regex("\"token\":\"([A-Za-z0-9_-]{22})\"").findAll(response).map { it.groupValues[1] }.toList()
         tokens.size shouldBe 2
         qrTokenRepository.findAllById(tokens).map { it.category }.toSet() shouldBe setOf(QrCategory.KINDERGARTEN_STUDENT)
     }

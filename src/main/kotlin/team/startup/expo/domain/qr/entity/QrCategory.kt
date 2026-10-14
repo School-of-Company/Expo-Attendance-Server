@@ -5,16 +5,19 @@ package team.startup.expo.domain.qr.entity
  * `GENERAL` 한 가지)만 쓴다. 나머지 값은 폼 서비스의 직업(`Occupation`) 값과 같아, 구분을 더 잘게 나눠야 할 때 코드를
  * 바꾸지 않고 쓸 수 있다.
  */
-enum class QrCategory {
-    KINDERGARTEN_STUDENT,
-    ELEMENTARY_STUDENT,
-    MIDDLE_SCHOOL_STUDENT,
-    HIGH_SCHOOL_STUDENT,
-    SCHOOL_STAFF,
-    PRE_SERVICE_TEACHER,
-    PARENT,
-    GENERAL,
-    TEACHER,
-    ADULT,
-    CHILD,
+enum class QrCategory(
+    /** 종이에 인쇄하는 연번 코드의 앞부분(예: `ADT-0001-K7`의 `ADT`). 구분마다 달라야 한다. */
+    val codePrefix: String,
+) {
+    KINDERGARTEN_STUDENT("KIN"),
+    ELEMENTARY_STUDENT("ELE"),
+    MIDDLE_SCHOOL_STUDENT("MID"),
+    HIGH_SCHOOL_STUDENT("HIG"),
+    SCHOOL_STAFF("STF"),
+    PRE_SERVICE_TEACHER("PRE"),
+    PARENT("PAR"),
+    GENERAL("GEN"),
+    TEACHER("TCH"),
+    ADULT("ADT"),
+    CHILD("CHD"),
 }
