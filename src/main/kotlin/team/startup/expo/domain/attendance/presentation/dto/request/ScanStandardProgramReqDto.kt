@@ -7,11 +7,11 @@ import jakarta.validation.constraints.Size
 
 @Schema(description = "일반 프로그램 출석 스캔 요청")
 data class ScanStandardProgramReqDto(
-    @field:Schema(description = "박람회 ID(UUID 문자열, 최대 36자)", example = "00000000-0000-0000-0000-000000000000")
+    @field:Schema(description = "박람회 ID(UUID 문자열, 최대 36자)", example = "00000000-0000-0000-0000-000000000000", minLength = 1)
     @field:NotBlank
     @field:Size(max = 36)
     val expoId: String,
-    @field:Schema(description = "참가자 ID", example = "55")
+    @field:Schema(description = "참가자 ID", example = "55", requiredMode = Schema.RequiredMode.REQUIRED)
     @field:Positive
     val participantId: Long,
     // 기존 앱이 함께 보내지만 참가자는 `participantId`로 찾으므로 쓰지 않는다. 로그에 남지 않게 한다.

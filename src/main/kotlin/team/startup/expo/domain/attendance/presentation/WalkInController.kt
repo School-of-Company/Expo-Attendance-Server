@@ -32,6 +32,7 @@ class WalkInController(
     @ApiError(401, "관리자 역할 헤더(`X-User-Id`, `X-User-Role`)가 없다.")
     @ApiError(403, "`X-User-Role`이 `ROLE_ADMIN`이 아니다.")
     @ApiError(404, "박람회를 찾지 못했다.")
+    @ApiError(503, "DB 일시 장애로 요청이 몰려 잠시 처리하지 못했다. 잠시 후 다시 시도한다.")
     @PostMapping("/{expoId}")
     fun record(
         @PathVariable expoId: String,
@@ -42,6 +43,7 @@ class WalkInController(
     @ApiError(400, "박람회 ID 형식(소문자 UUID)이나 날짜 형식이 올바르지 않다.")
     @ApiError(401, "관리자 역할 헤더가 없다.")
     @ApiError(403, "`X-User-Role`이 `ROLE_ADMIN`이 아니다.")
+    @ApiError(503, "DB 일시 장애로 요청이 몰려 잠시 처리하지 못했다. 잠시 후 다시 시도한다.")
     @GetMapping("/{expoId}")
     fun get(
         @PathVariable expoId: String,

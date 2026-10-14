@@ -2,6 +2,7 @@ package team.startup.expo.domain.attendance.presentation
 
 import io.swagger.v3.oas.annotations.Operation
 import jakarta.validation.Valid
+import org.springdoc.core.annotations.ParameterObject
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.ModelAttribute
 import org.springframework.web.bind.annotation.PathVariable
@@ -27,9 +28,10 @@ class EntrySummaryController(
     @ApiError(400, "박람회 ID 형식(소문자 UUID)이나 날짜 형식이 올바르지 않다.")
     @ApiError(401, "관리자 역할 헤더가 없다.")
     @ApiError(403, "`X-User-Role`이 `ROLE_ADMIN`이 아니다.")
+    @ApiError(503, "DB 일시 장애로 요청이 몰려 잠시 처리하지 못했다. 잠시 후 다시 시도한다.")
     @GetMapping("/{expoId}")
     fun get(
         @PathVariable expoId: String,
-        @Valid @ModelAttribute reqDto: EntrySummaryReqDto,
+        @Valid @ParameterObject @ModelAttribute reqDto: EntrySummaryReqDto,
     ): EntrySummaryResDto = entrySummaryService.get(expoId, reqDto)
 }
