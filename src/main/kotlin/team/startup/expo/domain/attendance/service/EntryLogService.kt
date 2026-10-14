@@ -12,5 +12,6 @@ interface EntryLogService {
         subjectType: EntrySubjectType,
         subjectId: String,
         category: String? = null,
+        scannerName: String? = null,
     )
 }

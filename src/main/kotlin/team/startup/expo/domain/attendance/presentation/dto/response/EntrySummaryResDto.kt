@@ -11,7 +11,8 @@ import java.time.LocalDateTime
 )
 data class EntrySummaryResDto(
     val expoId: String,
-    val date: LocalDate,
+    @field:Schema(description = "집계한 날짜. 박람회 전체 기간(`all=true`)이면 비어 있다", nullable = true)
+    val date: LocalDate?,
     @field:Schema(description = "집계한 시각(화면의 갱신 시각)")
     val generatedAt: LocalDateTime,
     val registered: RegisteredEntrySummaryResDto,
@@ -19,6 +20,17 @@ data class EntrySummaryResDto(
     val paper: List<PaperEntryCountResDto>,
     val walkIn: WalkInCountsResDto,
     val totals: EntryTotalsResDto,
+    @field:Schema(
+        description = "조회한 날짜와 상관없이 지금부터 10분 전까지의 입장 수(등록 QR + 종이 QR + 간편입장 순증감)",
+        example = "18",
+    )
+    val recentEntered10m: Long,
+    @field:Schema(
+        description =
+            "기간 안에서 서로 다른 QR 수(등록 QR + 종이 QR, 간편입장 제외). 하루 집계에서는 QR 입장 수와 같고, 전체 기간에서는 같은 QR의 다른 날 입장을 한 번만 센다",
+        example = "61",
+    )
+    val uniqueQr: Long,
 )
 
 @Schema(description = "사전등록 QR 입장")

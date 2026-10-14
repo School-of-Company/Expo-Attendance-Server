@@ -5,8 +5,10 @@ import jakarta.validation.Valid
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
+import team.startup.expo.domain.attendance.service.ScannerName
 import team.startup.expo.domain.qr.presentation.dto.request.ScanQrTokenReqDto
 import team.startup.expo.domain.qr.service.ScanQrTokenService
 import team.startup.expo.global.logging.RequestContext
@@ -28,8 +30,9 @@ class QrAttendanceController(
     fun scan(
         @PathVariable expoId: String,
         @Valid @RequestBody reqDto: ScanQrTokenReqDto,
+        @RequestHeader(name = ScannerName.HEADER, required = false) scannerName: String?,
     ) {
         RequestContext.bindScan(expoId, null)
-        scanQrTokenService.scan(expoId, reqDto)
+        scanQrTokenService.scan(expoId, reqDto, scannerName)
     }
 }
