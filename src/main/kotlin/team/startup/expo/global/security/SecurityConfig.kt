@@ -62,7 +62,7 @@ class SecurityConfig {
                     .hasAuthority(GatewayRoleAuthenticationFilter.ADMIN_AUTHORITY)
                     .requestMatchers(HttpMethod.POST, "/walk-in-counts/*")
                     .hasAuthority(GatewayRoleAuthenticationFilter.ADMIN_AUTHORITY)
-                    .requestMatchers(HttpMethod.GET, "/walk-in-counts/*", "/attendance/summary/*")
+                    .requestMatchers(HttpMethod.GET, "/walk-in-counts/*", "/attendance/summary/*", "/attendance/summary/*/*")
                     .hasAuthority(GatewayRoleAuthenticationFilter.ADMIN_AUTHORITY)
                     .requestMatchers(
                         HttpMethod.PATCH,

@@ -28,4 +28,7 @@ class WalkInLog(
     val requestId: String? = null,
     @field:Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime,
+    /** 요청을 보낸 스캐너(기기) 이름(#131). 보내지 않았으면 비어 있다. */
+    @field:Column(name = "scanner", length = 40)
+    val scanner: String? = null,
 )

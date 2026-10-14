@@ -43,4 +43,10 @@ class EntryLog(
     /** 종이 QR 토큰의 구분. 다른 입장에는 없다. */
     @field:Column(name = "category", length = 30)
     val category: String? = null,
+    /** 입장을 처리한 스캐너(기기) 이름(#131). 보내지 않았으면 비어 있다. */
+    @field:Column(name = "scanner", length = 40)
+    val scanner: String? = null,
+    /** 퇴장을 처리한 스캐너(기기) 이름. */
+    @field:Column(name = "exit_scanner", length = 40)
+    val exitScanner: String? = null,
 )

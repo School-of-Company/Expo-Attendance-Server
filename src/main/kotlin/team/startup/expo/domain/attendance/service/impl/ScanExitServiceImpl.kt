@@ -10,6 +10,7 @@ import team.startup.expo.domain.attendance.presentation.dto.request.ScanExitReqD
 import team.startup.expo.domain.attendance.presentation.dto.response.ScanExitResDto
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.ScanExitService
+import team.startup.expo.domain.attendance.service.ScannerName
 import team.startup.expo.domain.qr.repository.QrTokenRepository
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.TraineeNamesReqDto
@@ -36,12 +37,13 @@ class ScanExitServiceImpl(
     override fun scan(
         expoId: String,
         reqDto: ScanExitReqDto,
+        scannerName: String?,
     ): ScanExitResDto {
         val (type, subjectId) = identify(expoId, reqDto)
         val now = LocalDateTime.now(clock)
         val today = now.toLocalDate()
 
-        if (entryLogRepository.markExited(expoId, type.name, subjectId, today, now) == 1) {
+        if (entryLogRepository.markExited(expoId, type.name, subjectId, today, now, ScannerName.of(scannerName)) == 1) {
             val log = findLog(expoId, type, subjectId, now)
             return toResponse(log, now)
         }

@@ -6,5 +6,6 @@ interface ScanQrTokenService {
     fun scan(
         expoId: String,
         reqDto: ScanQrTokenReqDto,
+        scannerName: String? = null,
     )
 }

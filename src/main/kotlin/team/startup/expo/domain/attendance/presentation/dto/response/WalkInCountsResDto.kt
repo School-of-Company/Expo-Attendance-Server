@@ -7,7 +7,8 @@ import java.time.LocalDate
 @Schema(description = "간편입장 구분별 합계")
 data class WalkInCountsResDto(
     val expoId: String,
-    val date: LocalDate,
+    @field:Schema(description = "집계한 날짜. 박람회 전체 기간을 집계하면 비어 있다", nullable = true)
+    val date: LocalDate?,
     @field:Schema(description = "모든 구분의 합계(0인 구분도 포함한다)")
     val counts: List<WalkInCountResDto>,
     @field:Schema(description = "전체 합계", example = "54")
