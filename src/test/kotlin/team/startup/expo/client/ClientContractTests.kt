@@ -24,6 +24,8 @@ import team.startup.expo.global.client.user.ParticipantQrReqDto
 import team.startup.expo.global.client.user.ParticipantQrResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
+import team.startup.expo.global.client.user.ResolveStandardParticipantReqDto
+import team.startup.expo.global.client.user.ResolveStandardParticipantResDto
 import team.startup.expo.global.client.user.ResolveTraineeByParticipantReqDto
 import team.startup.expo.global.client.user.ResolveTraineeByParticipantResDto
 import team.startup.expo.global.client.user.StandardParticipantNameResDto
@@ -116,6 +118,23 @@ class ClientContractTests : IntegrationTestSupport() {
 
         notFoundPaths += "/internal/trainees/names"
         assertThrows<FeignException.NotFound> { userClient.getTraineeNames(TraineeNamesReqDto("expo-1", listOf(3))) }
+    }
+
+    @Test
+    fun `전화번호 참가자 조회는 기존 User 계약의 경로 본문 토큰과 응답을 맞춘다`() {
+        val path = "/internal/standard-participants/resolve"
+        respond(path, """{"participantId":42}""")
+        val request = ResolveStandardParticipantReqDto("expo-1", "01012345678")
+        userClient.resolveStandardParticipant(request) shouldBe ResolveStandardParticipantResDto(42)
+        received.single().let {
+            it.method shouldBe "POST"
+            it.path shouldBe path
+            it.token shouldBe USER_INTERNAL_TOKEN
+            it.body.tree() shouldBe """{"expoId":"expo-1","phoneNumber":"01012345678"}""".tree()
+        }
+        request.toString().contains("01012345678") shouldBe false
+        notFoundPaths += path
+        assertThrows<FeignException.NotFound> { userClient.resolveStandardParticipant(request) }
     }
 
     @Test

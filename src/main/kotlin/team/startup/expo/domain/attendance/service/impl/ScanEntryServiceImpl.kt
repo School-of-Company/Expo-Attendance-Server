@@ -18,6 +18,7 @@ import team.startup.expo.domain.attendance.service.ScanEntryService
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
+import team.startup.expo.global.client.user.ResolveStandardParticipantReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.global.exception.ExpectedException
@@ -65,10 +66,24 @@ class ScanEntryServiceImpl(
             }
         }
 
-        // 참가자 ID와 코드로 들어온 입장은 신청 취소와 겹치지 않게 취소 보호를 확인하며 기록한다(전화번호 입장은 참가자를 미리 알 수 없어 대상이 아니다)
+        // 전화번호도 기록 전에 ID를 조회해 QR과 같은 참가자 키로 취소 보호를 잡는다.
+        val participantId =
+            if (reqDto.authority == EntryAuthority.ROLE_STANDARD) {
+                reqDto.participantId ?: userCircuitBreaker.callService("유저", participantNotFound(reqDto)) {
+                    userClient
+                        .resolveStandardParticipant(
+                            ResolveStandardParticipantReqDto(expoId, requireNotNull(reqDto.phoneNumber)),
+                        ).participantId
+                }
+            } else {
+                null
+            }
         val entry =
-            if (reqDto.authority == EntryAuthority.ROLE_STANDARD && reqDto.participantId != null && !reqDto.code.isNullOrBlank()) {
-                cancellationGuardGate.scanning(expoId, participantId = reqDto.participantId) { recordEntry(expoId, reqDto) }
+            if (participantId != null) {
+                cancellationGuardGate.scanning(expoId, participantId = participantId) {
+                    preregisterSessionValidator.checkNotCancelled(expoId, participantId)
+                    recordEntry(expoId, reqDto)
+                }
             } else {
                 recordEntry(expoId, reqDto)
             }

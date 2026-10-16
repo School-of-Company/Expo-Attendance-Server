@@ -23,6 +23,8 @@ import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
+import team.startup.expo.global.client.user.ResolveStandardParticipantReqDto
+import team.startup.expo.global.client.user.ResolveStandardParticipantResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
@@ -295,6 +297,9 @@ class ScanEntryApiTests : IntegrationTestSupport() {
         type: String = "STANDARD",
         phone: String = "01012345678",
     ) {
+        doReturn(
+            ResolveStandardParticipantResDto(response.id),
+        ).`when`(userClient).resolveStandardParticipant(ResolveStandardParticipantReqDto(expoId, phone))
         doReturn(response).`when`(userClient).recordEntry(RecordEntryReqDto(expoId, type, phone))
     }
 
@@ -323,6 +328,9 @@ class ScanEntryApiTests : IntegrationTestSupport() {
         type: String = "STANDARD",
         phone: String = "01012345678",
     ) {
+        doReturn(
+            ResolveStandardParticipantResDto(9999L),
+        ).`when`(userClient).resolveStandardParticipant(ResolveStandardParticipantReqDto(expoId, phone))
         doThrow(feignException(status)).`when`(userClient).recordEntry(RecordEntryReqDto(expoId, type, phone))
     }
 

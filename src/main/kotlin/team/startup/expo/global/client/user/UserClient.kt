@@ -10,6 +10,12 @@ import org.springframework.web.bind.annotation.RequestBody
     configuration = [UserClientConfiguration::class],
 )
 interface UserClient {
+    /** 전화번호로 일반 참가자 ID만 조회한다. 입장을 기록하지 않고, 없으면 404다. */
+    @PostMapping("/internal/standard-participants/resolve")
+    fun resolveStandardParticipant(
+        @RequestBody request: ResolveStandardParticipantReqDto,
+    ): ResolveStandardParticipantResDto
+
     /** 참가자를 찾아 오늘의 입장을 기록한다. 참가자가 없으면 404, 오늘 이미 입장했으면 409다. */
     @PostMapping("/internal/entries")
     fun recordEntry(

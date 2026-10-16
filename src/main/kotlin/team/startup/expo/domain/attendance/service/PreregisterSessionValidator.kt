@@ -26,6 +26,18 @@ class PreregisterSessionValidator(
     private val properties: PreregisterEntryProperties,
     private val clock: Clock,
 ) {
+    /** 전화번호 입장은 회차 시간과 무관하게 취소된 신청만 거절한다. guard 공유 락 안에서 호출한다. */
+    fun checkNotCancelled(
+        expoId: String,
+        participantId: Long,
+    ) {
+        if (preregisterSessionRepository.findByExpoIdAndParticipantId(expoId, participantId)?.status ==
+            PreregisterSessionStatus.CANCELLED
+        ) {
+            throw ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청입니다.")
+        }
+    }
+
     fun check(
         expoId: String,
         participantId: Long,
@@ -34,7 +46,7 @@ class PreregisterSessionValidator(
         val assignment = preregisterSessionRepository.findByExpoIdAndParticipantId(expoId, participantId) ?: return
         verifyCode()
         if (assignment.status == PreregisterSessionStatus.CANCELLED) {
-            throw ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청의 QR입니다.")
+            throw ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청입니다.")
         }
 
         // 확정 상태인데 회차가 없거나, 회차가 없어졌다는 404는 있을 수 없는 상태라 "없음"이 아니라 호출 실패(503)로 본다
