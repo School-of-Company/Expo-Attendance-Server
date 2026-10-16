@@ -30,6 +30,8 @@ import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.expo.PreregisterSessionResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
+import team.startup.expo.global.client.user.ResolveStandardParticipantReqDto
+import team.startup.expo.global.client.user.ResolveStandardParticipantResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.support.IntegrationTestSupport
@@ -61,13 +63,17 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
-        jdbcTemplate.execute("TRUNCATE TABLE tb_preregister_session, tb_deleted_expo RESTART IDENTITY CASCADE")
+        jdbcTemplate.execute("TRUNCATE TABLE tb_preregister_session, tb_cancellation_guard, tb_deleted_expo RESTART IDENTITY CASCADE")
         reset(userClient, expoClient)
+        doReturn(ResolveStandardParticipantResDto(PARTICIPANT))
+            .`when`(userClient)
+            .resolveStandardParticipant(ResolveStandardParticipantReqDto(EXPO, "01012345678"))
         val today = LocalDate.now(clock)
         doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString())).`when`(expoClient).getPeriod(anyString())
         doReturn(
             entry(PARTICIPANT),
         ).`when`(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+        doReturn(entry(PARTICIPANT)).`when`(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", phoneNumber = "01012345678"))
     }
 
     @Test
@@ -109,8 +115,16 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
         sessionAt(start = now, end = now.plus(Duration.ofHours(3)))
 
         cancel().andExpect(status().isNoContent)
-        scan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("취소된 신청의 QR입니다."))
+        scan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("취소된 신청입니다."))
+        mockMvc
+            .perform(
+                patch("/attendance/$EXPO")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"authority":"ROLE_STANDARD","phoneNumber":"01012345678"}"""),
+            ).andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.message").value("취소된 신청입니다."))
         verify(userClient, never()).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+        verify(userClient, never()).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", phoneNumber = "01012345678"))
 
         // 취소를 두 번 보내도 같고, 재신청해 확정되면 다시 입장할 수 있다
         cancel().andExpect(status().isNoContent)
@@ -187,9 +201,9 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `전화번호로 입장하는 이전 방식과 연수자는 회차를 확인하지 않는다`() {
+    fun `회차 시간 밖에도 전화번호 입장은 회차를 확인하지 않는다`() {
         assign(SESSION).andExpect(status().isNoContent)
-        doReturn(entry(PARTICIPANT)).`when`(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", phoneNumber = "01012345678"))
+        sessionAt(start = now.plus(Duration.ofHours(3)), end = now.plus(Duration.ofHours(5)))
 
         mockMvc
             .perform(
@@ -248,7 +262,7 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
         assign(SESSION, revision = 1).andExpect(status().isNoContent)
 
         stored() shouldBe ("CANCELLED" to 2L)
-        scan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("취소된 신청의 QR입니다."))
+        scan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("취소된 신청입니다."))
     }
 
     @Test

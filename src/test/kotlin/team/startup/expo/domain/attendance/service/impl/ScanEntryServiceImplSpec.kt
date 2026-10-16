@@ -23,6 +23,8 @@ import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
 import team.startup.expo.domain.attendance.service.RecentEntryResponses
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
+import team.startup.expo.global.client.user.ResolveStandardParticipantReqDto
+import team.startup.expo.global.client.user.ResolveStandardParticipantResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.global.config.EntryRetryProperties
@@ -72,6 +74,8 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
     private fun givenPeriodOk() {
         every { expoPeriodValidator.checkInProgress(expoId, today) } just Runs
         every { preregisterSessionValidator.check(any(), any(), any()) } just Runs
+        every { preregisterSessionValidator.checkNotCancelled(any(), any()) } just Runs
+        every { userClient.resolveStandardParticipant(any()) } returns ResolveStandardParticipantResDto(55L)
         every { guardRepository.findByExpoIdAndParticipantId(any(), any()) } returns null
     }
 
@@ -118,11 +122,11 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
 
                 val res = service.scan(expoId, phoneReq)
 
-                then("전화번호로 입장을 기록하고 사전등록 확인과 취소 보호 락은 건너뛴다") {
+                then("전화번호로 입장을 기록하고 회차 시간 확인 없이 취소 보호 락을 잡는다") {
                     res.id shouldBe 55L
                     verify(exactly = 1) { userClient.recordEntry(RecordEntryReqDto(expoId, "STANDARD", phoneNumber = "010-1111-2222")) }
                     verify(exactly = 0) { preregisterSessionValidator.check(any(), any(), any()) }
-                    verify(exactly = 0) { guardRepository.lockShared(any()) }
+                    verify(exactly = 1) { guardRepository.lockShared(CancellationGuardGate.participantKey(expoId, 55L)) }
                 }
                 then("교사가 아니면 명찰이 없다") {
                     res.badge shouldBe null
@@ -176,6 +180,44 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
 
                 then("503을 던진다") {
                     shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.") { service.scan(expoId, phoneReq) }
+                }
+            }
+        }
+
+        given("전화번호 입장의 사전 조회와 취소 보호에서") {
+            listOf(404, 500).forEach { status ->
+                `when`("참가자 조회가 $status 이면") {
+                    givenPeriodOk()
+                    every { userClient.resolveStandardParticipant(any()) } throws
+                        if (status == 404) UnitTestSupport.feignNotFound() else UnitTestSupport.feignServerError()
+                    then("입장을 기록하지 않고 조회 실패를 돌려준다") {
+                        shouldFailWith(
+                            if (status == 404) HttpStatus.NOT_FOUND else HttpStatus.SERVICE_UNAVAILABLE,
+                            if (status == 404) "행사 참가자를 찾지 못 했습니다." else "유저 서비스를 잠시 사용할 수 없습니다.",
+                        ) { service.scan(expoId, phoneReq) }
+                        verify(exactly = 0) { userClient.recordEntry(any()) }
+                    }
+                }
+            }
+            CancellationGuardState.entries.forEach { state ->
+                `when`("전화번호 참가자 guard가 $state 이면") {
+                    givenPeriodOk()
+                    every { guardRepository.findByExpoIdAndParticipantId(expoId, 55L) } returns
+                        CancellationGuard(
+                            expoId = expoId,
+                            participantId = 55L,
+                            operationId = "op",
+                            state = state,
+                            createdAt = LocalDateTime.now(clock),
+                            updatedAt = LocalDateTime.now(clock),
+                        )
+                    then("QR과 같은 응답으로 거절하고 기록하지 않는다") {
+                        shouldFailWith(
+                            if (state == CancellationGuardState.HELD) HttpStatus.CONFLICT else HttpStatus.BAD_REQUEST,
+                            if (state == CancellationGuardState.HELD) "신청 취소를 처리 중입니다." else "취소된 신청입니다.",
+                        ) { service.scan(expoId, phoneReq) }
+                        verify(exactly = 0) { userClient.recordEntry(any()) }
+                    }
                 }
             }
         }
@@ -266,10 +308,10 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
             `when`("사전등록 회차 확인이 거절하면") {
                 every { expoPeriodValidator.checkInProgress(expoId, today) } just Runs
                 every { preregisterSessionValidator.check(any(), any(), any()) } throws
-                    ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청의 QR입니다.")
+                    ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청입니다.")
 
                 then("입장을 기록하지 않는다") {
-                    shouldFailWith(HttpStatus.BAD_REQUEST, "취소된 신청의 QR입니다.") { service.scan(expoId, codeReq) }
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "취소된 신청입니다.") { service.scan(expoId, codeReq) }
                     verify(exactly = 0) { userClient.recordEntry(any()) }
                 }
             }

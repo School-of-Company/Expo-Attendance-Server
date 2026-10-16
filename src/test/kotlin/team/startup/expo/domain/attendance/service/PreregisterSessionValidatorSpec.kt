@@ -67,6 +67,23 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
     private fun check() = validator.check(expoId, participantId, verifyCode)
 
     init {
+        given("전화번호 입장의 취소 상태 확인에서") {
+            listOf(null, PreregisterSessionStatus.ACTIVE, PreregisterSessionStatus.CANCELLED).forEach { status ->
+                `when`("기록 상태가 $status 이면") {
+                    givenRecord(status?.let { record(status = it) })
+                    then("취소만 거절하고 회차는 조회하지 않는다") {
+                        if (status == PreregisterSessionStatus.CANCELLED) {
+                            shouldFailWith(HttpStatus.BAD_REQUEST, "취소된 신청입니다.") {
+                                validator.checkNotCancelled(expoId, participantId)
+                            }
+                        } else {
+                            shouldNotThrowAny { validator.checkNotCancelled(expoId, participantId) }
+                        }
+                        verify(exactly = 0) { expoClient.getPreregisterSession(any(), any()) }
+                    }
+                }
+            }
+        }
         given("사전등록 QR의 회차 시간 확인에서") {
             `when`("회차 기록이 없는 참가자이면") {
                 givenRecord(null)
@@ -82,7 +99,7 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
                 givenRecord(record(status = PreregisterSessionStatus.CANCELLED))
 
                 then("코드를 확인한 뒤 400으로 거절하고 박람회 서비스를 부르지 않는다") {
-                    shouldFailWith(HttpStatus.BAD_REQUEST, "취소된 신청의 QR입니다.") { check() }
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "취소된 신청입니다.") { check() }
                     verifyCalls shouldBe 1
                     verify(exactly = 0) { expoClient.getPreregisterSession(any(), any()) }
                 }

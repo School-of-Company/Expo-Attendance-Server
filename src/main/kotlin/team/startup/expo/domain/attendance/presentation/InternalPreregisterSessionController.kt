@@ -43,7 +43,7 @@ class InternalPreregisterSessionController(
     @Operation(
         summary = "신청 취소 표시",
         description =
-            "취소된 신청의 QR 입장을 막습니다. revision 없이 보내면 기록이 없을 때 아무것도 하지 않고 204입니다. " +
+            "취소된 신청의 QR·전화번호 입장을 막습니다. revision 없이 보내면 기록이 없을 때 아무것도 하지 않고 204입니다. " +
                 "revision을 보내면 기록이 없어도 취소를 남기고, 더 오래된 요청은 상태를 바꾸지 않고 204이며, " +
                 "같은 revision에 다른 내용이면 409입니다.",
     )
