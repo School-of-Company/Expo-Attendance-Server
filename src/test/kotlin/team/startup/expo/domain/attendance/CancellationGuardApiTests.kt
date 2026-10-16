@@ -40,6 +40,8 @@ import team.startup.expo.global.client.user.CancellationStatusReqDto
 import team.startup.expo.global.client.user.CancellationStatusResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
+import team.startup.expo.global.client.user.ResolveStandardParticipantReqDto
+import team.startup.expo.global.client.user.ResolveStandardParticipantResDto
 import team.startup.expo.global.client.user.TraineeNameResDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
@@ -90,6 +92,9 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         doReturn(RecordEntryResDto(PARTICIPANT, "홍길동", "01012345678", true, "STANDARD", "STUDENT", null))
             .`when`(userClient)
             .recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+        doReturn(ResolveStandardParticipantResDto(PARTICIPANT))
+            .`when`(userClient)
+            .resolveStandardParticipant(ResolveStandardParticipantReqDto(EXPO, PHONE))
         status(entered = false, traineeId = null)
     }
 
@@ -113,6 +118,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         acquire().andExpect(status().isNoContent)
 
         entryScan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("취소된 신청입니다."))
+        phoneEntryScan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("취소된 신청입니다."))
         // 확정된 작업은 중단할 수 없다
         abort().andExpect(status().isConflict)
 
@@ -222,6 +228,41 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         executor.shutdown()
         entryScan().andExpect(status().isConflict)
     }
+
+    @Test
+    fun `진행 중인 전화번호 입장이 끝나야 취소 보호가 걸리고 이후 번호 입장은 거절된다`() {
+        val entering = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        doAnswer {
+            entering.countDown()
+            check(release.await(10, TimeUnit.SECONDS))
+            RecordEntryResDto(PARTICIPANT, "홍길동", PHONE, true, "STANDARD", "STUDENT", null)
+        }.`when`(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", phoneNumber = PHONE))
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val scan = executor.submit<Int> { phoneEntryScan().andReturn().response.status }
+            entering.await(10, TimeUnit.SECONDS) shouldBe true
+            val acquiring = executor.submit<Int> { acquire().andReturn().response.status }
+            Thread.sleep(500)
+            acquiring.isDone shouldBe false
+            release.countDown()
+            scan.get(10, TimeUnit.SECONDS) shouldBe 200
+            acquiring.get(10, TimeUnit.SECONDS) shouldBe 204
+            phoneEntryScan().andExpect(status().isConflict).andExpect(jsonPath("$.message").value("신청 취소를 처리 중입니다."))
+            abort().andExpect(status().isNoContent)
+            phoneEntryScan().andExpect(status().isOk)
+        } finally {
+            release.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    private fun phoneEntryScan(): ResultActions =
+        mockMvc.perform(
+            patch("/attendance/$EXPO")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"authority":"ROLE_STANDARD","phoneNumber":"$PHONE"}"""),
+        )
 
     @Test
     fun `서로 다른 참가자의 스캔은 서로 막지 않는다`() {
