@@ -71,13 +71,13 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
             listOf(null, PreregisterSessionStatus.ACTIVE, PreregisterSessionStatus.CANCELLED).forEach { status ->
                 `when`("기록 상태가 $status 이면") {
                     givenRecord(status?.let { record(status = it) })
-                    then("취소만 거절하고 회차는 조회하지 않는다") {
+                    then("취소만 거절하고 확정 상태면 회차 ID를 돌려주며 회차는 조회하지 않는다") {
                         if (status == PreregisterSessionStatus.CANCELLED) {
                             shouldFailWith(HttpStatus.BAD_REQUEST, "취소된 신청입니다.") {
                                 validator.checkNotCancelled(expoId, participantId)
                             }
                         } else {
-                            shouldNotThrowAny { validator.checkNotCancelled(expoId, participantId) }
+                            validator.checkNotCancelled(expoId, participantId) shouldBe (if (status == null) null else 11L)
                         }
                         verify(exactly = 0) { expoClient.getPreregisterSession(any(), any()) }
                     }
@@ -88,8 +88,8 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
             `when`("회차 기록이 없는 참가자이면") {
                 givenRecord(null)
 
-                then("아무것도 확인하지 않고 통과한다") {
-                    shouldNotThrowAny { check() }
+                then("아무것도 확인하지 않고 회차 없이 통과한다") {
+                    check() shouldBe null
                     verifyCalls shouldBe 0
                     verify(exactly = 0) { expoClient.getPreregisterSession(any(), any()) }
                 }
@@ -163,8 +163,8 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
                 givenRecord(record())
                 givenSession(now.minusSeconds(600), now.plusSeconds(600))
 
-                then("통과한다") {
-                    shouldNotThrowAny { check() }
+                then("통과하고 확인한 회차 ID를 돌려준다") {
+                    check() shouldBe 11L
                 }
             }
 
