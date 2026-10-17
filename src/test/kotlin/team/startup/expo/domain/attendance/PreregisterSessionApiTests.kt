@@ -12,6 +12,7 @@ import org.mockito.Mockito.doReturn
 import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.never
 import org.mockito.Mockito.reset
+import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
@@ -74,13 +75,21 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
             entry(PARTICIPANT),
         ).`when`(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
         doReturn(entry(PARTICIPANT)).`when`(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", phoneNumber = "01012345678"))
+        // 회차 입장 시간 안의 QR 입장은 확인한 회차를 함께 보낸다(#142)
+        listOf(SESSION, OTHER_SESSION).forEach { session ->
+            doReturn(entry(PARTICIPANT)).`when`(userClient).recordEntry(withSession(session))
+        }
     }
+
+    private fun withSession(session: Long) =
+        RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE, preregisterSessionId = session)
 
     @Test
     fun `회차 기록이 없는 참가자는 회차 확인 없이 입장한다`() {
         scan().andExpect(status().isOk)
 
         verify(expoClient, never()).getPreregisterSession(anyString(), anyLong())
+        verify(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
     }
 
     @Test
@@ -94,6 +103,9 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
         // 이미 시작해 진행 중, 종료 직전
         sessionAt(start = now.minus(Duration.ofHours(2)), end = now.plus(Duration.ofSeconds(30)))
         scan().andExpect(status().isOk)
+
+        verify(userClient, times(2)).recordEntry(withSession(SESSION))
+        verify(userClient, never()).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
     }
 
     @Test
@@ -107,6 +119,7 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
         scan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("신청한 회차가 이미 끝났습니다."))
 
         verify(userClient, never()).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+        verify(userClient, never()).recordEntry(withSession(SESSION))
     }
 
     @Test
@@ -124,12 +137,14 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
             ).andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.message").value("취소된 신청입니다."))
         verify(userClient, never()).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+        verify(userClient, never()).recordEntry(withSession(SESSION))
         verify(userClient, never()).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", phoneNumber = "01012345678"))
 
         // 취소를 두 번 보내도 같고, 재신청해 확정되면 다시 입장할 수 있다
         cancel().andExpect(status().isNoContent)
         assign(SESSION).andExpect(status().isNoContent)
         scan().andExpect(status().isOk)
+        verify(userClient).recordEntry(withSession(SESSION))
     }
 
     @Test
@@ -155,6 +170,7 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
             scan().andExpect(status().isServiceUnavailable)
         }
         verify(userClient, never()).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+        verify(userClient, never()).recordEntry(withSession(SESSION))
     }
 
     @Test
@@ -252,6 +268,7 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
         stored() shouldBe ("ACTIVE" to 3L)
         sessionAt(start = now, end = now.plus(Duration.ofHours(3)))
         scan().andExpect(status().isOk)
+        verify(userClient).recordEntry(withSession(SESSION))
     }
 
     @Test
