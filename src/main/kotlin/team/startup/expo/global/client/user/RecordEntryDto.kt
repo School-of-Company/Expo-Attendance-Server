@@ -13,6 +13,8 @@ data class RecordEntryReqDto(
     val phoneNumber: String? = null,
     val participantId: Long? = null,
     val code: String? = null,
+    /** 입장 시간을 확인한 사전등록 회차. 일반 참가자 QR 입장에만 보내고, 없으면 생략해 회차 없이 기록된다(#142). */
+    val preregisterSessionId: Long? = null,
 )
 
 /** 연수자는 `occupation`이 없고(연수자는 모두 교사) `school`만 있다. 동행자는 `phoneNumber`가 없다. */

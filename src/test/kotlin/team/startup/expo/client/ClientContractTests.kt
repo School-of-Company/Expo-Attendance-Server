@@ -172,6 +172,25 @@ class ClientContractTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `유저 서비스 입장 기록은 확인한 사전등록 회차를 preregisterSessionId로 보낸다`() {
+        respond(
+            "/internal/entries",
+            """{"id":5001,"name":"홍길동","phoneNumber":null,""" +
+                """"personalInformationStatus":true,"participationType":"STANDARD","occupation":"STUDENT","school":null}""",
+        )
+
+        userClient.recordEntry(
+            RecordEntryReqDto("expo-1", "STANDARD", participantId = 5001, code = "abcdefghijklmnopqrstuv", preregisterSessionId = 11),
+        )
+
+        received[0].body.tree() shouldBe
+            (
+                """{"expoId":"expo-1","participationType":"STANDARD","participantId":5001,""" +
+                    """"code":"abcdefghijklmnopqrstuv","preregisterSessionId":11}"""
+            ).tree()
+    }
+
+    @Test
     fun `유저 서비스 입장 기록의 404는 NotFound로 409는 Conflict로 던져진다`() {
         respond("/internal/entries", "{}")
         val request = RecordEntryReqDto("expo-1", "STANDARD", phoneNumber = "01012345678")

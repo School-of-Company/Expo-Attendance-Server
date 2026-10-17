@@ -17,6 +17,7 @@ import java.time.Duration
  * 사전등록 참가자가 신청한 회차의 입장 시간인지 확인한다. 회차 기록이 없는 참가자(현장등록, 연동 전 등록)는 확인하지 않는다.
  * 신청 상태는 참가자 ID와 code가 맞는 사람에게만 알려야 하므로, 회차 기록이 있으면 먼저 `verifyCode`로 확인한 뒤에 검사한다.
  * 허용 시간은 회차 시작 `leadMinutes`분 전부터 종료 시각까지이고, 시각은 모두 `Instant`(UTC)로 비교한다.
+ * 통과한 회차 ID는 유저 서비스 입장 기록의 `preregisterSessionId`로 보낸다(#142).
  */
 @Component
 class PreregisterSessionValidator(
@@ -26,24 +27,28 @@ class PreregisterSessionValidator(
     private val properties: PreregisterEntryProperties,
     private val clock: Clock,
 ) {
-    /** 전화번호 입장은 회차 시간과 무관하게 취소된 신청만 거절한다. guard 공유 락 안에서 호출한다. */
+    /**
+     * 취소된 신청을 거절하고, 확정 상태인 신청의 회차 ID를 돌려준다(신청이 없거나 회차가 없으면 null).
+     * 전화번호 입장은 회차 시간과 무관하게 이것만 확인한다. guard 공유 락 안에서 호출한다.
+     */
     fun checkNotCancelled(
         expoId: String,
         participantId: Long,
-    ) {
-        if (preregisterSessionRepository.findByExpoIdAndParticipantId(expoId, participantId)?.status ==
-            PreregisterSessionStatus.CANCELLED
-        ) {
+    ): Long? {
+        val assignment = preregisterSessionRepository.findByExpoIdAndParticipantId(expoId, participantId) ?: return null
+        if (assignment.status == PreregisterSessionStatus.CANCELLED) {
             throw ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청입니다.")
         }
+        return assignment.sessionId
     }
 
+    /** 입장 시간을 확인한 회차 ID를 돌려준다. 회차 기록이 없는 참가자는 확인하지 않고 null이다. */
     fun check(
         expoId: String,
         participantId: Long,
         verifyCode: () -> Unit,
-    ) {
-        val assignment = preregisterSessionRepository.findByExpoIdAndParticipantId(expoId, participantId) ?: return
+    ): Long? {
+        val assignment = preregisterSessionRepository.findByExpoIdAndParticipantId(expoId, participantId) ?: return null
         verifyCode()
         if (assignment.status == PreregisterSessionStatus.CANCELLED) {
             throw ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청입니다.")
@@ -63,5 +68,6 @@ class PreregisterSessionValidator(
         if (now.isAfter(session.endedAt)) {
             throw ExpectedException(HttpStatus.BAD_REQUEST, "신청한 회차가 이미 끝났습니다.")
         }
+        return sessionId
     }
 }

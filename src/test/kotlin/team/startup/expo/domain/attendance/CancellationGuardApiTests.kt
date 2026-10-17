@@ -12,6 +12,7 @@ import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.doReturn
 import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.reset
+import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
@@ -92,6 +93,10 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         doReturn(RecordEntryResDto(PARTICIPANT, "홍길동", "01012345678", true, "STANDARD", "STUDENT", null))
             .`when`(userClient)
             .recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+        // 회차 입장 시간 안의 QR 입장은 확인한 회차를 함께 보낸다(#142)
+        doReturn(RecordEntryResDto(PARTICIPANT, "홍길동", "01012345678", true, "STANDARD", "STUDENT", null))
+            .`when`(userClient)
+            .recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE, preregisterSessionId = SESSION))
         doReturn(ResolveStandardParticipantResDto(PARTICIPANT))
             .`when`(userClient)
             .resolveStandardParticipant(ResolveStandardParticipantReqDto(EXPO, PHONE))
@@ -385,6 +390,8 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
 
         jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
         entryScan().andExpect(status().isOk)
+        verify(userClient)
+            .recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE, preregisterSessionId = SESSION))
         // 밀려난 취소의 지연된 acquire는 거절된다
         acquire().andExpect(status().isConflict)
     }

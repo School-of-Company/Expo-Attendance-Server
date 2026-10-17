@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "team.startup"
-version = "0.4.1"
+version = "0.5.0"
 
 java {
     toolchain {
@@ -30,7 +30,7 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-postgresql")
     kapt("jakarta.annotation:jakarta.annotation-api")
     kapt("jakarta.persistence:jakarta.persistence-api")
-    runtimeOnly("org.postgresql:postgresql")
+    implementation("org.postgresql:postgresql")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     testImplementation("io.kotest:kotest-runner-junit5:5.9.1")
     testImplementation("io.kotest:kotest-assertions-core:5.9.1")

@@ -17,6 +17,7 @@ Expo-Attention-Server
 | `CANCELLATION_ABORTED_RETENTION_DAYS` | 중단된 취소 작업 기록(`tb_cancellation_aborted`)을 이 일수가 지나면 지운다(기본 `0` = 지우지 않음). 신청 서비스가 중단 뒤 늦게 보낼 수 있는 재시도 기간보다 충분히 길게 둔다. 다른 데이터는 기간으로 지우지 않는다(`docs/data-retention.md`) |
 | `PREREGISTER_ENTRY_LEAD_MINUTES` | 사전등록 입장을 회차 시작 몇 분 전부터 허용할지 (기본 `30`) |
 | `PROGRAM_ATTENDANCE_REQUIRE_CODE` | 켜면 일반 프로그램 출석 스캔에 참가자 `code`가 필수 (기본 `false`) |
+| `ATTENDANCE_ADMIN_EVENTS_ENABLED` | 켜면 실시간 입·퇴장 현황 변경 SSE(`GET /attendance/summary/{expoId}/events`)와 DB LISTEN 연결을 연다 (기본 `false`). 한도·수명·heartbeat·병합 간격(`..._MAX_CONNECTIONS` `500`, `..._MAX_CONNECTIONS_PER_EXPO` `50`, `..._CONNECTION_LIFETIME` `PT30M`, `..._HEARTBEAT_INTERVAL` `PT25S`, `..._COALESCE_INTERVAL` `PT1S`)은 `docs/admin-data-change-events.md` |
 | `SWAGGER_ENABLED` | 켜면 API 문서를 `/attendance/swagger-ui.html`, `/attendance/v3/api-docs`로 제공 (기본 `false`). 밖에서 보려면 게이트웨이 `publicPaths`에도 이 경로를 열어야 한다 |
 | `SWAGGER_INCLUDE_INTERNAL` | 켜면 문서에 `/internal/**` 엔드포인트도 싣고 `X-Internal-Token` 헤더를 안내 (기본 `false`, `SWAGGER_ENABLED`가 켜져 있을 때만 의미가 있다) |
 
