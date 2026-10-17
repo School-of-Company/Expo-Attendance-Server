@@ -62,6 +62,14 @@ cancellation-aborted-retention:
   days: ${CANCELLATION_ABORTED_RETENTION_DAYS:0}
 expo-period-cache:
   ttl-seconds: ${EXPO_PERIOD_CACHE_TTL_SECONDS:30}
+# #141 실시간 입·퇴장 현황 변경 SSE(docs/admin-data-change-events.md). Gateway의 text/event-stream 전달을 확인한 뒤 켠다
+admin-events:
+  enabled: ${ATTENDANCE_ADMIN_EVENTS_ENABLED:false}
+  max-connections: ${ATTENDANCE_ADMIN_EVENTS_MAX_CONNECTIONS:500}
+  max-connections-per-expo: ${ATTENDANCE_ADMIN_EVENTS_MAX_CONNECTIONS_PER_EXPO:50}
+  connection-lifetime: ${ATTENDANCE_ADMIN_EVENTS_CONNECTION_LIFETIME:PT30M}
+  heartbeat-interval: ${ATTENDANCE_ADMIN_EVENTS_HEARTBEAT_INTERVAL:PT25S}
+  coalesce-interval: ${ATTENDANCE_ADMIN_EVENTS_COALESCE_INTERVAL:PT1S}
 swagger:
   enabled: ${SWAGGER_ENABLED:false}
   include-internal: ${SWAGGER_INCLUDE_INTERNAL:false}
