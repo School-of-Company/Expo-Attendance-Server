@@ -56,15 +56,18 @@ class ScanEntryServiceImpl(
         val today = LocalDate.now(clock)
         expoPeriodValidator.checkInProgress(expoId, today)
         // 사전등록 QR(참가자 ID와 코드)은 신청한 회차의 입장 시간이어야 한다. 입장을 기록하기 전에 확인한다.
-        if (reqDto.authority == EntryAuthority.ROLE_STANDARD && reqDto.participantId != null && !reqDto.code.isNullOrBlank()) {
-            val code = reqDto.code
-            preregisterSessionValidator.check(expoId, reqDto.participantId) {
-                // 코드가 틀리면 입장 기록과 같은 404여야 해서, 신청 상태를 알리기 전에 먼저 확인한다
-                userCircuitBreaker.callService("유저", participantNotFound(reqDto)) {
-                    userClient.verifyStandardParticipant(VerifyStandardParticipantReqDto(expoId, reqDto.participantId, code))
+        val checkedSessionId =
+            if (reqDto.authority == EntryAuthority.ROLE_STANDARD && reqDto.participantId != null && !reqDto.code.isNullOrBlank()) {
+                val code = reqDto.code
+                preregisterSessionValidator.check(expoId, reqDto.participantId) {
+                    // 코드가 틀리면 입장 기록과 같은 404여야 해서, 신청 상태를 알리기 전에 먼저 확인한다
+                    userCircuitBreaker.callService("유저", participantNotFound(reqDto)) {
+                        userClient.verifyStandardParticipant(VerifyStandardParticipantReqDto(expoId, reqDto.participantId, code))
+                    }
                 }
+            } else {
+                null
             }
-        }
 
         // 전화번호도 기록 전에 ID를 조회해 QR과 같은 참가자 키로 취소 보호를 잡는다.
         val participantId =
@@ -81,11 +84,12 @@ class ScanEntryServiceImpl(
         val entry =
             if (participantId != null) {
                 cancellationGuardGate.scanning(expoId, participantId = participantId) {
-                    preregisterSessionValidator.checkNotCancelled(expoId, participantId)
-                    recordEntry(expoId, reqDto)
+                    val activeSessionId = preregisterSessionValidator.checkNotCancelled(expoId, participantId)
+                    // 락을 잡기 전에 회차가 바뀌었으면 확인한 회차가 아니므로 회차 없이 기록한다. 전화번호 입장은 회차를 붙이지 않는다
+                    recordEntry(expoId, reqDto, checkedSessionId?.takeIf { it == activeSessionId })
                 }
             } else {
-                recordEntry(expoId, reqDto)
+                recordEntry(expoId, reqDto, null)
             }
 
         // 퇴장 기록과 집계를 위한 입장 로그. 입장은 이미 기록되었으므로 로그 실패가 입장을 막지 않는다(#120)
@@ -119,8 +123,9 @@ class ScanEntryServiceImpl(
     private fun recordEntry(
         expoId: String,
         reqDto: ScanEntryReqDto,
+        preregisterSessionId: Long?,
     ): RecordEntryResDto {
-        val request = toEntryRequest(expoId, reqDto)
+        val request = toEntryRequest(expoId, reqDto, preregisterSessionId)
         return userCircuitBreaker.callService(
             "유저",
             participantNotFound(reqDto),
@@ -128,16 +133,26 @@ class ScanEntryServiceImpl(
         ) { userClient.recordEntry(request) }
     }
 
-    /** 일반 참가자가 참가자 ID와 코드로 왔으면 그 값을, 아니면 전화번호를 유저 서비스에 보낸다(ID와 코드가 우선). */
+    /**
+     * 일반 참가자가 참가자 ID와 코드로 왔으면 그 값을, 아니면 전화번호를 유저 서비스에 보낸다(ID와 코드가 우선).
+     * 회차는 입장 시간을 확인한 사전등록 QR에만 붙인다. 유저 서비스는 연수자 회차를 400으로 거절하므로 전화번호 경로에는 싣지 않는다.
+     */
     private fun toEntryRequest(
         expoId: String,
         reqDto: ScanEntryReqDto,
+        preregisterSessionId: Long?,
     ): RecordEntryReqDto {
         val type = reqDto.authority.participationType
         val usesParticipantCode =
             reqDto.authority == EntryAuthority.ROLE_STANDARD && reqDto.participantId != null && !reqDto.code.isNullOrBlank()
         return if (usesParticipantCode) {
-            RecordEntryReqDto(expoId, type, participantId = reqDto.participantId, code = reqDto.code)
+            RecordEntryReqDto(
+                expoId,
+                type,
+                participantId = reqDto.participantId,
+                code = reqDto.code,
+                preregisterSessionId = preregisterSessionId,
+            )
         } else {
             RecordEntryReqDto(expoId, type, phoneNumber = reqDto.phoneNumber)
         }
