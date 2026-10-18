@@ -24,19 +24,29 @@ class EntryLogServiceImpl(
         scannerName: String?,
     ) {
         val now = LocalDateTime.now(clock)
-        try {
-            entryLogRepository.insertIfAbsent(
-                expoId,
-                subjectType.name,
-                subjectId,
-                now.toLocalDate(),
-                now,
-                category,
-                ScannerName.of(scannerName),
-            )
-        } catch (e: Exception) {
-            // 입장은 이미 기록되었다. 로그가 빠지면 퇴장 기록과 집계에서만 빠지므로 입장을 실패시키지 않는다(식별자는 남기지 않는다)
-            logger.warn("입장 로그를 남기지 못했습니다: type={}, 원인={}", subjectType, e.javaClass.simpleName)
+        // 유저 서비스는 이미 입장을 기록했다. 일시적인 DB 오류로 로그가 빠지면 퇴장 스캔이 "입장 기록 없음"이 되므로 몇 번 다시 시도한다.
+        var failure: Exception? = null
+        repeat(ATTEMPTS) {
+            try {
+                entryLogRepository.insertIfAbsent(
+                    expoId,
+                    subjectType.name,
+                    subjectId,
+                    now.toLocalDate(),
+                    now,
+                    category,
+                    ScannerName.of(scannerName),
+                )
+                return
+            } catch (e: Exception) {
+                failure = e
+            }
         }
+        // 그래도 안 되면 입장은 그대로 두고 퇴장 기록과 집계에서만 빠진다(식별자는 남기지 않는다)
+        logger.warn("입장 로그를 남기지 못했습니다: type={}, 원인={}", subjectType, failure?.javaClass?.simpleName)
+    }
+
+    private companion object {
+        const val ATTEMPTS = 3
     }
 }

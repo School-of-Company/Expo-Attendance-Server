@@ -35,6 +35,40 @@ interface QrEntryRepository : JpaRepository<QrEntry, Long> {
         @Param("periodCheck") periodCheck: String,
     ): Int
 
+    /**
+     * [insertIfAbsent]와 같은 규칙으로 입장을 기록하면서, 같은 문장 안에서 입장 로그(`tb_entry_log`, 토큰 구분 포함)도 남긴다.
+     * 한 문장이라 둘이 함께 커밋되거나 함께 빠지므로, 입장은 됐는데 로그만 없어 퇴장 스캔이 막히는 일이 없다.
+     * 반환값은 새로 기록한 입장 수다(1이면 입장, 0이면 이미 입장했거나 없는 토큰이거나 무효화한 토큰).
+     */
+    @Transactional
+    @Query(
+        nativeQuery = true,
+        value = """
+            WITH entered AS (
+                INSERT INTO tb_qr_entry (token, attendance_date, entered_at, period_check)
+                SELECT t.token, :attendanceDate, :enteredAt, :periodCheck FROM tb_qr_token t
+                WHERE t.token = :token AND t.expo_id = :expoId AND t.revoked_at IS NULL
+                ON CONFLICT (token, attendance_date) DO NOTHING
+                RETURNING token
+            ), logged AS (
+                INSERT INTO tb_entry_log (expo_id, subject_type, subject_id, attendance_date, entered_at, category, scanner)
+                SELECT t.expo_id, 'PAPER_QR', t.token, :attendanceDate, :enteredAt, t.category, :scanner
+                FROM tb_qr_token t JOIN entered e ON e.token = t.token
+                ON CONFLICT (expo_id, subject_type, subject_id, attendance_date) DO NOTHING
+                RETURNING 1
+            )
+            SELECT COUNT(*) FROM entered
+        """,
+    )
+    fun recordEntry(
+        @Param("token") token: String,
+        @Param("expoId") expoId: String,
+        @Param("attendanceDate") attendanceDate: LocalDate,
+        @Param("enteredAt") enteredAt: LocalDateTime,
+        @Param("periodCheck") periodCheck: String,
+        @Param("scanner") scanner: String?,
+    ): Int
+
     /** 박람회 서비스 장애 중 기간 확인 없이 기록되어 아직 다시 확인하지 못한 입장 수. 부분 인덱스(`period_check = 'PENDING'`)를 탄다. */
     @Query(nativeQuery = true, value = "SELECT count(*) FROM tb_qr_entry WHERE period_check = 'PENDING'")
     fun countPending(): Long
