@@ -31,6 +31,9 @@ import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
 import java.time.LocalDate
+import java.util.concurrent.Callable
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 
 class ScanExitApiTests : IntegrationTestSupport() {
     @Autowired
@@ -162,6 +165,30 @@ class ScanExitApiTests : IntegrationTestSupport() {
         deleteExpoDataService.delete(EXPO)
 
         jdbcTemplate.queryForObject("SELECT count(*) FROM tb_entry_log", Long::class.java) shouldBe 0L
+    }
+
+    @Test
+    fun `같은 종이 QR을 동시에 퇴장 스캔해도 한 번만 퇴장 처리된다`() {
+        paperEntry().andExpect(status().isOk)
+        val threads = 8
+        val executor = Executors.newFixedThreadPool(threads)
+        val start = CountDownLatch(1)
+        val statuses =
+            List(threads) {
+                executor.submit(
+                    Callable {
+                        start.await()
+                        exit("""{"token":"$TOKEN"}""").andReturn().response.status
+                    },
+                )
+            }
+        start.countDown()
+        val results = statuses.map { it.get() }
+        executor.shutdown()
+
+        results.count { it == 200 } shouldBe 1
+        results.count { it == 400 } shouldBe threads - 1
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_entry_log WHERE exited_at IS NOT NULL", Long::class.java) shouldBe 1L
     }
 
     private fun paperEntry(): ResultActions =
