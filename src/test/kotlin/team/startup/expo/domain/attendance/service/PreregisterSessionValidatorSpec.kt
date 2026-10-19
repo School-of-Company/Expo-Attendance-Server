@@ -53,15 +53,18 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
         updatedAt = LocalDateTime.of(2026, 5, 10, 3, 0),
     )
 
-    private fun givenRecord(record: PreregisterSession?) {
-        every { sessionRepository.findByExpoIdAndParticipantId(expoId, participantId) } returns record
+    private fun givenRecord(record: PreregisterSession?) = givenRecords(listOfNotNull(record))
+
+    private fun givenRecords(records: List<PreregisterSession>) {
+        every { sessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId) } returns records
     }
 
     private fun givenSession(
         startedAt: Instant,
         endedAt: Instant,
+        sessionId: Long = 11L,
     ) {
-        every { expoClient.getPreregisterSession(expoId, 11L) } returns PreregisterSessionResDto(11L, startedAt, endedAt)
+        every { expoClient.getPreregisterSession(expoId, sessionId) } returns PreregisterSessionResDto(sessionId, startedAt, endedAt)
     }
 
     private fun check() = validator.check(expoId, participantId, verifyCode)
@@ -71,16 +74,113 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
             listOf(null, PreregisterSessionStatus.ACTIVE, PreregisterSessionStatus.CANCELLED).forEach { status ->
                 `when`("기록 상태가 $status 이면") {
                     givenRecord(status?.let { record(status = it) })
-                    then("취소만 거절하고 확정 상태면 회차 ID를 돌려주며 회차는 조회하지 않는다") {
+                    then("취소만 거절하고 회차는 붙이지도 조회하지도 않는다") {
                         if (status == PreregisterSessionStatus.CANCELLED) {
                             shouldFailWith(HttpStatus.BAD_REQUEST, "취소된 신청입니다.") {
                                 validator.checkNotCancelled(expoId, participantId)
                             }
                         } else {
-                            validator.checkNotCancelled(expoId, participantId) shouldBe (if (status == null) null else 11L)
+                            validator.checkNotCancelled(expoId, participantId) shouldBe null
                         }
                         verify(exactly = 0) { expoClient.getPreregisterSession(any(), any()) }
                     }
+                }
+            }
+        }
+        given("락 안에서 고른 회차를 다시 확인할 때") {
+            `when`("고른 회차가 아직 확정 상태이면") {
+                givenRecords(listOf(record(sessionId = 11L), record(sessionId = 12L)))
+
+                then("그 회차 ID를 돌려준다") {
+                    validator.checkNotCancelled(expoId, participantId, 12L) shouldBe 12L
+                }
+            }
+
+            `when`("고른 회차만 그 사이 취소되었으면") {
+                givenRecords(listOf(record(sessionId = 11L), record(status = PreregisterSessionStatus.CANCELLED, sessionId = 12L)))
+
+                then("다른 회차가 남아 있어도 거절한다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "취소된 신청입니다.") {
+                        validator.checkNotCancelled(expoId, participantId, 12L)
+                    }
+                }
+            }
+        }
+        given("여러 회차가 배정된 참가자의 QR 입장에서") {
+            val morning = 11L
+            val afternoon = 12L
+
+            `when`("오전 회차 시간이면") {
+                givenRecords(listOf(record(sessionId = morning), record(sessionId = afternoon)))
+                givenSession(now.minusSeconds(600), now.plusSeconds(3600), morning)
+                givenSession(now.plusSeconds(4 * 3600), now.plusSeconds(6 * 3600), afternoon)
+
+                then("오전 회차로 입장한다") {
+                    check() shouldBe morning
+                }
+            }
+
+            `when`("오후 회차 시간이면") {
+                givenRecords(listOf(record(sessionId = morning), record(sessionId = afternoon)))
+                givenSession(now.minusSeconds(6 * 3600), now.minusSeconds(4 * 3600), morning)
+                givenSession(now.minusSeconds(600), now.plusSeconds(3600), afternoon)
+
+                then("오후 회차로 입장한다") {
+                    check() shouldBe afternoon
+                }
+            }
+
+            `when`("두 회차 사이라 어느 회차의 입장 시간도 아니면") {
+                givenRecords(listOf(record(sessionId = morning), record(sessionId = afternoon)))
+                givenSession(now.minusSeconds(3 * 3600), now.minusSeconds(3600), morning)
+                givenSession(now.plusSeconds(3600), now.plusSeconds(3 * 3600), afternoon)
+
+                then("입장 시간이 아니라고 거절한다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "입장 시간이 아닙니다. 신청한 회차 시작 30분 전부터 입장할 수 있습니다.") { check() }
+                }
+            }
+
+            `when`("모든 회차가 끝났으면") {
+                givenRecords(listOf(record(sessionId = morning), record(sessionId = afternoon)))
+                givenSession(now.minusSeconds(6 * 3600), now.minusSeconds(4 * 3600), morning)
+                givenSession(now.minusSeconds(3 * 3600), now.minusSeconds(1), afternoon)
+
+                then("이미 끝났다고 거절한다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "신청한 회차가 이미 끝났습니다.") { check() }
+                }
+            }
+
+            `when`("두 회차의 입장 시간이 겹치면") {
+                givenRecords(listOf(record(sessionId = afternoon), record(sessionId = morning)))
+                // 오후 회차 입장 창(시작 30분 전)이 오전 회차 종료 전에 열린다
+                givenSession(now.minusSeconds(3600), now.plusSeconds(600), morning)
+                givenSession(now.plusSeconds(20 * 60), now.plusSeconds(3 * 3600), afternoon)
+
+                then("시작이 이른 회차를 고른다") {
+                    check() shouldBe morning
+                }
+            }
+
+            `when`("오전 회차를 취소하고 오전 회차 시간에 찍으면") {
+                givenRecords(
+                    listOf(record(status = PreregisterSessionStatus.CANCELLED, sessionId = morning), record(sessionId = afternoon)),
+                )
+                givenSession(now.plusSeconds(4 * 3600), now.plusSeconds(6 * 3600), afternoon)
+
+                then("취소된 회차로는 입장하지 못하고 오후 회차는 조회만 한다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "입장 시간이 아닙니다. 신청한 회차 시작 30분 전부터 입장할 수 있습니다.") { check() }
+                    verify(exactly = 0) { expoClient.getPreregisterSession(expoId, morning) }
+                }
+            }
+
+            `when`("오전 회차를 취소하고 오후 회차 시간에 찍으면") {
+                givenRecords(
+                    listOf(record(status = PreregisterSessionStatus.CANCELLED, sessionId = morning), record(sessionId = afternoon)),
+                )
+                givenSession(now.minusSeconds(600), now.plusSeconds(3600), afternoon)
+
+                then("오후 회차로 입장한다") {
+                    check() shouldBe afternoon
                 }
             }
         }

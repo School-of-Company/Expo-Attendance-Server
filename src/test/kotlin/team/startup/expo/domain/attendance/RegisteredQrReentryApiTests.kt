@@ -169,7 +169,7 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
         standardEntry().andExpect(status().isOk)
         summary()
             .andExpect(jsonPath("$.totals.entered").value(1))
-            .andExpect(jsonPath("$.totals.exited").value(0))
+            .andExpect(jsonPath("$.totals.exited").value(1))
             .andExpect(jsonPath("$.totals.stillInside").value(1))
             .andExpect(jsonPath("$.uniqueQr").value(1))
             .andExpect(jsonPath("$.reentered").value(1))

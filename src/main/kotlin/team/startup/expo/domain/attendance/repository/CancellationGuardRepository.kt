@@ -149,6 +149,41 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
         @Param("now") now: LocalDateTime,
     ): Int
 
+    /** commit이 보호를 확정하지 않고 해제로 끝낸 작업으로 기록한다. 이미 기록되어 있으면 아무것도 하지 않는다. */
+    @Transactional
+    @Modifying
+    @Query(
+        nativeQuery = true,
+        value = """
+            INSERT INTO tb_cancellation_aborted (expo_id, participant_id, operation_id, created_at, released_by_commit)
+            VALUES (:expoId, :participantId, :operationId, :now, TRUE)
+            ON CONFLICT DO NOTHING
+        """,
+    )
+    fun insertReleasedByCommit(
+        @Param("expoId") expoId: String,
+        @Param("participantId") participantId: Long,
+        @Param("operationId") operationId: String,
+        @Param("now") now: LocalDateTime,
+    ): Int
+
+    /** commit이 해제로 끝낸 작업인지 확인한다. abort로 끝난 작업은 false다. */
+    @Query(
+        nativeQuery = true,
+        value = """
+            SELECT EXISTS (
+                SELECT 1 FROM tb_cancellation_aborted
+                WHERE expo_id = :expoId AND participant_id = :participantId AND operation_id = :operationId
+                  AND released_by_commit
+            )
+        """,
+    )
+    fun existsReleasedByCommit(
+        @Param("expoId") expoId: String,
+        @Param("participantId") participantId: Long,
+        @Param("operationId") operationId: String,
+    ): Boolean
+
     @Query(
         nativeQuery = true,
         value = """
