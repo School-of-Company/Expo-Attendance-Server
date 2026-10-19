@@ -12,18 +12,24 @@ import io.mockk.verify
 import org.springframework.http.HttpStatus
 import team.startup.expo.domain.attendance.entity.CancellationGuard
 import team.startup.expo.domain.attendance.entity.CancellationGuardState
+import team.startup.expo.domain.attendance.entity.EntryLog
+import team.startup.expo.domain.attendance.entity.EntryStatus
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.presentation.dto.request.EntryAuthority
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanEntryReqDto
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
+import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
+import team.startup.expo.global.client.user.ResolveParticipantResDto
 import team.startup.expo.global.client.user.ResolveStandardParticipantReqDto
 import team.startup.expo.global.client.user.ResolveStandardParticipantResDto
+import team.startup.expo.global.client.user.StandardParticipantNameResDto
+import team.startup.expo.global.client.user.TraineeNameResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.global.exception.ExpectedException
@@ -41,6 +47,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
     private val preregisterSessionValidator = mockk<PreregisterSessionValidator>()
     private val guardRepository = mockk<CancellationGuardRepository>(relaxed = true)
     private val entryLogService = mockk<EntryLogService>(relaxed = true)
+    private val entryLogRepository = mockk<EntryLogRepository>(relaxed = true)
     private val clock = UnitTestSupport.fixedClock()
     private val today = LocalDate.now(clock)
 
@@ -52,6 +59,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
             preregisterSessionValidator,
             CancellationGuardGate(UnitTestSupport.transactionManager(), guardRepository),
             entryLogService,
+            entryLogRepository,
             JsonMapper.builder().build(),
             clock,
         )
@@ -77,6 +85,102 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
     }
 
     init {
+        // 기본은 오늘 입장 로그가 없는 상태
+        every { entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(any(), any(), any(), any()) } returns null
+
+        given("409를 받고 오늘 입장 로그에 퇴장 기록이 있으면(재입장, #148)") {
+            fun log(
+                type: EntrySubjectType = EntrySubjectType.STANDARD,
+                id: String = "55",
+                exitedAt: LocalDateTime? = today.atTime(10, 0),
+            ) = EntryLog(
+                expoId = expoId,
+                subjectType = type,
+                subjectId = id,
+                attendanceDate = today,
+                enteredAt = today.atTime(9, 5),
+                exitedAt = exitedAt,
+            )
+            val exitedLog = log()
+            givenPeriodOk()
+            every { userClient.recordEntry(any()) } throws UnitTestSupport.feignConflict()
+            every { userClient.getStandardParticipantNames(any()) } returns listOf(StandardParticipantNameResDto(55L, "홍길동"))
+            every { entryLogRepository.reenter(any(), any(), any(), any(), any(), any()) } returns 1
+
+            `when`("일반 참가자가 전화번호로 스캔하면") {
+                every {
+                    entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(
+                        expoId,
+                        EntrySubjectType.STANDARD,
+                        "55",
+                        today,
+                    )
+                } returns exitedLog
+
+                then("RE_ENTRY와 최초 입장 시각을 응답하고 입장 로그를 다시 만들지 않는다") {
+                    val res = service.scan(expoId, phoneReq)
+                    res.entryStatus shouldBe EntryStatus.RE_ENTRY
+                    res.firstEnteredTime shouldBe "09:05"
+                    res.id shouldBe 55L
+                    res.name shouldBe "홍길동"
+                    res.badge shouldBe null
+                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any()) }
+                }
+            }
+
+            `when`("퇴장 없이 찍었거나(퇴장 시각 없음) 입장 로그가 없으면") {
+                every {
+                    entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(
+                        expoId,
+                        EntrySubjectType.STANDARD,
+                        "55",
+                        today,
+                    )
+                } returns log(exitedAt = null)
+
+                then("400 이미 입장 메시지를 던지고 재입장을 기록하지 않는다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.") { service.scan(expoId, phoneReq) }
+                    verify(exactly = 0) { entryLogRepository.reenter(any(), any(), any(), any(), any(), any()) }
+                }
+            }
+
+            `when`("동시에 다른 스캔이 먼저 재입장을 기록해 갱신 건수가 0이면") {
+                every {
+                    entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(
+                        expoId,
+                        EntrySubjectType.STANDARD,
+                        "55",
+                        today,
+                    )
+                } returns exitedLog
+                every { entryLogRepository.reenter(any(), any(), any(), any(), any(), any()) } returns 0
+
+                then("400을 던진다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.") { service.scan(expoId, phoneReq) }
+                }
+            }
+
+            `when`("연수자가 스캔하면") {
+                every { userClient.resolveParticipant(any()) } returns ResolveParticipantResDto(77L, "TRAINEE")
+                every { userClient.getTraineeNames(any()) } returns listOf(TraineeNameResDto(77L, "김연수"))
+                every {
+                    entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(
+                        expoId,
+                        EntrySubjectType.TRAINEE,
+                        "77",
+                        today,
+                    )
+                } returns log(EntrySubjectType.TRAINEE, "77")
+
+                then("전화번호로 찾은 ID로 재입장하고 구분은 TRAINEE다") {
+                    val res = service.scan(expoId, traineeReq)
+                    res.entryStatus shouldBe EntryStatus.RE_ENTRY
+                    res.id shouldBe 77L
+                    res.participationType shouldBe "TRAINEE"
+                }
+            }
+        }
+
         given("입장 스캔의 식별자 검증에서") {
             `when`("연수자가 전화번호 없이 스캔하면") {
                 then("400을 던지고 유저 서비스를 부르지 않는다") {
