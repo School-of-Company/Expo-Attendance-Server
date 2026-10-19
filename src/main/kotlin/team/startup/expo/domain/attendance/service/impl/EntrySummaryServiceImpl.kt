@@ -34,7 +34,13 @@ class EntrySummaryServiceImpl(
             if (scope.date != null) walkInService.get(expoId, scope.date) else walkInService.getBetween(expoId, scope.from, scope.to)
         val rows =
             entryLogRepository.summarize(expoId, scope.from, scope.to).map {
-                Row(EntrySubjectType.valueOf(it[0] as String), it[1] as String?, (it[2] as Number).toLong(), (it[3] as Number).toLong())
+                Row(
+                    EntrySubjectType.valueOf(it[0] as String),
+                    it[1] as String?,
+                    (it[2] as Number).toLong(),
+                    (it[3] as Number).toLong(),
+                    (it[4] as Number).toLong(),
+                )
             }
 
         fun entered(type: EntrySubjectType) = rows.filter { it.type == type }.sumOf { it.entered }
@@ -49,6 +55,7 @@ class EntrySummaryServiceImpl(
 
         val qrEntered = standard + trainee + paper.sumOf { it.entered }
         val exited = rows.sumOf { it.exited }
+        val outside = rows.sumOf { it.outside }
         return EntrySummaryResDto(
             expoId = expoId,
             date = scope.date,
@@ -56,7 +63,7 @@ class EntrySummaryServiceImpl(
             registered = RegisteredEntrySummaryResDto(standard, trainee),
             paper = paper,
             walkIn = walkIn,
-            totals = EntryTotalsResDto(entered = qrEntered + walkIn.total, exited = exited, stillInside = qrEntered - exited),
+            totals = EntryTotalsResDto(entered = qrEntered + walkIn.total, exited = exited, stillInside = qrEntered - outside),
             recentEntered10m = recentEntered(expoId, generatedAt),
             uniqueQr = entryLogRepository.countDistinctSubjects(expoId, scope.from, scope.to),
             reentered = entryLogRepository.countReentered(expoId, scope.from, scope.to),
@@ -76,6 +83,7 @@ class EntrySummaryServiceImpl(
         val type: EntrySubjectType,
         val category: String?,
         val entered: Long,
+        val outside: Long,
         val exited: Long,
     )
 

@@ -21,8 +21,7 @@ data class HourlyEntryBucketResDto(
     val entered: Long,
     @field:Schema(
         description =
-            "이 시간의 퇴장 스캔 횟수(QR로 입장한 사람만 센다). 퇴장했다가 재입장한 사람이 다시 퇴장하면 또 센다. " +
-                "요약의 `exited`(지금 밖에 있는 수)와 재입장이 있으면 다를 수 있다",
+            "이 시간의 퇴장 스캔 횟수(QR로 입장한 사람만 센다). 퇴장했다가 재입장한 사람이 다시 퇴장하면 또 센다. 요약의 `exited`와 같은 기준이다",
         example = "8",
     )
     val exited: Long,
@@ -84,7 +83,7 @@ data class ScannerEntryCountResDto(
     @field:Schema(description = "입장 처리 수(간편입장은 순증감)", example = "120")
     val entered: Long,
     @field:Schema(
-        description = "퇴장 스캔 횟수. 재입장한 사람이 다시 퇴장하면 또 센다. 요약의 `exited`(지금 밖에 있는 수)와 다를 수 있다",
+        description = "퇴장 스캔 횟수. 재입장한 사람이 다시 퇴장하면 또 센다. 요약의 `exited`와 같은 기준이다",
         example = "30",
     )
     val exited: Long,

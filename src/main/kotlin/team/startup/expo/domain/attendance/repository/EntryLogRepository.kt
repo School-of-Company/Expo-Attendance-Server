@@ -109,12 +109,20 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
         @Param("exitScanner") exitScanner: String?,
     ): Int
 
-    /** 종류·구분별 [종류, 구분, 입장 수, 퇴장 수]. 구분은 종이 QR에만 있다. */
+    /**
+     * 종류·구분별 [종류, 구분, 입장 수, 지금 밖에 있는 수, 퇴장 스캔 수]. 구분은 종이 QR에만 있다.
+     * 퇴장 스캔 수는 시간대별·스캐너별과 같은 `tb_entry_event`의 `EXIT` 횟수(#162)이고, 구분은 그 사람의 입장 로그에서 가져온다.
+     */
     @Query(
         nativeQuery = true,
         value = """
-            SELECT subject_type, category, COUNT(*), COUNT(exited_at) FROM tb_entry_log
-            WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to GROUP BY subject_type, category
+            SELECT l.subject_type, l.category, COUNT(*), COUNT(l.exited_at), COALESCE(SUM(x.n), 0) FROM tb_entry_log l
+            LEFT JOIN (
+                SELECT subject_type, subject_id, attendance_date, COUNT(*) AS n FROM tb_entry_event
+                WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to AND event_type = 'EXIT'
+                GROUP BY subject_type, subject_id, attendance_date
+            ) x ON x.subject_type = l.subject_type AND x.subject_id = l.subject_id AND x.attendance_date = l.attendance_date
+            WHERE l.expo_id = :expoId AND l.attendance_date BETWEEN :from AND :to GROUP BY l.subject_type, l.category
         """,
     )
     fun summarize(
