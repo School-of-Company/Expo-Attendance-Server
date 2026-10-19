@@ -1,6 +1,7 @@
 package team.startup.expo.domain.qr
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
+import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.anyString
@@ -22,6 +23,9 @@ import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
 import java.time.LocalDate
+import java.util.concurrent.Callable
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 
 /** 종이 QR 연번 코드·발급 현황·다시 조회·분실 무효화(#132). */
 class QrTokenSerialApiTests : IntegrationTestSupport() {
@@ -144,6 +148,57 @@ class QrTokenSerialApiTests : IntegrationTestSupport() {
             .andExpect(jsonPath("$.message").value("사용이 중지된 QR입니다."))
         // 무효화하지 않은 QR은 그대로 입장한다
         mockMvc.perform(scan(expoId, tokens[1])).andExpect(status().isOk)
+    }
+
+    @Test
+    fun `같은 구분을 동시에 발급해도 연번이 겹치거나 빠지지 않는다`() {
+        val expoId = "a1000000-0000-4000-8000-000000000006"
+        val threads = 6
+        val perRequest = 5
+        val executor = Executors.newFixedThreadPool(threads)
+        val start = CountDownLatch(1)
+        val bodies =
+            List(threads) {
+                executor.submit(
+                    Callable {
+                        start.await()
+                        val response = issue(expoId, perRequest, "ADULT").andReturn().response
+                        response.status to response.contentAsString
+                    },
+                )
+            }
+        start.countDown()
+        val results = bodies.map { it.get() }
+        executor.shutdown()
+
+        results.map { it.first }.toSet() shouldBe setOf(201)
+        val serials = results.flatMap { (_, body) -> Regex("\"serial\":(\\d+)").findAll(body).map { it.groupValues[1].toInt() }.toList() }
+        serials.sorted() shouldBe (1..threads * perRequest).toList()
+    }
+
+    @Test
+    fun `같은 코드를 동시에 무효화해도 모두 성공하고 그 뒤 스캔은 거부한다`() {
+        val expoId = "a1000000-0000-4000-8000-000000000007"
+        val issued = issue(expoId, 1, "ADULT").andReturn().response.contentAsString
+        val token = Regex("\"token\":\"([^\"]+)\"").find(issued)!!.groupValues[1]
+        val code = QrTokenCode.of(QrCategory.ADULT, 1)
+        val threads = 6
+        val executor = Executors.newFixedThreadPool(threads)
+        val start = CountDownLatch(1)
+        val statuses =
+            List(threads) {
+                executor.submit(
+                    Callable {
+                        start.await()
+                        revoke(expoId, code).andReturn().response.status
+                    },
+                )
+            }
+        start.countDown()
+        statuses.map { it.get() }.toSet() shouldBe setOf(204)
+        executor.shutdown()
+
+        mockMvc.perform(scan(expoId, token)).andExpect(status().isBadRequest)
     }
 
     @Test

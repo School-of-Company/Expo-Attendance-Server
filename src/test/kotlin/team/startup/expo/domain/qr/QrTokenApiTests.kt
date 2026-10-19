@@ -72,6 +72,9 @@ class QrTokenApiTests : IntegrationTestSupport() {
     lateinit var qrEntryRepository: QrEntryRepository
 
     @Autowired
+    lateinit var jdbcTemplate: org.springframework.jdbc.core.JdbcTemplate
+
+    @Autowired
     lateinit var issueQrTokensService: IssueQrTokensService
 
     @Autowired
@@ -242,6 +245,35 @@ class QrTokenApiTests : IntegrationTestSupport() {
         mockMvc.perform(scan("expo-scan", "scan-token-1")).andExpect(status().isBadRequest)
 
         qrEntryRepository.existsByToken("scan-token-1") shouldBe true
+    }
+
+    @Test
+    fun `같은 종이 QR을 동시에 찍어도 입장 한 번과 입장 로그 한 행만 남는다`() {
+        qrTokenRepository.save(QrToken(token = "scan-race-1", expoId = "expo-race", category = QrCategory.GENERAL))
+        val threads = 8
+        val executor = Executors.newFixedThreadPool(threads)
+        val start = CountDownLatch(1)
+        val statuses =
+            List(threads) {
+                executor.submit<Int> {
+                    start.await()
+                    mockMvc
+                        .perform(scan("expo-race", "scan-race-1").header("X-Scanner-Name", "gate-1"))
+                        .andReturn()
+                        .response.status
+                }
+            }
+        start.countDown()
+        val results = statuses.map { it.get() }
+        executor.shutdown()
+
+        results.count { it == 200 } shouldBe 1
+        results.count { it == 400 } shouldBe threads - 1
+        qrEntryRepository.findAll().count { it.token == "scan-race-1" } shouldBe 1
+        jdbcTemplate
+            .queryForList(
+                "SELECT category, scanner FROM tb_entry_log WHERE expo_id = 'expo-race' AND subject_type = 'PAPER_QR' AND subject_id = 'scan-race-1'",
+            ).single() shouldBe mapOf("category" to "GENERAL", "scanner" to "gate-1")
     }
 
     @Test

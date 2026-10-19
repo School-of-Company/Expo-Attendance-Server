@@ -18,15 +18,25 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
         attendanceDate: LocalDate,
     ): EntryLog?
 
-    /** 오늘 입장 로그를 남긴다. 이미 있으면 아무것도 하지 않는다(같은 날 한 번만 입장하므로 하루 한 행). */
+    /**
+     * 오늘 입장 로그를 남기고, 같은 문장 안에서 입장 이력(`tb_entry_event`)도 남긴다. 이미 있으면 아무것도 하지 않는다(같은 날 최초
+     * 입장은 하루 한 행). 반환값은 새로 남긴 로그 수다. 재입장은 [reenter]가 맡는다.
+     */
     @Transactional
-    @Modifying
     @Query(
         nativeQuery = true,
         value = """
-            INSERT INTO tb_entry_log (expo_id, subject_type, subject_id, attendance_date, entered_at, category, scanner)
-            VALUES (:expoId, :subjectType, :subjectId, :attendanceDate, :enteredAt, :category, :scanner)
-            ON CONFLICT (expo_id, subject_type, subject_id, attendance_date) DO NOTHING
+            WITH entered AS (
+                INSERT INTO tb_entry_log (expo_id, subject_type, subject_id, attendance_date, entered_at, category, scanner)
+                VALUES (:expoId, :subjectType, :subjectId, :attendanceDate, :enteredAt, :category, :scanner)
+                ON CONFLICT (expo_id, subject_type, subject_id, attendance_date) DO NOTHING
+                RETURNING subject_id
+            ), logged AS (
+                INSERT INTO tb_entry_event (expo_id, subject_type, subject_id, attendance_date, event_type, occurred_at, scanner)
+                SELECT :expoId, :subjectType, :subjectId, :attendanceDate, 'ENTER', :enteredAt, :scanner FROM entered
+                RETURNING 1
+            )
+            SELECT COUNT(*) FROM entered
         """,
     )
     fun insertIfAbsent(
@@ -39,15 +49,55 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
         @Param("scanner") scanner: String?,
     ): Int
 
-    /** 오늘 입장했고 아직 퇴장하지 않은 경우에만 퇴장 시각을 기록한다. 0이면 입장 기록이 없거나 이미 퇴장했다. */
+    /**
+     * 오늘 퇴장한 사람이 다시 입장하면 재입장으로 기록한다(#148). 퇴장 시각을 비워 다시 "안에 있는" 상태로 되돌리고, 재입장 이력을 남긴다.
+     * 반환값이 0이면 오늘 입장한 적이 없거나 퇴장하지 않은 상태다(퇴장 없이 다시 찍은 것은 재입장이 아니다).
+     */
     @Transactional
-    @Modifying
     @Query(
         nativeQuery = true,
         value = """
-            UPDATE tb_entry_log SET exited_at = :exitedAt, exit_scanner = :exitScanner
-            WHERE expo_id = :expoId AND subject_type = :subjectType AND subject_id = :subjectId
-              AND attendance_date = :attendanceDate AND exited_at IS NULL
+            WITH reopened AS (
+                UPDATE tb_entry_log SET exited_at = NULL, exit_scanner = NULL
+                WHERE expo_id = :expoId AND subject_type = :subjectType AND subject_id = :subjectId
+                  AND attendance_date = :attendanceDate AND exited_at IS NOT NULL
+                RETURNING subject_id
+            ), logged AS (
+                INSERT INTO tb_entry_event (expo_id, subject_type, subject_id, attendance_date, event_type, occurred_at, scanner)
+                SELECT :expoId, :subjectType, :subjectId, :attendanceDate, 'RE_ENTER', :occurredAt, :scanner FROM reopened
+                RETURNING 1
+            )
+            SELECT COUNT(*) FROM reopened
+        """,
+    )
+    fun reenter(
+        @Param("expoId") expoId: String,
+        @Param("subjectType") subjectType: String,
+        @Param("subjectId") subjectId: String,
+        @Param("attendanceDate") attendanceDate: LocalDate,
+        @Param("occurredAt") occurredAt: LocalDateTime,
+        @Param("scanner") scanner: String?,
+    ): Int
+
+    /**
+     * 오늘 입장했고 지금 퇴장하지 않은 경우에만 퇴장 시각을 기록하고, 같은 문장 안에서 퇴장 이력도 남긴다. 0이면 입장 기록이 없거나
+     * 이미 퇴장한 상태다. 재입장한 사람은 다시 퇴장할 수 있다.
+     */
+    @Transactional
+    @Query(
+        nativeQuery = true,
+        value = """
+            WITH exited AS (
+                UPDATE tb_entry_log SET exited_at = :exitedAt, exit_scanner = :exitScanner
+                WHERE expo_id = :expoId AND subject_type = :subjectType AND subject_id = :subjectId
+                  AND attendance_date = :attendanceDate AND exited_at IS NULL
+                RETURNING subject_id
+            ), logged AS (
+                INSERT INTO tb_entry_event (expo_id, subject_type, subject_id, attendance_date, event_type, occurred_at, scanner)
+                SELECT :expoId, :subjectType, :subjectId, :attendanceDate, 'EXIT', :exitedAt, :exitScanner FROM exited
+                RETURNING 1
+            )
+            SELECT COUNT(*) FROM exited
         """,
     )
     fun markExited(
@@ -89,6 +139,20 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
         @Param("to") to: LocalDate,
     ): Long
 
+    /** 기간 안의 재입장 건수(`tb_entry_event`의 `RE_ENTER`). 같은 사람이 여러 번 재입장하면 그만큼 센다. */
+    @Query(
+        nativeQuery = true,
+        value = """
+            SELECT COUNT(*) FROM tb_entry_event
+            WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to AND event_type = 'RE_ENTER'
+        """,
+    )
+    fun countReentered(
+        @Param("expoId") expoId: String,
+        @Param("from") from: LocalDate,
+        @Param("to") to: LocalDate,
+    ): Long
+
     /** 이 시각 이후의 QR 입장 수. */
     @Query(nativeQuery = true, value = "SELECT COUNT(*) FROM tb_entry_log WHERE expo_id = :expoId AND entered_at >= :since")
     fun countEnteredSince(
@@ -107,8 +171,8 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
                 SELECT attendance_date AS d, CAST(EXTRACT(HOUR FROM entered_at) AS INTEGER) AS h, 1 AS entered, 0 AS exited
                 FROM tb_entry_log WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to
                 UNION ALL
-                SELECT attendance_date, CAST(EXTRACT(HOUR FROM exited_at) AS INTEGER), 0, 1
-                FROM tb_entry_log WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to AND exited_at IS NOT NULL
+                SELECT attendance_date, CAST(EXTRACT(HOUR FROM occurred_at) AS INTEGER), 0, 1
+                FROM tb_entry_event WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to AND event_type = 'EXIT'
                 UNION ALL
                 SELECT attendance_date, CAST(EXTRACT(HOUR FROM created_at) AS INTEGER), delta, 0
                 FROM tb_walk_in_log WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to
@@ -132,8 +196,10 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
                 SELECT entered_at AS occurred_at, 'ENTER' AS kind, subject_type, category, subject_id, scanner
                 FROM tb_entry_log WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to
                 UNION ALL
-                SELECT exited_at, 'EXIT', subject_type, category, subject_id, exit_scanner
-                FROM tb_entry_log WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to AND exited_at IS NOT NULL
+                SELECT v.occurred_at, 'EXIT', v.subject_type, l.category, v.subject_id, v.scanner
+                FROM tb_entry_event v JOIN tb_entry_log l
+                  ON l.expo_id = v.expo_id AND l.subject_type = v.subject_type AND l.subject_id = v.subject_id AND l.attendance_date = v.attendance_date
+                WHERE v.expo_id = :expoId AND v.attendance_date BETWEEN :from AND :to AND v.event_type = 'EXIT'
                 UNION ALL
                 SELECT created_at, CASE WHEN delta > 0 THEN 'ENTER' ELSE 'CANCEL' END, 'WALK_IN', category, CAST(NULL AS VARCHAR), scanner
                 FROM tb_walk_in_log WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to
@@ -155,8 +221,8 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
                 SELECT scanner, 1 AS entered, 0 AS exited FROM tb_entry_log
                 WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to AND scanner IS NOT NULL
                 UNION ALL
-                SELECT exit_scanner, 0, 1 FROM tb_entry_log
-                WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to AND exit_scanner IS NOT NULL
+                SELECT scanner, 0, 1 FROM tb_entry_event
+                WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to AND event_type = 'EXIT' AND scanner IS NOT NULL
                 UNION ALL
                 SELECT scanner, delta, 0 FROM tb_walk_in_log
                 WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to AND scanner IS NOT NULL
@@ -169,6 +235,13 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
         @Param("to") to: LocalDate,
         @Param("limit") limit: Int,
     ): List<Array<Any?>>
+
+    @Transactional
+    @Modifying
+    @Query(nativeQuery = true, value = "DELETE FROM tb_entry_event WHERE expo_id = :expoId")
+    fun deleteEventsByExpoId(
+        @Param("expoId") expoId: String,
+    ): Int
 
     @Transactional
     @Modifying

@@ -31,6 +31,12 @@ data class EntrySummaryResDto(
         example = "61",
     )
     val uniqueQr: Long,
+    @field:Schema(
+        description =
+            "기간 안의 재입장 건수(퇴장한 뒤 다시 입장 스캔한 횟수). 같은 사람이 여러 번 재입장하면 그만큼 센다. 입장 수(`totals.entered`, `uniqueQr`)에는 더하지 않는다",
+        example = "4",
+    )
+    val reentered: Long,
 )
 
 @Schema(description = "사전등록 QR 입장")

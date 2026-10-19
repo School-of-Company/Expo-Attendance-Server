@@ -8,7 +8,13 @@ import team.startup.expo.domain.attendance.entity.WalkInCategory
 
 @Schema(description = "QR 없는 방문객 간편입장 증감 요청")
 data class RecordWalkInReqDto(
-    @field:Schema(description = "구분", example = "ADULT", requiredMode = Schema.RequiredMode.REQUIRED)
+    @field:Schema(
+        description =
+            "구분. 참가 유형 8종(`KINDERGARTEN_STUDENT`, `ELEMENTARY_STUDENT`, `MIDDLE_SCHOOL_STUDENT`, `HIGH_SCHOOL_STUDENT`, " +
+                "`PARENT`, `GENERAL`, `TEACHER`, `PRE_SERVICE_TEACHER`)과 기존 `ADULT`, `STUDENT`. 그 밖의 값은 400",
+        example = "GENERAL",
+        requiredMode = Schema.RequiredMode.REQUIRED,
+    )
     val category: WalkInCategory,
     @field:Schema(description = "`ADD`는 +1, `UNDO`는 잘못 누른 것을 하나 되돌린다(합계는 0 아래로 내려가지 않는다). 없으면 `ADD`", example = "ADD", defaultValue = "ADD")
     val action: WalkInAction = WalkInAction.ADD,
