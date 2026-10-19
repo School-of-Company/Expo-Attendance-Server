@@ -19,7 +19,12 @@ data class HourlyEntryBucketResDto(
     val hour: Int,
     @field:Schema(description = "이 시간의 입장 수(등록 QR + 종이 QR + 간편입장 순증감)", example = "35")
     val entered: Long,
-    @field:Schema(description = "이 시간의 퇴장 수(QR로 입장한 사람만 센다)", example = "8")
+    @field:Schema(
+        description =
+            "이 시간의 퇴장 스캔 횟수(QR로 입장한 사람만 센다). 퇴장했다가 재입장한 사람이 다시 퇴장하면 또 센다. " +
+                "요약의 `exited`(지금 밖에 있는 수)와 재입장이 있으면 다를 수 있다",
+        example = "8",
+    )
     val exited: Long,
 )
 
@@ -38,7 +43,10 @@ data class EntryRecordResDto(
     val type: EntryRecordType,
     @field:Schema(description = "입장 방식")
     val method: EntryMethod,
-    @field:Schema(description = "종이 QR이면 `ADULT`·`CHILD` 등, 간편입장이면 `ADULT`·`STUDENT`. 그 밖에는 비어 있다", nullable = true)
+    @field:Schema(
+        description = "종이 QR이면 `ADULT`·`CHILD` 등, 간편입장이면 참가 유형 8종(#149 이전 기록은 `ADULT`·`STUDENT`). 그 밖에는 비어 있다",
+        nullable = true,
+    )
     val category: String?,
     @field:Schema(description = "참가자·연수자 이름. 등록 QR이고 유저 서비스가 이름을 돌려줄 때만 있다(개인정보라 이 서비스는 저장하지 않는다)", nullable = true)
     val name: String?,
@@ -75,6 +83,9 @@ data class ScannerEntryCountResDto(
     val scanner: String,
     @field:Schema(description = "입장 처리 수(간편입장은 순증감)", example = "120")
     val entered: Long,
-    @field:Schema(description = "퇴장 처리 수", example = "30")
+    @field:Schema(
+        description = "퇴장 스캔 횟수. 재입장한 사람이 다시 퇴장하면 또 센다. 요약의 `exited`(지금 밖에 있는 수)와 다를 수 있다",
+        example = "30",
+    )
     val exited: Long,
 )
