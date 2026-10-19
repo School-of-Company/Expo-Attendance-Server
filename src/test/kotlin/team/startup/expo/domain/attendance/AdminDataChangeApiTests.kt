@@ -210,9 +210,11 @@ class AdminDataChangeApiTests : IntegrationTestSupport() {
         )
     }
 
+    // 서버가 아직 쓰는 중이면 마지막 블록이 `data:` 줄 중간에서 끊겨 있다. 빈 줄로 끝난 완결 블록만 읽도록 마지막 조각은 버린다
     private fun events(result: MvcResult) =
         result.response.contentAsString
             .split("\n\n")
+            .dropLast(1)
             .filter { it.contains("event:admin-data-changed") }
             .map { block -> mapper.readTree(block.lines().single { it.startsWith("data:") }.removePrefix("data:")) }
 
