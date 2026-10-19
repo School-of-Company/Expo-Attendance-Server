@@ -9,7 +9,11 @@ data class WalkInCountsResDto(
     val expoId: String,
     @field:Schema(description = "집계한 날짜. 박람회 전체 기간을 집계하면 비어 있다", nullable = true)
     val date: LocalDate?,
-    @field:Schema(description = "모든 구분의 합계(0인 구분도 포함한다)")
+    @field:Schema(
+        description =
+            "모든 구분의 합계(0인 구분도 포함한다). 구분은 `ADULT`, `STUDENT`(기존)와 참가 유형 8종을 합쳐 10개이며 구분이 늘면 항목도 늘어난다. " +
+                "클라이언트는 목록의 길이나 순서에 기대지 말고 `category` 값으로 찾아 쓰고, 모르는 구분은 건너뛴다",
+    )
     val counts: List<WalkInCountResDto>,
     @field:Schema(description = "전체 합계", example = "54")
     val total: Long,
