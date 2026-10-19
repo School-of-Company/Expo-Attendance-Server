@@ -56,7 +56,9 @@ class ScanExitApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
-        jdbcTemplate.execute("TRUNCATE TABLE tb_entry_log, tb_qr_entry, tb_qr_token, tb_deleted_expo RESTART IDENTITY CASCADE")
+        jdbcTemplate.execute(
+            "TRUNCATE TABLE tb_entry_log, tb_entry_event, tb_qr_entry, tb_qr_token, tb_deleted_expo RESTART IDENTITY CASCADE",
+        )
         reset(userClient, expoClient)
         val today = LocalDate.now(clock)
         doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString())).`when`(expoClient).getPeriod(anyString())
