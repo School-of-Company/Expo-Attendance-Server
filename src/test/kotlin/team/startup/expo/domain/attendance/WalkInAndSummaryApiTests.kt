@@ -92,6 +92,28 @@ class WalkInAndSummaryApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `같은 requestId를 다른 박람회에 보내면 박람회마다 한 번씩 센다`() {
+        val other = "7c2d9a4e-1b3f-4a68-8e05-3f6b9d1c2e77"
+        val body = """{"category":"ADULT","requestId":"req-shared"}"""
+        walkIn(body).andExpect(jsonPath("$.total").value(1))
+        walkIn(body, other).andExpect(status().isOk).andExpect(jsonPath("$.total").value(1))
+        // 같은 박람회의 재전송은 여전히 한 번만 센다
+        walkIn(body).andExpect(jsonPath("$.total").value(1))
+        walkIn(body, other).andExpect(jsonPath("$.total").value(1))
+
+        // requestId 없는 요청은 여러 번 센다
+        repeat(2) { walkIn("""{"category":"ADULT"}""", other).andExpect(status().isOk) }
+        walkIn("""{"category":"ADULT"}""", other).andExpect(jsonPath("$.total").value(4))
+
+        // UNDO의 재전송은 박람회 안에서 한 번만 줄인다
+        val undo = """{"category":"ADULT","action":"UNDO","requestId":"req-shared-undo"}"""
+        walkIn(undo, other).andExpect(jsonPath("$.total").value(3))
+        walkIn(undo, other).andExpect(jsonPath("$.total").value(3))
+        walkIn(undo).andExpect(jsonPath("$.total").value(0))
+        walkIn(undo).andExpect(jsonPath("$.total").value(0))
+    }
+
+    @Test
     fun `집계를 0으로 만든 UNDO의 재전송은 오류 없이 현재 합계를 돌려준다`() {
         walkIn("""{"category":"ADULT"}""").andExpect(status().isOk)
         val undo = """{"category":"ADULT","action":"UNDO","requestId":"req-undo-1"}"""
