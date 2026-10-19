@@ -130,6 +130,10 @@ class CancellationGuardServiceImpl(
     ) {
         exclusive(expoId, participantId) {
             val existing = cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId)
+            if (existing == null && cancellationGuardRepository.existsReleasedByCommit(expoId, participantId, operationId)) {
+                // 이 commit이 이미 보호를 해제로 끝냈다. 응답이 유실되어 재시도한 것이므로 확정 후 재시도처럼 204로 둔다(#168)
+                return@exclusive
+            }
             if (existing == null || existing.operationId != operationId) {
                 throw ExpectedException(HttpStatus.CONFLICT, "이 작업의 취소 보호가 없습니다. 먼저 보호를 걸어야 합니다.")
             }
@@ -151,7 +155,7 @@ class CancellationGuardServiceImpl(
                 val otherSessionsRemain = sessionId != null && active.any { it.sessionId != sessionId }
                 if (superseded || otherSessionsRemain) {
                     // 보호를 확정하지 않고 끝난 작업으로 기록해 입장·출석을 다시 허용한다
-                    cancellationGuardRepository.insertAborted(expoId, participantId, operationId, now)
+                    cancellationGuardRepository.insertReleasedByCommit(expoId, participantId, operationId, now)
                     cancellationGuardRepository.deleteHeld(expoId, participantId, operationId)
                 } else {
                     cancellationGuardRepository.commit(expoId, participantId, operationId, revision, now)

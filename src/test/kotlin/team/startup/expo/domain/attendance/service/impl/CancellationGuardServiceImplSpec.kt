@@ -379,7 +379,8 @@ class CancellationGuardServiceImplSpec : BehaviorSpec() {
                 service.commit(expoId, participantId, operationId, CommitCancellationGuardReqDto(revision = 3))
 
                 then("확정하지 않고 중단 기록을 남긴 뒤 보호를 푼다") {
-                    verify(exactly = 1) { guardRepository.insertAborted(expoId, participantId, operationId, now) }
+                    verify(exactly = 1) { guardRepository.insertReleasedByCommit(expoId, participantId, operationId, now) }
+                    verify(exactly = 0) { guardRepository.insertAborted(any(), any(), any(), any()) }
                     verify(exactly = 1) { guardRepository.deleteHeld(expoId, participantId, operationId) }
                     verify(exactly = 0) { guardRepository.commit(any(), any(), any(), any(), any()) }
                 }
@@ -408,9 +409,35 @@ class CancellationGuardServiceImplSpec : BehaviorSpec() {
 
                 then("그 회차를 취소로 표시하고, 보호는 확정하지 않고 끝내 남은 회차로 입장할 수 있게 한다") {
                     verify(exactly = 1) { sessionRepository.cancelExistingSession(expoId, participantId, 1L, 4L, now) }
-                    verify(exactly = 1) { guardRepository.insertAborted(expoId, participantId, operationId, now) }
+                    verify(exactly = 1) { guardRepository.insertReleasedByCommit(expoId, participantId, operationId, now) }
+                    verify(exactly = 0) { guardRepository.insertAborted(any(), any(), any(), any()) }
                     verify(exactly = 1) { guardRepository.deleteHeld(expoId, participantId, operationId) }
                     verify(exactly = 0) { guardRepository.commit(any(), any(), any(), any(), any()) }
+                }
+            }
+
+            `when`("해제로 끝난 commit을 같은 operationId로 다시 보내면") {
+                givenExistingGuard(null)
+                every { guardRepository.existsReleasedByCommit(expoId, participantId, operationId) } returns true
+
+                service.commit(expoId, participantId, operationId, CommitCancellationGuardReqDto(revision = 4, sessionId = 1L))
+
+                then("오류 없이 끝나고 아무것도 바꾸지 않는다") {
+                    verify(exactly = 0) { guardRepository.commit(any(), any(), any(), any(), any()) }
+                    verify(exactly = 0) { guardRepository.insertReleasedByCommit(any(), any(), any(), any()) }
+                    verify(exactly = 0) { guardRepository.deleteHeld(any(), any(), any()) }
+                }
+            }
+
+            `when`("abort로 끝난 작업을 commit하면") {
+                givenExistingGuard(null)
+                every { guardRepository.existsAborted(expoId, participantId, operationId) } returns true
+                every { guardRepository.existsReleasedByCommit(expoId, participantId, operationId) } returns false
+
+                then("409를 던진다") {
+                    shouldFailWith(HttpStatus.CONFLICT, "이 작업의 취소 보호가 없습니다. 먼저 보호를 걸어야 합니다.") {
+                        service.commit(expoId, participantId, operationId, null)
+                    }
                 }
             }
 
@@ -493,6 +520,7 @@ class CancellationGuardServiceImplSpec : BehaviorSpec() {
 
                 then("중단 기록을 남기고 보호를 푼다") {
                     verify(exactly = 1) { guardRepository.insertAborted(expoId, participantId, operationId, now) }
+                    verify(exactly = 0) { guardRepository.insertReleasedByCommit(any(), any(), any(), any()) }
                     verify(exactly = 1) { guardRepository.deleteHeld(expoId, participantId, operationId) }
                 }
             }

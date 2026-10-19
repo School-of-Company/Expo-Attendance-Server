@@ -397,6 +397,22 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `해제로 끝난 commit을 같은 operationId로 다시 보내도 204이고 abort 뒤의 commit은 409이다`() {
+        sessionValid()
+        acquire().andExpect(status().isNoContent)
+        putSession(5).andExpect(status().isNoContent)
+        commit(revision = 4).andExpect(status().isNoContent)
+        // 응답이 유실되어 재시도해도 같다
+        commit(revision = 4).andExpect(status().isNoContent)
+        acquire().andExpect(status().isConflict)
+
+        // abort로 끝난 작업의 commit은 그대로 409다
+        acquire(OTHER_OPERATION).andExpect(status().isNoContent)
+        abort(OTHER_OPERATION).andExpect(status().isNoContent)
+        commit(OTHER_OPERATION).andExpect(status().isConflict)
+    }
+
+    @Test
     fun `취소가 확정된 뒤 늦게 도착한 오래된 PUT은 보호를 풀지 못하고 더 새로운 PUT만 푼다`() {
         sessionValid()
         acquire().andExpect(status().isNoContent)
