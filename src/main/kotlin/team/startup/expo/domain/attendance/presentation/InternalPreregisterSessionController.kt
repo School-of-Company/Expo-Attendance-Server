@@ -25,7 +25,7 @@ class InternalPreregisterSessionController(
     @Operation(
         summary = "신청 회차 기록",
         description =
-            "확정·승급한 참가자의 회차를 기록합니다. 같은 요청을 다시 보내도 결과는 같고, " +
+            "확정·승급한 참가자의 회차 하나를 기록합니다(참가자의 다른 회차는 그대로 둡니다). 같은 요청을 다시 보내도 결과는 같고, " +
                 "취소된 참가자가 재신청해 확정되면 다시 입장할 수 있습니다. " +
                 "revision을 보내면 더 오래된 요청은 상태를 바꾸지 않고 204이며, 같은 revision에 다른 내용이면 409입니다.",
     )
@@ -43,7 +43,8 @@ class InternalPreregisterSessionController(
     @Operation(
         summary = "신청 취소 표시",
         description =
-            "취소된 신청의 QR·전화번호 입장을 막습니다. revision 없이 보내면 기록이 없을 때 아무것도 하지 않고 204입니다. " +
+            "취소된 신청의 QR·전화번호 입장을 막습니다. sessionId를 보내면 그 회차만, 없으면 모든 회차를 취소합니다. " +
+                "revision 없이 보내면 기록이 없을 때 아무것도 하지 않고 204입니다. " +
                 "revision을 보내면 기록이 없어도 취소를 남기고, 더 오래된 요청은 상태를 바꾸지 않고 204이며, " +
                 "같은 revision에 다른 내용이면 409입니다.",
     )

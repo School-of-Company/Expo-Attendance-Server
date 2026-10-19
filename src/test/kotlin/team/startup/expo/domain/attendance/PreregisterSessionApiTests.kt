@@ -148,17 +148,47 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `회차를 바꿔 기록하면 새 회차 시간으로 확인한다`() {
+    fun `두 회차를 배정하면 오전과 오후에 각각 그 회차로 입장한다`() {
         assign(SESSION).andExpect(status().isNoContent)
         assign(OTHER_SESSION).andExpect(status().isNoContent)
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_preregister_session", Long::class.java) shouldBe 2L
 
-        jdbcTemplate.queryForObject(
-            "SELECT session_id FROM tb_preregister_session WHERE participant_id = ?",
-            Long::class.java,
-            PARTICIPANT,
-        ) shouldBe
-            OTHER_SESSION
-        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_preregister_session", Long::class.java) shouldBe 1L
+        // 오전 회차 시간
+        sessionAt(start = now.minus(Duration.ofMinutes(10)), end = now.plus(Duration.ofHours(1)))
+        sessionAt(start = now.plus(Duration.ofHours(4)), end = now.plus(Duration.ofHours(6)), sessionId = OTHER_SESSION)
+        scan().andExpect(status().isOk)
+        verify(userClient).recordEntry(withSession(SESSION))
+
+        // 오후 회차 시간
+        sessionAt(start = now.minus(Duration.ofHours(6)), end = now.minus(Duration.ofHours(4)))
+        sessionAt(start = now.minus(Duration.ofMinutes(10)), end = now.plus(Duration.ofHours(1)), sessionId = OTHER_SESSION)
+        scan().andExpect(status().isOk)
+        verify(userClient).recordEntry(withSession(OTHER_SESSION))
+    }
+
+    @Test
+    fun `회차 하나를 취소해도 다른 회차로는 입장한다`() {
+        assign(SESSION, revision = 1).andExpect(status().isNoContent)
+        assign(OTHER_SESSION, revision = 2).andExpect(status().isNoContent)
+        mockMvc
+            .perform(delete("$PATH?sessionId=$SESSION&revision=3").header("X-Internal-Token", INTERNAL_TOKEN))
+            .andExpect(status().isNoContent)
+
+        // 취소한 오전 회차 시간에는 거절한다
+        sessionAt(start = now.minus(Duration.ofMinutes(10)), end = now.plus(Duration.ofHours(1)))
+        sessionAt(start = now.plus(Duration.ofHours(4)), end = now.plus(Duration.ofHours(6)), sessionId = OTHER_SESSION)
+        scan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("입장 시간이 아닙니다. 신청한 회차 시작 30분 전부터 입장할 수 있습니다."))
+
+        // 남은 오후 회차 시간에는 입장한다
+        sessionAt(start = now.minus(Duration.ofMinutes(10)), end = now.plus(Duration.ofHours(1)), sessionId = OTHER_SESSION)
+        scan().andExpect(status().isOk)
+        verify(userClient, never()).recordEntry(withSession(SESSION))
+        verify(userClient).recordEntry(withSession(OTHER_SESSION))
+
+        // 회차를 지정하지 않은 취소는 모든 회차를 취소하고, 그보다 오래된 회차 PUT은 되살리지 못한다
+        cancel(revision = 4).andExpect(status().isNoContent)
+        assign(SESSION, revision = 3).andExpect(status().isNoContent)
+        scan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("취소된 신청입니다."))
     }
 
     @Test
@@ -286,7 +316,11 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
     fun `같은 revision의 같은 내용은 멱등이고 다른 내용은 409이다`() {
         assign(SESSION, revision = 5).andExpect(status().isNoContent)
         assign(SESSION, revision = 5).andExpect(status().isNoContent)
-        assign(OTHER_SESSION, revision = 5).andExpect(status().isConflict)
+        // revision은 회차마다 비교하므로 다른 회차는 따로 기록된다(#160)
+        assign(OTHER_SESSION, revision = 5).andExpect(status().isNoContent)
+        mockMvc
+            .perform(delete("$PATH?sessionId=$SESSION&revision=5").header("X-Internal-Token", INTERNAL_TOKEN))
+            .andExpect(status().isConflict)
         cancel(revision = 5).andExpect(status().isConflict)
         stored() shouldBe ("ACTIVE" to 5L)
 
@@ -315,8 +349,12 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
         cancel().andExpect(status().isNoContent)
         stored() shouldBe ("CANCELLED" to 4L)
 
+        // 다른 회차를 기록해도 취소한 회차는 그대로 두고 새 회차를 더한다(#160)
         assign(OTHER_SESSION).andExpect(status().isNoContent)
-        stored() shouldBe ("ACTIVE" to 4L)
+        jdbcTemplate.queryForList(
+            "SELECT session_id || ':' || status FROM tb_preregister_session ORDER BY session_id",
+            String::class.java,
+        ) shouldBe listOf("$SESSION:CANCELLED", "$OTHER_SESSION:ACTIVE")
     }
 
     @Test
@@ -350,8 +388,9 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
     private fun sessionAt(
         start: Instant,
         end: Instant,
+        sessionId: Long = SESSION,
     ) {
-        doReturn(PreregisterSessionResDto(SESSION, start, end)).`when`(expoClient).getPreregisterSession(EXPO, SESSION)
+        doReturn(PreregisterSessionResDto(sessionId, start, end)).`when`(expoClient).getPreregisterSession(EXPO, sessionId)
     }
 
     private fun scan(code: String = CODE): ResultActions =
@@ -375,7 +414,7 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
     private fun stored(): Pair<String, Long>? =
         jdbcTemplate
             .query(
-                "SELECT status, revision FROM tb_preregister_session WHERE expo_id = ? AND participant_id = ?",
+                "SELECT status, revision FROM tb_preregister_session WHERE expo_id = ? AND participant_id = ? ORDER BY session_id NULLS LAST",
                 { rs, _ -> rs.getString("status") to rs.getLong("revision") },
                 EXPO,
                 PARTICIPANT,
