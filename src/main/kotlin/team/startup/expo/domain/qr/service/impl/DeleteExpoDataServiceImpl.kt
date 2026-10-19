@@ -35,6 +35,7 @@ class DeleteExpoDataServiceImpl(
         preregisterSessionRepository.deleteByExpoId(expoId)
         cancellationGuardRepository.deleteByExpoId(expoId)
         cancellationGuardRepository.deleteAbortedByExpoId(expoId)
+        entryLogRepository.deleteEventsByExpoId(expoId)
         entryLogRepository.deleteByExpoId(expoId)
         walkInLogRepository.deleteByExpoId(expoId)
     }

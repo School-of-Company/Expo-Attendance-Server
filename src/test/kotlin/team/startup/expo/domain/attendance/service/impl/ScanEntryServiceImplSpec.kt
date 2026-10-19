@@ -20,14 +20,12 @@ import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
-import team.startup.expo.domain.attendance.service.RecentEntryResponses
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.ResolveStandardParticipantReqDto
 import team.startup.expo.global.client.user.ResolveStandardParticipantResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
-import team.startup.expo.global.config.EntryRetryProperties
 import team.startup.expo.global.exception.ExpectedException
 import team.startup.expo.support.UnitTestSupport
 import team.startup.expo.support.shouldFailWith
@@ -52,7 +50,6 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
             UnitTestSupport.circuitBreaker("user"),
             expoPeriodValidator,
             preregisterSessionValidator,
-            RecentEntryResponses(EntryRetryProperties(windowSeconds = 300), clock),
             CancellationGuardGate(UnitTestSupport.transactionManager(), guardRepository),
             entryLogService,
             JsonMapper.builder().build(),
@@ -389,48 +386,6 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 then("409로 거절하고 입장을 기록하지 않는다") {
                     shouldFailWith(HttpStatus.CONFLICT, "신청 취소를 처리 중입니다.") { service.scan(expoId, codeReq) }
                     verify(exactly = 0) { userClient.recordEntry(any()) }
-                }
-            }
-        }
-
-        given("같은 스캐너가 같은 QR을 다시 찍는 재시도에서") {
-            `when`("처음 스캔이 성공한 뒤 같은 스캐너 사용자로 다시 스캔하면") {
-                givenPeriodOk()
-                every { userClient.recordEntry(any()) } returns entry()
-
-                val first = service.scan(expoId, phoneReq, scannerId = "staff-1")
-                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignConflict()
-                val second = service.scan(expoId, phoneReq, scannerId = "staff-1")
-
-                then("유저 서비스를 다시 부르지 않고 처음 응답을 돌려준다") {
-                    second shouldBe first
-                    verify(exactly = 1) { userClient.recordEntry(any()) }
-                }
-            }
-
-            `when`("다른 스캐너 사용자가 같은 QR을 찍으면") {
-                givenPeriodOk()
-                every { userClient.recordEntry(any()) } returns entry()
-                service.scan(expoId, phoneReq, scannerId = "staff-1")
-                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignConflict()
-
-                then("기억된 응답을 쓰지 않고 이미 입장으로 거절한다") {
-                    shouldFailWith(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.") {
-                        service.scan(expoId, phoneReq, scannerId = "staff-2")
-                    }
-                }
-            }
-
-            `when`("스캐너 사용자를 알 수 없으면") {
-                givenPeriodOk()
-                every { userClient.recordEntry(any()) } returns entry()
-                service.scan(expoId, phoneReq, scannerId = null)
-                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignConflict()
-
-                then("응답을 기억하지 않아 다시 찍으면 이미 입장으로 거절한다") {
-                    shouldFailWith(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.") {
-                        service.scan(expoId, phoneReq, scannerId = null)
-                    }
                 }
             }
         }

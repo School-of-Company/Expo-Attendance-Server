@@ -59,7 +59,7 @@ class AdminDataChangeApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
-        jdbcTemplate.execute("TRUNCATE TABLE tb_walk_in_log, tb_entry_log RESTART IDENTITY CASCADE")
+        jdbcTemplate.execute("TRUNCATE TABLE tb_walk_in_log, tb_entry_log, tb_entry_event RESTART IDENTITY CASCADE")
         doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString())).`when`(expoClient).getPeriod(anyString())
         eventually { listener.isListening() }
         // 앞 테스트의 신호가 다 지나가도록 기다린다

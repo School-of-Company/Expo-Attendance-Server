@@ -28,7 +28,7 @@ class AttendanceController(
         summary = "박람회 입장 스캔",
         description =
             "박람회 진행 기간을 확인하고 참가자의 오늘 입장을 기록한다. 오늘 이미 입장했거나 진행 기간이 아니면 400, 박람회·참가자가 없으면 404다." +
-                " 입장이 성공한 직후 같은 스캐너 사용자가 같은 QR을 다시 찍으면 처음 응답을 돌려준다(응답 유실 대비, 기본 5분).",
+                " 퇴장 없이 같은 날 다시 찍으면 400이다.",
     )
     @ApiError(400, "요청 값이 올바르지 않다(일반 참가자는 전화번호 또는 참가자 ID와 코드, 연수자는 전화번호가 필요하다).")
     @ApiError(400, "박람회가 진행 중인 상태가 아니다.")
@@ -42,11 +42,10 @@ class AttendanceController(
     fun scanEntry(
         @PathVariable expoId: String,
         @Valid @RequestBody reqDto: ScanEntryReqDto,
-        @RequestHeader(name = "X-User-Id", required = false) scannerId: String?,
         @RequestHeader(name = ScannerName.HEADER, required = false) scannerName: String?,
     ): ScanEntryResDto {
         RequestContext.bindScan(expoId, reqDto.participantId)
-        return scanEntryService.scan(expoId, reqDto, scannerId, scannerName)
+        return scanEntryService.scan(expoId, reqDto, scannerName)
     }
 
     @Operation(
