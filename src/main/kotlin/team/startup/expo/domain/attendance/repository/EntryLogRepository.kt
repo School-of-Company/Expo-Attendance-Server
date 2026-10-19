@@ -139,6 +139,20 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
         @Param("to") to: LocalDate,
     ): Long
 
+    /** 기간 안의 재입장 건수(`tb_entry_event`의 `RE_ENTER`). 같은 사람이 여러 번 재입장하면 그만큼 센다. */
+    @Query(
+        nativeQuery = true,
+        value = """
+            SELECT COUNT(*) FROM tb_entry_event
+            WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to AND event_type = 'RE_ENTER'
+        """,
+    )
+    fun countReentered(
+        @Param("expoId") expoId: String,
+        @Param("from") from: LocalDate,
+        @Param("to") to: LocalDate,
+    ): Long
+
     /** 이 시각 이후의 QR 입장 수. */
     @Query(nativeQuery = true, value = "SELECT COUNT(*) FROM tb_entry_log WHERE expo_id = :expoId AND entered_at >= :since")
     fun countEnteredSince(

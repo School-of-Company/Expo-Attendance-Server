@@ -59,6 +59,7 @@ class EntrySummaryServiceImpl(
             totals = EntryTotalsResDto(entered = qrEntered + walkIn.total, exited = exited, stillInside = qrEntered - exited),
             recentEntered10m = recentEntered(expoId, generatedAt),
             uniqueQr = entryLogRepository.countDistinctSubjects(expoId, scope.from, scope.to),
+            reentered = entryLogRepository.countReentered(expoId, scope.from, scope.to),
         )
     }
 
