@@ -74,7 +74,7 @@ interface WalkInLogRepository : JpaRepository<WalkInLog, Long> {
         @Param("since") since: LocalDateTime,
     ): Long
 
-    /** 같은 `request_id`가 이미 있으면 아무것도 하지 않는다(0). */
+    /** 같은 박람회에 같은 `request_id`가 이미 있으면 아무것도 하지 않는다(0). */
     @Transactional
     @Modifying
     @Query(
@@ -82,7 +82,7 @@ interface WalkInLogRepository : JpaRepository<WalkInLog, Long> {
         value = """
             INSERT INTO tb_walk_in_log (expo_id, attendance_date, category, delta, request_id, created_at, scanner)
             VALUES (:expoId, :attendanceDate, :category, :delta, :requestId, :createdAt, :scanner)
-            ON CONFLICT (request_id) DO NOTHING
+            ON CONFLICT (expo_id, request_id) DO NOTHING
         """,
     )
     fun insert(
