@@ -4,26 +4,34 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import team.startup.expo.domain.attendance.entity.EntryStatus
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.presentation.dto.request.EntryAuthority
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanEntryReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.BadgeResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ScanEntryResDto
+import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
 import team.startup.expo.domain.attendance.service.ScanEntryService
+import team.startup.expo.domain.attendance.service.ScannerName
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
+import team.startup.expo.global.client.user.ResolveParticipantReqDto
 import team.startup.expo.global.client.user.ResolveStandardParticipantReqDto
+import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
+import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.global.exception.ExpectedException
 import tools.jackson.databind.ObjectMapper
 import java.time.Clock
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 /**
  * v1 `PreEnterScanQrCodeServiceImpl`의 입장 스캔. 입장 기록은 유저 서비스가 소유하고, 이 서비스는 박람회 기간과
@@ -39,6 +47,7 @@ class ScanEntryServiceImpl(
     private val preregisterSessionValidator: PreregisterSessionValidator,
     private val cancellationGuardGate: CancellationGuardGate,
     private val entryLogService: EntryLogService,
+    private val entryLogRepository: EntryLogRepository,
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
 ) : ScanEntryService {
@@ -76,23 +85,94 @@ class ScanEntryServiceImpl(
             } else {
                 null
             }
-        val entry =
+        val now = LocalDateTime.now(clock)
+        val scanner = ScannerName.of(scannerName)
+        val scanned =
             if (participantId != null) {
                 cancellationGuardGate.scanning(expoId, participantId = participantId) {
                     val activeSessionId = preregisterSessionValidator.checkNotCancelled(expoId, participantId)
                     // 락을 잡기 전에 회차가 바뀌었으면 확인한 회차가 아니므로 회차 없이 기록한다. 전화번호 입장은 회차를 붙이지 않는다
-                    recordEntry(expoId, reqDto, checkedSessionId?.takeIf { it == activeSessionId })
+                    recordOrReenter(expoId, reqDto, checkedSessionId?.takeIf { it == activeSessionId }, participantId, now, scanner)
                 }
             } else {
-                recordEntry(expoId, reqDto, null)
+                recordOrReenter(expoId, reqDto, null, null, now, scanner)
             }
 
-        // 퇴장 기록과 집계를 위한 입장 로그. 입장은 이미 기록되었으므로 로그 실패가 입장을 막지 않는다(#120)
-        val subjectType = if (entry.participationType == TRAINEE) EntrySubjectType.TRAINEE else EntrySubjectType.STANDARD
-        entryLogService.recordEntry(expoId, subjectType, entry.id.toString(), scannerName = scannerName)
-
-        return toResponse(entry, reqDto)
+        // 재입장은 입장 로그가 이미 있다. 처음 입장만, 퇴장 기록과 집계를 위한 입장 로그를 남긴다. 입장은 이미 기록되었으므로 로그 실패가 입장을 막지 않는다(#120)
+        scanned.entry?.let {
+            val subjectType = if (it.participationType == TRAINEE) EntrySubjectType.TRAINEE else EntrySubjectType.STANDARD
+            entryLogService.recordEntry(expoId, subjectType, it.id.toString(), scannerName = scannerName)
+        }
+        return scanned.response ?: toResponse(requireNotNull(scanned.entry), reqDto, now.format(TIME))
     }
+
+    /**
+     * 유저 서비스에 입장을 기록한다. 오늘 이미 입장했다고(409) 답하면, 오늘 입장 로그에 퇴장 기록이 있을 때만 재입장으로 처리하고
+     * 퇴장 없이 다시 찍은 것은 400이다(#148). 유저 서비스의 409는 참가자 정보를 주지 않으므로 재입장 응답은 [reenterResponse]가 만든다.
+     */
+    private fun recordOrReenter(
+        expoId: String,
+        reqDto: ScanEntryReqDto,
+        preregisterSessionId: Long?,
+        participantId: Long?,
+        now: LocalDateTime,
+        scanner: String?,
+    ): Scanned =
+        try {
+            Scanned(entry = recordEntry(expoId, reqDto, preregisterSessionId))
+        } catch (_: AlreadyEnteredToday) {
+            Scanned(response = reenterResponse(expoId, reqDto, participantId, now, scanner))
+        }
+
+    private fun reenterResponse(
+        expoId: String,
+        reqDto: ScanEntryReqDto,
+        knownParticipantId: Long?,
+        now: LocalDateTime,
+        scanner: String?,
+    ): ScanEntryResDto {
+        val isTrainee = reqDto.authority == EntryAuthority.ROLE_TRAINEE
+        val subjectType = if (isTrainee) EntrySubjectType.TRAINEE else EntrySubjectType.STANDARD
+        val subjectId =
+            knownParticipantId ?: userCircuitBreaker.callService("유저", alreadyEntered()) {
+                userClient
+                    .resolveParticipant(
+                        ResolveParticipantReqDto(expoId, requireNotNull(reqDto.phoneNumber), reqDto.authority.participationType),
+                    ).participantId
+            }
+        val today = now.toLocalDate()
+        val log =
+            entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(expoId, subjectType, subjectId.toString(), today)
+        // 입장 로그가 없거나(로그 도입 전 입장, 로그 유실) 퇴장하지 않았으면 재입장이 아니다
+        if (log?.exitedAt == null) throw alreadyEntered()
+
+        val name =
+            userCircuitBreaker.callService("유저", participantNotFound(reqDto)) {
+                if (isTrainee) {
+                    userClient.getTraineeNames(TraineeNamesReqDto(expoId, listOf(subjectId))).first { it.traineeId == subjectId }.name
+                } else {
+                    userClient
+                        .getStandardParticipantNames(StandardParticipantNamesReqDto(expoId, listOf(subjectId)))
+                        .first { it.participantId == subjectId }
+                        .name
+                }
+            }
+        // 동시에 같은 재입장 스캔이 오면 한쪽만 퇴장 시각을 비운다
+        if (entryLogRepository.reenter(expoId, subjectType.name, subjectId.toString(), today, now, scanner) != 1) throw alreadyEntered()
+
+        return ScanEntryResDto(
+            id = subjectId,
+            name = name,
+            phoneNumber = reqDto.phoneNumber?.takeIf { reqDto.participantId == null },
+            personalInformationStatus = null,
+            participationType = reqDto.authority.participationType,
+            badge = null,
+            entryStatus = EntryStatus.RE_ENTRY,
+            firstEnteredTime = log.enteredAt.format(TIME),
+        )
+    }
+
+    private fun alreadyEntered() = ExpectedException(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.")
 
     private fun participantNotFound(reqDto: ScanEntryReqDto) =
         ExpectedException(
@@ -124,7 +204,7 @@ class ScanEntryServiceImpl(
         return userCircuitBreaker.callService(
             "유저",
             participantNotFound(reqDto),
-            onConflict = { throw ExpectedException(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.") },
+            onConflict = { throw AlreadyEnteredToday() },
         ) { userClient.recordEntry(request) }
     }
 
@@ -156,6 +236,7 @@ class ScanEntryServiceImpl(
     private fun toResponse(
         entry: RecordEntryResDto,
         reqDto: ScanEntryReqDto,
+        firstEnteredTime: String,
     ): ScanEntryResDto {
         val isTrainee = entry.participationType == TRAINEE
         // 명찰 대상은 연수자 전원과 교사·예비교사인 일반 참가자다
@@ -177,6 +258,8 @@ class ScanEntryServiceImpl(
             personalInformationStatus = entry.personalInformationStatus,
             participationType = entry.participationType,
             badge = badge,
+            entryStatus = EntryStatus.FIRST,
+            firstEnteredTime = firstEnteredTime,
         )
     }
 
@@ -200,8 +283,18 @@ class ScanEntryServiceImpl(
         )
     }
 
+    /** 스캔 한 번의 결과. 처음 입장은 유저 서비스의 [entry]가, 재입장은 이 서비스가 만든 [response]가 있다. */
+    private class Scanned(
+        val entry: RecordEntryResDto? = null,
+        val response: ScanEntryResDto? = null,
+    )
+
+    /** 유저 서비스가 409로 답한 것을 재입장 판정으로 넘기는 내부 신호다. 밖으로 나가지 않는다. */
+    private class AlreadyEnteredToday : RuntimeException(null, null, false, false)
+
     private companion object {
         const val TRAINEE = "TRAINEE"
+        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
         // 소속을 받아 명찰에 "소속 이름"으로 찍는 구분: 교사와 예비교사
         val BADGE_OCCUPATIONS = setOf("TEACHER", "PRE_SERVICE_TEACHER")
