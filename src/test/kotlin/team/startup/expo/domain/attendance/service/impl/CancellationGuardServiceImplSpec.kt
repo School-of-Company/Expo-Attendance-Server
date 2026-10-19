@@ -74,10 +74,11 @@ class CancellationGuardServiceImplSpec : BehaviorSpec() {
     private fun session(
         status: PreregisterSessionStatus = PreregisterSessionStatus.ACTIVE,
         revision: Long = 0,
+        sessionId: Long = 1L,
     ) = PreregisterSession(
         expoId = expoId,
         participantId = participantId,
-        sessionId = 1L,
+        sessionId = sessionId,
         status = status,
         revision = revision,
         updatedAt = now,
@@ -321,7 +322,7 @@ class CancellationGuardServiceImplSpec : BehaviorSpec() {
 
             `when`("HELD 보호를 revision 없이 확정하면") {
                 givenExistingGuard(guard())
-                every { sessionRepository.findByExpoIdAndParticipantId(expoId, participantId) } returns session(revision = 9)
+                every { sessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId) } returns listOf(session(revision = 9))
 
                 service.commit(expoId, participantId, operationId, null)
 
@@ -333,7 +334,7 @@ class CancellationGuardServiceImplSpec : BehaviorSpec() {
 
             `when`("HELD 보호를 revision과 함께 확정하고 회차가 더 새롭지 않으면") {
                 givenExistingGuard(guard())
-                every { sessionRepository.findByExpoIdAndParticipantId(expoId, participantId) } returns session(revision = 4)
+                every { sessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId) } returns listOf(session(revision = 4))
 
                 service.commit(expoId, participantId, operationId, CommitCancellationGuardReqDto(revision = 4))
 
@@ -345,7 +346,7 @@ class CancellationGuardServiceImplSpec : BehaviorSpec() {
 
             `when`("HELD 보호를 revision과 함께 확정하고 저장된 회차가 없으면") {
                 givenExistingGuard(guard())
-                every { sessionRepository.findByExpoIdAndParticipantId(expoId, participantId) } returns null
+                every { sessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId) } returns emptyList()
 
                 service.commit(expoId, participantId, operationId, CommitCancellationGuardReqDto(revision = 4))
 
@@ -356,7 +357,7 @@ class CancellationGuardServiceImplSpec : BehaviorSpec() {
 
             `when`("확정 전에 더 새로운 revision의 ACTIVE 회차가 이미 적용되었으면") {
                 givenExistingGuard(guard())
-                every { sessionRepository.findByExpoIdAndParticipantId(expoId, participantId) } returns session(revision = 5)
+                every { sessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId) } returns listOf(session(revision = 5))
 
                 service.commit(expoId, participantId, operationId, CommitCancellationGuardReqDto(revision = 3))
 
@@ -369,13 +370,43 @@ class CancellationGuardServiceImplSpec : BehaviorSpec() {
 
             `when`("더 새로운 revision이지만 회차가 CANCELLED이면") {
                 givenExistingGuard(guard())
-                every { sessionRepository.findByExpoIdAndParticipantId(expoId, participantId) } returns
-                    session(status = PreregisterSessionStatus.CANCELLED, revision = 5)
+                every { sessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId) } returns
+                    listOf(session(status = PreregisterSessionStatus.CANCELLED, revision = 5))
 
                 service.commit(expoId, participantId, operationId, CommitCancellationGuardReqDto(revision = 3))
 
                 then("밀려나지 않은 취소이므로 확정한다") {
                     verify(exactly = 1) { guardRepository.commit(expoId, participantId, operationId, 3L, now) }
+                    verify(exactly = 0) { guardRepository.insertAborted(any(), any(), any(), any()) }
+                }
+            }
+
+            `when`("회차 하나만 취소하고 확정 상태인 다른 회차가 남아 있으면") {
+                givenExistingGuard(guard())
+                every { sessionRepository.cancelExistingSession(expoId, participantId, 1L, 4L, now) } returns 1
+                every { sessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId) } returns
+                    listOf(session(status = PreregisterSessionStatus.CANCELLED, revision = 4), session(revision = 2, sessionId = 2L))
+
+                service.commit(expoId, participantId, operationId, CommitCancellationGuardReqDto(revision = 4, sessionId = 1L))
+
+                then("그 회차를 취소로 표시하고, 보호는 확정하지 않고 끝내 남은 회차로 입장할 수 있게 한다") {
+                    verify(exactly = 1) { sessionRepository.cancelExistingSession(expoId, participantId, 1L, 4L, now) }
+                    verify(exactly = 1) { guardRepository.insertAborted(expoId, participantId, operationId, now) }
+                    verify(exactly = 1) { guardRepository.deleteHeld(expoId, participantId, operationId) }
+                    verify(exactly = 0) { guardRepository.commit(any(), any(), any(), any(), any()) }
+                }
+            }
+
+            `when`("회차 하나만 취소하고 남은 확정 회차가 없으면") {
+                givenExistingGuard(guard())
+                every { sessionRepository.cancelExistingSession(expoId, participantId, 1L, 4L, now) } returns 1
+                every { sessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId) } returns
+                    listOf(session(status = PreregisterSessionStatus.CANCELLED, revision = 4))
+
+                service.commit(expoId, participantId, operationId, CommitCancellationGuardReqDto(revision = 4, sessionId = 1L))
+
+                then("기존처럼 COMMITTED로 바꾼다") {
+                    verify(exactly = 1) { guardRepository.commit(expoId, participantId, operationId, 4L, now) }
                     verify(exactly = 0) { guardRepository.insertAborted(any(), any(), any(), any()) }
                 }
             }
