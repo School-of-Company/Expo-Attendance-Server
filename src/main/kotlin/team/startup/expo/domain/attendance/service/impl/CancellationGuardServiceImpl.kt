@@ -136,16 +136,26 @@ class CancellationGuardServiceImpl(
             }
             if (existing.state == CancellationGuardState.HELD) {
                 val revision = reqDto?.revision
-                val session = preregisterSessionRepository.findByExpoIdAndParticipantId(expoId, participantId)
-                if (revision != null && session != null && session.status == PreregisterSessionStatus.ACTIVE &&
-                    session.revision > revision
-                ) {
-                    // 보호가 걸려 있는 동안 이 취소보다 새로운 신청의 회차 PUT이 먼저 적용되었다. 이 취소는 밀려났으므로 보호를 확정하지 않고
-                    // 끝난 작업으로 기록해 새 신청이 출석할 수 있게 한다.
-                    cancellationGuardRepository.insertAborted(expoId, participantId, operationId, LocalDateTime.now(clock))
+                val sessionId = reqDto?.sessionId
+                val now = LocalDateTime.now(clock)
+                if (sessionId != null) {
+                    // 회차 하나의 취소다. 회차 취소 통지보다 먼저 와도 그 회차로는 바로 입장할 수 없게 여기서 취소로 표시한다(같은 revision이라 통지는 멱등이다)
+                    preregisterSessionRepository.cancelExistingSession(expoId, participantId, sessionId, revision, now)
+                }
+                val active =
+                    preregisterSessionRepository
+                        .findAllByExpoIdAndParticipantId(expoId, participantId)
+                        .filter { it.status == PreregisterSessionStatus.ACTIVE }
+                // 보호가 걸려 있는 동안 이 취소보다 새로운 신청의 회차 PUT이 먼저 적용되었으면 이 취소는 밀려났다.
+                val superseded = revision != null && active.any { it.revision > revision }
+                // 회차 하나만 취소했고 확정 상태인 다른 회차가 남아 있으면, 참가자는 남은 회차로 계속 입장·출석할 수 있어야 한다(#160).
+                val otherSessionsRemain = sessionId != null && active.any { it.sessionId != sessionId }
+                if (superseded || otherSessionsRemain) {
+                    // 보호를 확정하지 않고 끝난 작업으로 기록해 입장·출석을 다시 허용한다
+                    cancellationGuardRepository.insertAborted(expoId, participantId, operationId, now)
                     cancellationGuardRepository.deleteHeld(expoId, participantId, operationId)
                 } else {
-                    cancellationGuardRepository.commit(expoId, participantId, operationId, revision, LocalDateTime.now(clock))
+                    cancellationGuardRepository.commit(expoId, participantId, operationId, revision, now)
                 }
             }
         }

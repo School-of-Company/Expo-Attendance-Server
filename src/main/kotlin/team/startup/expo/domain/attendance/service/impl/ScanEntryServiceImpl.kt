@@ -59,7 +59,7 @@ class ScanEntryServiceImpl(
         checkIdentifier(reqDto)
         val today = LocalDate.now(clock)
         expoPeriodValidator.checkInProgress(expoId, today)
-        // 사전등록 QR(참가자 ID와 코드)은 신청한 회차의 입장 시간이어야 한다. 입장을 기록하기 전에 확인한다.
+        // 사전등록 QR(참가자 ID와 코드)은 신청한 회차 중 하나의 입장 시간이어야 한다. 입장을 기록하기 전에 지금 회차를 고른다.
         val checkedSessionId =
             if (reqDto.authority == EntryAuthority.ROLE_STANDARD && reqDto.participantId != null && !reqDto.code.isNullOrBlank()) {
                 val code = reqDto.code
@@ -90,9 +90,9 @@ class ScanEntryServiceImpl(
         val scanned =
             if (participantId != null) {
                 cancellationGuardGate.scanning(expoId, participantId = participantId) {
-                    val activeSessionId = preregisterSessionValidator.checkNotCancelled(expoId, participantId)
-                    // 락을 잡기 전에 회차가 바뀌었으면 확인한 회차가 아니므로 회차 없이 기록한다. 전화번호 입장은 회차를 붙이지 않는다
-                    recordOrReenter(expoId, reqDto, checkedSessionId?.takeIf { it == activeSessionId }, participantId, now, scanner)
+                    // 락을 잡기 전에 고른 회차가 취소되었으면 거절한다. 전화번호 입장은 회차를 붙이지 않는다
+                    val sessionId = preregisterSessionValidator.checkNotCancelled(expoId, participantId, checkedSessionId)
+                    recordOrReenter(expoId, reqDto, sessionId, participantId, now, scanner)
                 }
             } else {
                 recordOrReenter(expoId, reqDto, null, null, now, scanner)

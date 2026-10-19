@@ -12,4 +12,13 @@ data class CommitCancellationGuardReqDto(
     )
     @field:Positive
     val revision: Long? = null,
+    @field:Schema(
+        description =
+            "이 취소가 회차 하나만 취소하면 그 회차 ID(#160). 보내면 그 회차를 바로 취소로 표시하고, 확정 상태인 다른 회차가 남아 있으면 " +
+                "보호를 확정하지 않고 끝내 남은 회차로 입장할 수 있게 한다. 없으면 참가자의 모든 신청을 취소한 것으로 본다(기존 방식).",
+        example = "12",
+        nullable = true,
+    )
+    @field:Positive
+    val sessionId: Long? = null,
 )
