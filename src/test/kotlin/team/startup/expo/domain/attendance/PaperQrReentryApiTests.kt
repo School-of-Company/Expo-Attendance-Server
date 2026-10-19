@@ -95,9 +95,40 @@ class PaperQrReentryApiTests : IntegrationTestSupport() {
         entry().andExpect(status().isOk)
         summary()
             .andExpect(jsonPath("$.totals.entered").value(1))
-            .andExpect(jsonPath("$.totals.exited").value(0))
+            // 퇴장은 스캔 횟수라 재입장해도 줄지 않는다(#162)
+            .andExpect(jsonPath("$.totals.exited").value(1))
             .andExpect(jsonPath("$.totals.stillInside").value(1))
             .andExpect(jsonPath("$.uniqueQr").value(1))
+    }
+
+    @Test
+    fun `재입장이 있어도 요약·시간대별·스캐너별 퇴장 수가 같다`() {
+        // #162 재현: A 입장 → A 퇴장 → A 재입장 → B 입장 → B 퇴장
+        jdbcTemplate.update("INSERT INTO tb_qr_token (token, expo_id, category, created_at) VALUES (?, ?, 'ADULT', now())", TOKEN_B, EXPO)
+        entry(TOKEN, "gate-1").andExpect(status().isOk)
+        exit(TOKEN, "gate-1").andExpect(status().isOk)
+        entry(TOKEN, "gate-1").andExpect(status().isOk).andExpect(jsonPath("$.entryStatus").value("RE_ENTRY"))
+        entry(TOKEN_B, "gate-1").andExpect(status().isOk)
+        exit(TOKEN_B, "gate-1").andExpect(status().isOk)
+
+        mockMvc
+            .perform(get("/attendance/summary/$EXPO?all=true").header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN"))
+            .andExpect(jsonPath("$.totals.entered").value(2))
+            .andExpect(jsonPath("$.totals.exited").value(2))
+            .andExpect(jsonPath("$.totals.stillInside").value(1))
+            .andExpect(jsonPath("$.paper[?(@.category=='ADULT')].entered").value(2))
+            .andExpect(jsonPath("$.paper[?(@.category=='ADULT')].exited").value(2))
+            .andExpect(jsonPath("$.reentered").value(1))
+        val hourly =
+            mockMvc
+                .perform(get("/attendance/summary/$EXPO/hourly?all=true").header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN"))
+                .andReturn()
+                .response.contentAsString
+        Regex("\"exited\":(\\d+)").findAll(hourly).sumOf { it.groupValues[1].toLong() } shouldBe 2L
+        mockMvc
+            .perform(get("/attendance/summary/$EXPO/scanners").header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN"))
+            .andExpect(jsonPath("$.scanners[0].entered").value(2))
+            .andExpect(jsonPath("$.scanners[0].exited").value(2))
     }
 
     @Test
@@ -165,11 +196,25 @@ class PaperQrReentryApiTests : IntegrationTestSupport() {
     private fun events(): List<String> =
         jdbcTemplate.queryForList("SELECT event_type FROM tb_entry_event ORDER BY id", String::class.java).filterNotNull()
 
-    private fun entry(): ResultActions =
-        mockMvc.perform(patch("/attendance/qr/$EXPO").contentType(MediaType.APPLICATION_JSON).content("""{"token":"$TOKEN"}"""))
+    private fun entry(
+        token: String = TOKEN,
+        scanner: String? = null,
+    ): ResultActions = scan("/attendance/qr/$EXPO", token, scanner)
 
-    private fun exit(): ResultActions =
-        mockMvc.perform(patch("/attendance/exit/$EXPO").contentType(MediaType.APPLICATION_JSON).content("""{"token":"$TOKEN"}"""))
+    private fun exit(
+        token: String = TOKEN,
+        scanner: String? = null,
+    ): ResultActions = scan("/attendance/exit/$EXPO", token, scanner)
+
+    private fun scan(
+        path: String,
+        token: String,
+        scanner: String?,
+    ): ResultActions {
+        val request = patch(path).contentType(MediaType.APPLICATION_JSON).content("""{"token":"$token"}""")
+        scanner?.let { request.header("X-Scanner-Name", it) }
+        return mockMvc.perform(request)
+    }
 
     private fun summary(): ResultActions =
         mockMvc.perform(get("/attendance/summary/$EXPO?date=$today").header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN"))
@@ -177,5 +222,6 @@ class PaperQrReentryApiTests : IntegrationTestSupport() {
     private companion object {
         const val EXPO = "0b1f6c3e-52a4-4d6e-9d57-4b7a1e5c9a10"
         const val TOKEN = "paper-token-0001"
+        const val TOKEN_B = "paper-token-0002"
     }
 }
