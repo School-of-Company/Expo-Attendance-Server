@@ -236,6 +236,47 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
         @Param("limit") limit: Int,
     ): List<Array<Any?>>
 
+    /** 기간 안의 입장·재입장·퇴장 이벤트 수(#150). */
+    @Query(
+        nativeQuery = true,
+        value = "SELECT COUNT(*) FROM tb_entry_event WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to",
+    )
+    fun countEvents(
+        @Param("expoId") expoId: String,
+        @Param("from") from: LocalDate,
+        @Param("to") to: LocalDate,
+    ): Long
+
+    /**
+     * 기간 안의 이벤트 한 페이지 [시각, 종류, 대상 종류, 대상 ID, 종이 QR 구분, 종이 QR 코드, 스캐너](#150). 발생 시각, 같으면 id 순이다.
+     * 먼저 이벤트 표에서 `ix_entry_event_expo_day`로 범위를 거르고 정렬·`LIMIT`/`OFFSET`을 한 뒤, 그 페이지 행에만 구분(`tb_entry_log`)과
+     * 코드(`tb_qr_token`)를 붙인다. 입장 로그는 대상·날짜마다 한 행(유일 키)이고 토큰은 PK라 행이 늘어나지 않는다.
+     */
+    @Query(
+        nativeQuery = true,
+        value = """
+            SELECT e.occurred_at, e.event_type, e.subject_type, e.subject_id, l.category, q.code, e.scanner
+            FROM (
+                SELECT id, expo_id, subject_type, subject_id, attendance_date, event_type, occurred_at, scanner
+                FROM tb_entry_event
+                WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to
+                ORDER BY occurred_at, id LIMIT :size OFFSET :offset
+            ) e
+            LEFT JOIN tb_entry_log l
+              ON l.expo_id = e.expo_id AND l.subject_type = e.subject_type AND l.subject_id = e.subject_id AND l.attendance_date = e.attendance_date
+            LEFT JOIN tb_qr_token q
+              ON e.subject_type = 'PAPER_QR' AND q.expo_id = e.expo_id AND q.token = e.subject_id
+            ORDER BY e.occurred_at, e.id
+        """,
+    )
+    fun findEvents(
+        @Param("expoId") expoId: String,
+        @Param("from") from: LocalDate,
+        @Param("to") to: LocalDate,
+        @Param("size") size: Int,
+        @Param("offset") offset: Long,
+    ): List<Array<Any?>>
+
     @Transactional
     @Modifying
     @Query(nativeQuery = true, value = "DELETE FROM tb_entry_event WHERE expo_id = :expoId")

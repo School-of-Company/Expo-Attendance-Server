@@ -49,6 +49,21 @@ interface WalkInLogRepository : JpaRepository<WalkInLog, Long> {
         @Param("to") to: LocalDate,
     ): List<Array<Any>>
 
+    /** 날짜·구분별 [날짜, 구분, 순증감](#150). 기록이 없는 날짜·구분은 행이 없다. */
+    @Query(
+        nativeQuery = true,
+        value = """
+            SELECT attendance_date, category, COALESCE(SUM(delta), 0) FROM tb_walk_in_log
+            WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to
+            GROUP BY attendance_date, category ORDER BY attendance_date, category
+        """,
+    )
+    fun sumByDateAndCategory(
+        @Param("expoId") expoId: String,
+        @Param("from") from: LocalDate,
+        @Param("to") to: LocalDate,
+    ): List<Array<Any?>>
+
     /** 이 시각 이후의 간편입장 순증감. */
     @Query(
         nativeQuery = true,
