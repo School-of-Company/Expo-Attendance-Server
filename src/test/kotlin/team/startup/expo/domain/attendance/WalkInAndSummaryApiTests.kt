@@ -155,6 +155,60 @@ class WalkInAndSummaryApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `참가 유형 8종은 각각 ADD와 UNDO가 구분별로 동작하고 0 아래로 내려가지 않는다`() {
+        PARTICIPANT_TYPES.forEach { type ->
+            walkIn("""{"category":"$type","action":"UNDO"}""").andExpect(status().isBadRequest)
+            repeat(2) { walkIn("""{"category":"$type"}""").andExpect(status().isOk) }
+            walkIn("""{"category":"$type","action":"UNDO"}""")
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.counts[?(@.category=='$type')].count").value(1))
+        }
+        walkInGet()
+            .andExpect(jsonPath("$.counts.length()").value(10))
+            .andExpect(jsonPath("$.counts[?(@.category=='ADULT')].count").value(0))
+            .andExpect(jsonPath("$.total").value(PARTICIPANT_TYPES.size))
+        PARTICIPANT_TYPES.forEach { walkIn("""{"category":"$it","action":"UNDO"}""").andExpect(status().isOk) }
+        walkInGet().andExpect(jsonPath("$.total").value(0))
+    }
+
+    @Test
+    fun `참가 유형 8종도 같은 requestId는 한 번만 센다`() {
+        PARTICIPANT_TYPES.forEach { type ->
+            val body = """{"category":"$type","requestId":"req-$type"}"""
+            walkIn(body).andExpect(status().isOk)
+            walkIn(body).andExpect(status().isOk).andExpect(jsonPath("$.counts[?(@.category=='$type')].count").value(1))
+        }
+        walkInGet().andExpect(jsonPath("$.total").value(PARTICIPANT_TYPES.size))
+    }
+
+    @Test
+    fun `참가 유형 8종을 동시에 눌러도 구분별로 유실 없이 센다`() {
+        val executor = Executors.newFixedThreadPool(10)
+        val tasks =
+            PARTICIPANT_TYPES.flatMap { type ->
+                List(10) { Callable { walkIn("""{"category":"$type"}""").andReturn().response.status } }
+            }
+        executor.invokeAll(tasks).map { it.get() }.toSet() shouldBe setOf(200)
+        executor.shutdown()
+
+        PARTICIPANT_TYPES.forEach { walkInGet().andExpect(jsonPath("$.counts[?(@.category=='$it')].count").value(10)) }
+        walkInGet().andExpect(jsonPath("$.total").value(PARTICIPANT_TYPES.size * 10))
+    }
+
+    @Test
+    fun `간편입장 요약에 참가 유형이 나온다`() {
+        walkIn("""{"category":"PRE_SERVICE_TEACHER"}""")
+        walkIn("""{"category":"MIDDLE_SCHOOL_STUDENT"}""")
+        walkIn("""{"category":"MIDDLE_SCHOOL_STUDENT"}""")
+        mockMvc
+            .perform(admin(get("/attendance/summary/$EXPO")))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.walkIn.counts[?(@.category=='MIDDLE_SCHOOL_STUDENT')].count").value(2))
+            .andExpect(jsonPath("$.walkIn.counts[?(@.category=='PRE_SERVICE_TEACHER')].count").value(1))
+            .andExpect(jsonPath("$.walkIn.total").value(3))
+    }
+
+    @Test
     fun `관리자만 쓸 수 있고 입력을 검증한다`() {
         mockMvc
             .perform(
@@ -174,6 +228,8 @@ class WalkInAndSummaryApiTests : IntegrationTestSupport() {
             """{"category":"ELDER"}""",
             """{"category":"ADULT","action":"X"}""",
             """{"category":"ADULT","requestId":"bad id!"}""",
+            """{"category":"CHILD"}""",
+            """{"category":"school_staff"}""",
         ).forEach {
             walkIn(it).andExpect(status().isBadRequest)
         }
@@ -278,5 +334,16 @@ class WalkInAndSummaryApiTests : IntegrationTestSupport() {
 
     private companion object {
         const val EXPO = "0b1f6c3e-52a4-4d6e-9d57-4b7a1e5c9a10"
+        val PARTICIPANT_TYPES =
+            listOf(
+                "KINDERGARTEN_STUDENT",
+                "ELEMENTARY_STUDENT",
+                "MIDDLE_SCHOOL_STUDENT",
+                "HIGH_SCHOOL_STUDENT",
+                "PARENT",
+                "GENERAL",
+                "TEACHER",
+                "PRE_SERVICE_TEACHER",
+            )
     }
 }
