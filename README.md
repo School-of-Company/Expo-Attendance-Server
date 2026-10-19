@@ -11,7 +11,6 @@ Expo-Attention-Server
 | `INTERNAL_TOKEN` | 이 서비스의 `/internal/**`를 보호하는 `X-Internal-Token` 값. 폼 서비스가 이 값을 `PARTICIPATION_SERVICE_INTERNAL_TOKEN`으로 들고 있다 |
 | `USER_INTERNAL_TOKEN`, `EXPO_INTERNAL_TOKEN`, `APPLICATION_INTERNAL_TOKEN` | 유저·박람회·신청 서비스를 호출할 때 보내는 토큰. 각 서비스의 `INTERNAL_TOKEN`과 같은 값 |
 | `USER_URL`, `EXPO_URL`, `APPLICATION_URL` | 비우면 Eureka로 찾는다. Gateway·Eureka 없이 로컬에서 직접 부를 때만 지정한다 |
-| `ENTRY_RETRY_WINDOW_SECONDS` | 입장이 성공한 직후 같은 스캐너 사용자가 같은 QR을 다시 찍으면 처음 응답을 돌려주는 시간(초, 기본 `300`, `0`이면 끔) |
 | `QR_ENTRY_REVIEW_ENABLED`, `QR_ENTRY_REVIEW_INTERVAL_MS` | 박람회 서비스 장애 때 기간 확인 없이 기록한 종이 QR 입장을 다시 확인하는 작업을 켜고 끄는 값(기본 `true`)과 주기(기본 5분) |
 | `EXPO_PERIOD_CACHE_TTL_SECONDS` | 박람회 서비스에서 읽은 박람회 기간을 다시 부르지 않고 쓰는 시간(초, 기본 `30`, `0`이면 끔). 박람회 기간을 고친 직후 최대 이 시간만큼 이전 기간으로 판단될 수 있다 |
 | `CANCELLATION_ABORTED_RETENTION_DAYS` | 중단된 취소 작업 기록(`tb_cancellation_aborted`)을 이 일수가 지나면 지운다(기본 `0` = 지우지 않음). 신청 서비스가 중단 뒤 늦게 보낼 수 있는 재시도 기간보다 충분히 길게 둔다. 다른 데이터는 기간으로 지우지 않는다(`docs/data-retention.md`) |
