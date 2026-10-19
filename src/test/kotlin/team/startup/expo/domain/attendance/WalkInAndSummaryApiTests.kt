@@ -32,6 +32,7 @@ import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
 import java.time.LocalDate
 import java.util.concurrent.Callable
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 
 class WalkInAndSummaryApiTests : IntegrationTestSupport() {
@@ -106,6 +107,51 @@ class WalkInAndSummaryApiTests : IntegrationTestSupport() {
         executor.shutdown()
 
         walkInGet().andExpect(jsonPath("$.counts[?(@.category=='STUDENT')].count").value(40)).andExpect(jsonPath("$.total").value(40))
+    }
+
+    @Test
+    fun `같은 requestId를 동시에 보내도 한 번만 센다`() {
+        val threads = 8
+        val executor = Executors.newFixedThreadPool(threads)
+        val start = CountDownLatch(1)
+        val statuses =
+            List(threads) {
+                executor.submit(
+                    Callable {
+                        start.await()
+                        walkIn("""{"category":"ADULT","requestId":"req-race-1"}""").andReturn().response.status
+                    },
+                )
+            }
+        start.countDown()
+        statuses.map { it.get() }.toSet() shouldBe setOf(200)
+        executor.shutdown()
+
+        walkInGet().andExpect(jsonPath("$.total").value(1))
+    }
+
+    @Test
+    fun `집계보다 많은 UNDO를 동시에 보내도 0 아래로 내려가지 않는다`() {
+        repeat(3) { walkIn("""{"category":"ADULT"}""").andExpect(status().isOk) }
+        val threads = 10
+        val executor = Executors.newFixedThreadPool(threads)
+        val start = CountDownLatch(1)
+        val statuses =
+            List(threads) {
+                executor.submit(
+                    Callable {
+                        start.await()
+                        walkIn("""{"category":"ADULT","action":"UNDO"}""").andReturn().response.status
+                    },
+                )
+            }
+        start.countDown()
+        val results = statuses.map { it.get() }
+        executor.shutdown()
+
+        results.count { it == 200 } shouldBe 3
+        results.count { it == 400 } shouldBe threads - 3
+        walkInGet().andExpect(jsonPath("$.total").value(0))
     }
 
     @Test
