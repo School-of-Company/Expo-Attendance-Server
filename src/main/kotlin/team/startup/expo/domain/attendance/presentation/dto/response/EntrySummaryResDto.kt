@@ -52,7 +52,7 @@ data class PaperEntryCountResDto(
     val category: String?,
     @field:Schema(description = "입장 수", example = "12")
     val entered: Long,
-    @field:Schema(description = "이 중 퇴장한 수", example = "3")
+    @field:Schema(description = "이 중 지금 밖에 있는 수(퇴장했다가 재입장하면 빠진다)", example = "3")
     val exited: Long,
 )
 
@@ -60,7 +60,12 @@ data class PaperEntryCountResDto(
 data class EntryTotalsResDto(
     @field:Schema(description = "등록 QR + 종이 QR + 간편입장의 입장 합계", example = "73")
     val entered: Long,
-    @field:Schema(description = "퇴장한 수(QR로 입장한 사람만 센다. 간편입장은 퇴장을 세지 않는다)", example = "10")
+    @field:Schema(
+        description =
+            "지금 밖에 있는 수(QR로 입장한 사람만 센다. 간편입장은 세지 않는다). 퇴장했다가 재입장하면 빠진다. " +
+                "시간대별·스캐너별 `exited`는 퇴장 스캔 횟수라 재입장이 있으면 이 값과 다를 수 있다",
+        example = "10",
+    )
     val exited: Long,
     @field:Schema(description = "QR로 입장했고 아직 퇴장하지 않은 수(등록 QR + 종이 QR − 퇴장). 간편입장은 포함하지 않는다", example = "25")
     val stillInside: Long,
