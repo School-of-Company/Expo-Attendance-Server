@@ -77,8 +77,7 @@ class CancellationGuardServiceImpl(
     ): AcquireCancellationGuardResult {
         // 1) 진행 중인 입장·프로그램 스캔이 끝나기를 기다린 뒤 보호를 건다. 이 뒤의 스캔은 거절된다.
         val alreadyCommitted =
-            exclusive(expoId, participantId) {
-                deletedExpoRepository.lockExpo(expoId)
+            exclusive(expoId, participantId, lockExpoFirst = true) {
                 if (deletedExpoRepository.existsById(expoId)) throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
                 // 이미 중단된 작업의 지연된 acquire가 보호를 다시 걸지 못하게 한다. 새 operationId로 다시 시작해야 한다
                 if (cancellationGuardRepository.existsAborted(expoId, participantId, operationId)) {
@@ -207,23 +206,31 @@ class CancellationGuardServiceImpl(
     private fun <T> exclusive(
         expoId: String,
         participantId: Long,
+        lockExpoFirst: Boolean = false,
         block: () -> T,
-    ): T = locked(CancellationGuardGate.participantKey(expoId, participantId), block)
+    ): T = locked(CancellationGuardGate.participantKey(expoId, participantId), expoId.takeIf { lockExpoFirst }, block)
 
     private fun lockTrainee(
         expoId: String,
         traineeId: Long,
         block: () -> Unit,
-    ) = locked(CancellationGuardGate.traineeKey(expoId, traineeId), block)
+    ) = locked(CancellationGuardGate.traineeKey(expoId, traineeId), null, block)
 
+    /**
+     * 잠금 순서 규칙(#167): 한 트랜잭션에서 둘 이상 잡을 때는 항상 박람회 락 -> 참가자(연수자) 락 순서다.
+     * [PreregisterSessionServiceImpl.assign]이 이 순서로 잡으므로 반대로 잡으면 같은 참가자에서 교착이 난다.
+     * 박람회 락이 필요한 호출은 [expoIdToLock]을 넘겨 참가자 락보다 먼저 잡게 한다.
+     */
     private fun <T> locked(
         key: String,
+        expoIdToLock: String?,
         block: () -> T,
     ): T {
         try {
             return requireNotNull(
                 transaction.execute {
                     cancellationGuardRepository.setLockTimeout(CancellationGuardGate.LOCK_TIMEOUT)
+                    if (expoIdToLock != null) deletedExpoRepository.lockExpo(expoIdToLock)
                     val start = System.nanoTime()
                     try {
                         cancellationGuardRepository.lockExclusive(key)

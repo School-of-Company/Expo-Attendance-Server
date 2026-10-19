@@ -6,6 +6,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.springframework.dao.CannotAcquireLockException
 import org.springframework.http.HttpStatus
 import team.startup.expo.domain.attendance.entity.CancellationGuard
@@ -119,6 +120,22 @@ class CancellationGuardServiceImplSpec : BehaviorSpec() {
                 }
                 then("유저 서비스에는 박람회, 전화번호, 참가자 ID를 보낸다") {
                     verify { userClient.getCancellationStatus(CancellationStatusReqDto(expoId, "010-0000-0000", participantId)) }
+                }
+            }
+
+            `when`("보호를 거는 트랜잭션에서 박람회 락과 참가자 락을 함께 잡으면(#167)") {
+                givenNoGuard()
+                every { userClient.getCancellationStatus(any()) } returns userStatus()
+                every { standardAttendanceRepository.existsByParticipantId(participantId) } returns false
+
+                service.acquire(expoId, participantId, operationId, acquireReq)
+
+                then("박람회 락을 참가자 락보다 먼저 잡는다(assign과 같은 순서라 교착이 나지 않는다)") {
+                    verifyOrder {
+                        guardRepository.setLockTimeout(CancellationGuardGate.LOCK_TIMEOUT)
+                        deletedExpoRepository.lockExpo(expoId)
+                        guardRepository.lockExclusive(CancellationGuardGate.participantKey(expoId, participantId))
+                    }
                 }
             }
 
