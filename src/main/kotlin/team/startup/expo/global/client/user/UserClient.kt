@@ -16,6 +16,15 @@ interface UserClient {
         @RequestBody request: ResolveStandardParticipantReqDto,
     ): ResolveStandardParticipantResDto
 
+    /**
+     * 전화번호와 응답자 구분(`STANDARD`, `TRAINEE`)으로 참가자(연수자) ID만 조회한다. 입장을 기록하지 않고, 없으면 404다.
+     * 연수자 재입장에서 유저 서비스의 409가 ID를 주지 않아 쓴다(#148).
+     */
+    @PostMapping("/internal/participants/resolve")
+    fun resolveParticipant(
+        @RequestBody request: ResolveParticipantReqDto,
+    ): ResolveParticipantResDto
+
     /** 참가자를 찾아 오늘의 입장을 기록한다. 참가자가 없으면 404, 오늘 이미 입장했으면 409다. */
     @PostMapping("/internal/entries")
     fun recordEntry(
