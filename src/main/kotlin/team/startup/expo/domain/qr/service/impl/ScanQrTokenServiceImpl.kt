@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service
 import team.startup.expo.domain.attendance.entity.EntryStatus
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
+import team.startup.expo.domain.attendance.service.EntryReplayPolicy
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.ScannerName
 import team.startup.expo.domain.qr.entity.QrEntryPeriodCheck
@@ -34,6 +35,7 @@ class ScanQrTokenServiceImpl(
     private val qrEntryRepository: QrEntryRepository,
     private val entryLogRepository: EntryLogRepository,
     private val expoPeriodValidator: ExpoPeriodValidator,
+    private val entryReplayPolicy: EntryReplayPolicy,
     private val clock: Clock,
 ) : ScanQrTokenService {
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -66,6 +68,18 @@ class ScanQrTokenServiceImpl(
         }
         if (qrTokenRepository.existsByTokenAndExpoIdAndRevokedAtIsNotNull(reqDto.token, expoId)) {
             throw ExpectedException(HttpStatus.BAD_REQUEST, "사용이 중지된 QR입니다.")
+        }
+        // 방금 같은 스캐너가 찍은 입장이면 타임아웃 뒤 재시도로 보고 직전 결과를 다시 돌려준다(#176). 아무것도 기록하지 않는다.
+        // 없는 토큰과 무효화한 토큰은 위에서 이미 거절했다
+        val log =
+            entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(
+                expoId,
+                EntrySubjectType.PAPER_QR,
+                reqDto.token,
+                today,
+            )
+        if (entryReplayPolicy.allows(log, now, scanner)) {
+            return ScanQrTokenResDto(EntryStatus.FIRST, log!!.enteredAt.format(TIME))
         }
         throw ExpectedException(HttpStatus.BAD_REQUEST, "오늘 이미 입장한 QR입니다.")
     }
