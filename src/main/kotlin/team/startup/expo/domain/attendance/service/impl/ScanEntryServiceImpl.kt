@@ -4,6 +4,7 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import team.startup.expo.domain.attendance.entity.EntryLog
 import team.startup.expo.domain.attendance.entity.EntryStatus
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.presentation.dto.request.EntryAuthority
@@ -13,6 +14,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.ScanEntryRe
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.EntryLogService
+import team.startup.expo.domain.attendance.service.EntryReplayPolicy
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
 import team.startup.expo.domain.attendance.service.ScanEntryService
@@ -48,6 +50,7 @@ class ScanEntryServiceImpl(
     private val cancellationGuardGate: CancellationGuardGate,
     private val entryLogService: EntryLogService,
     private val entryLogRepository: EntryLogRepository,
+    private val entryReplayPolicy: EntryReplayPolicy,
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
 ) : ScanEntryService {
@@ -144,19 +147,13 @@ class ScanEntryServiceImpl(
         val log =
             entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(expoId, subjectType, subjectId.toString(), today)
         // 입장 로그가 없거나(로그 도입 전 입장, 로그 유실) 퇴장하지 않았으면 재입장이 아니다
-        if (log?.exitedAt == null) throw alreadyEntered()
+        if (log?.exitedAt == null) {
+            // 방금 같은 스캐너가 찍은 입장이면 타임아웃 뒤 재시도로 보고 직전 결과를 다시 돌려준다(#176). 아무것도 기록하지 않는다
+            if (entryReplayPolicy.allows(log, now, scanner)) return replayResponse(expoId, reqDto, subjectId, isTrainee, log!!)
+            throw alreadyEntered()
+        }
 
-        val name =
-            userCircuitBreaker.callService("유저", participantNotFound(reqDto)) {
-                if (isTrainee) {
-                    userClient.getTraineeNames(TraineeNamesReqDto(expoId, listOf(subjectId))).first { it.traineeId == subjectId }.name
-                } else {
-                    userClient
-                        .getStandardParticipantNames(StandardParticipantNamesReqDto(expoId, listOf(subjectId)))
-                        .first { it.participantId == subjectId }
-                        .name
-                }
-            }
+        val name = lookupName(expoId, reqDto, subjectId, isTrainee)
         // 동시에 같은 재입장 스캔이 오면 한쪽만 퇴장 시각을 비운다
         if (entryLogRepository.reenter(expoId, subjectType.name, subjectId.toString(), today, now, scanner) != 1) throw alreadyEntered()
 
@@ -171,6 +168,44 @@ class ScanEntryServiceImpl(
             firstEnteredTime = log.enteredAt.format(TIME),
         )
     }
+
+    /**
+     * 재생 응답. 입장 응답처럼 `FIRST`와 최초 입장 시각을 돌려주지만, 유저 서비스의 409는 참가자 정보를 주지 않으므로 재입장 응답처럼
+     * 이름 외 정보(개인정보 동의 상태, 명찰)는 비어 있다.
+     */
+    private fun replayResponse(
+        expoId: String,
+        reqDto: ScanEntryReqDto,
+        subjectId: Long,
+        isTrainee: Boolean,
+        log: EntryLog,
+    ) = ScanEntryResDto(
+        id = subjectId,
+        name = lookupName(expoId, reqDto, subjectId, isTrainee),
+        phoneNumber = reqDto.phoneNumber?.takeIf { reqDto.participantId == null },
+        personalInformationStatus = null,
+        participationType = reqDto.authority.participationType,
+        badge = null,
+        entryStatus = EntryStatus.FIRST,
+        firstEnteredTime = log.enteredAt.format(TIME),
+    )
+
+    private fun lookupName(
+        expoId: String,
+        reqDto: ScanEntryReqDto,
+        subjectId: Long,
+        isTrainee: Boolean,
+    ): String =
+        userCircuitBreaker.callService("유저", participantNotFound(reqDto)) {
+            if (isTrainee) {
+                userClient.getTraineeNames(TraineeNamesReqDto(expoId, listOf(subjectId))).first { it.traineeId == subjectId }.name
+            } else {
+                userClient
+                    .getStandardParticipantNames(StandardParticipantNamesReqDto(expoId, listOf(subjectId)))
+                    .first { it.participantId == subjectId }
+                    .name
+            }
+        }
 
     private fun alreadyEntered() = ExpectedException(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.")
 

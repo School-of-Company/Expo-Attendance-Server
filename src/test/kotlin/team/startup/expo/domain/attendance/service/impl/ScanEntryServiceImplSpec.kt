@@ -21,6 +21,7 @@ import team.startup.expo.domain.attendance.repository.CancellationGuardRepositor
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.EntryLogService
+import team.startup.expo.domain.attendance.service.EntryReplayPolicy
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
 import team.startup.expo.global.client.user.RecordEntryReqDto
@@ -32,6 +33,7 @@ import team.startup.expo.global.client.user.StandardParticipantNameResDto
 import team.startup.expo.global.client.user.TraineeNameResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
+import team.startup.expo.global.config.EntryReplayProperties
 import team.startup.expo.global.exception.ExpectedException
 import team.startup.expo.support.UnitTestSupport
 import team.startup.expo.support.shouldFailWith
@@ -60,6 +62,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
             CancellationGuardGate(UnitTestSupport.transactionManager(), guardRepository),
             entryLogService,
             entryLogRepository,
+            EntryReplayPolicy(EntryReplayProperties(windowSeconds = 30)),
             JsonMapper.builder().build(),
             clock,
         )
@@ -177,6 +180,103 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                     res.entryStatus shouldBe EntryStatus.RE_ENTRY
                     res.id shouldBe 77L
                     res.participationType shouldBe "TRAINEE"
+                }
+            }
+        }
+
+        given("409를 받고 퇴장 없이 같은 스캐너가 재생 구간 안에 다시 찍으면(#176)") {
+            fun enteredLog(
+                enteredAt: LocalDateTime = LocalDateTime.now(clock).minusSeconds(10),
+                exitedAt: LocalDateTime? = null,
+                scanner: String? = "door-1",
+            ) = EntryLog(
+                expoId = expoId,
+                subjectType = EntrySubjectType.STANDARD,
+                subjectId = "55",
+                attendanceDate = today,
+                enteredAt = enteredAt,
+                exitedAt = exitedAt,
+                scanner = scanner,
+            )
+
+            fun givenLog(log: EntryLog) {
+                every {
+                    entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(
+                        expoId,
+                        EntrySubjectType.STANDARD,
+                        "55",
+                        today,
+                    )
+                } returns log
+            }
+            givenPeriodOk()
+            every { userClient.recordEntry(any()) } throws UnitTestSupport.feignConflict()
+            every { userClient.getStandardParticipantNames(any()) } returns listOf(StandardParticipantNameResDto(55L, "홍길동"))
+            every { entryLogRepository.reenter(any(), any(), any(), any(), any(), any()) } returns 1
+
+            `when`("입장 후 10초 안에 같은 스캐너로 찍으면") {
+                givenLog(enteredLog())
+
+                then("FIRST와 최초 입장 시각을 응답하고 아무것도 기록하지 않는다") {
+                    val res = service.scan(expoId, codeReq, "door-1")
+                    res.entryStatus shouldBe EntryStatus.FIRST
+                    res.firstEnteredTime shouldBe "02:59"
+                    res.id shouldBe 55L
+                    res.name shouldBe "홍길동"
+                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any()) }
+                    verify(exactly = 0) { entryLogRepository.reenter(any(), any(), any(), any(), any(), any()) }
+                }
+            }
+
+            `when`("스캐너 이름이 한쪽에 없으면") {
+                givenLog(enteredLog())
+
+                then("같은 스캐너로 보고 재생한다") {
+                    service.scan(expoId, codeReq, null).entryStatus shouldBe EntryStatus.FIRST
+                }
+            }
+
+            `when`("재생 구간(30초)을 넘겨 찍으면") {
+                givenLog(enteredLog(enteredAt = LocalDateTime.now(clock).minusSeconds(31)))
+
+                then("400을 던진다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.") { service.scan(expoId, codeReq, "door-1") }
+                }
+            }
+
+            `when`("다른 스캐너로 찍으면") {
+                givenLog(enteredLog())
+
+                then("400을 던진다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.") { service.scan(expoId, codeReq, "door-2") }
+                }
+            }
+
+            `when`("퇴장한 뒤 다시 찍으면") {
+                givenLog(enteredLog(exitedAt = LocalDateTime.now(clock).minusSeconds(5)))
+
+                then("재생이 아니라 재입장이다") {
+                    service.scan(expoId, codeReq, "door-1").entryStatus shouldBe EntryStatus.RE_ENTRY
+                    verify(exactly = 1) { entryLogRepository.reenter(any(), any(), any(), any(), any(), any()) }
+                }
+            }
+
+            `when`("입장 로그가 없으면") {
+                then("400을 던진다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.") { service.scan(expoId, codeReq, "door-1") }
+                }
+            }
+        }
+
+        given("신청이 취소된 참가자가 재생 구간 안에 다시 찍으면(#176)") {
+            givenPeriodOk()
+            every { preregisterSessionValidator.checkNotCancelled(any(), any(), any()) } throws
+                ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청입니다.")
+
+            `when`("스캔하면") {
+                then("재생하지 않고 취소 오류를 그대로 던진다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "취소된 신청입니다.") { service.scan(expoId, codeReq, "door-1") }
+                    verify(exactly = 0) { userClient.recordEntry(any()) }
                 }
             }
         }

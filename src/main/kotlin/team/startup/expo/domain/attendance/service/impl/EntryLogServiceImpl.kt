@@ -28,15 +28,19 @@ class EntryLogServiceImpl(
         var failure: Exception? = null
         repeat(ATTEMPTS) {
             try {
-                entryLogRepository.insertIfAbsent(
-                    expoId,
-                    subjectType.name,
-                    subjectId,
-                    now.toLocalDate(),
-                    now,
-                    category,
-                    ScannerName.of(scannerName),
-                )
+                val scanner = ScannerName.of(scannerName)
+                val inserted =
+                    entryLogRepository.insertIfAbsent(
+                        expoId,
+                        subjectType.name,
+                        subjectId,
+                        now.toLocalDate(),
+                        now,
+                        category,
+                        scanner,
+                    )
+                // 퇴장한 뒤 다른 회차로 입장하면 유저 서비스는 새 입장으로 받으므로, 오늘 로그를 다시 열어 재입장으로 남긴다(#174)
+                if (inserted == 0) entryLogRepository.reenter(expoId, subjectType.name, subjectId, now.toLocalDate(), now, scanner)
                 return
             } catch (e: Exception) {
                 failure = e
