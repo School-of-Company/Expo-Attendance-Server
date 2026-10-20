@@ -15,7 +15,12 @@ import org.testcontainers.postgresql.PostgreSQLContainer
  * 컨텍스트와 컨테이너를 공유한다. 다른 서비스는 띄우지 않는다.
  */
 @SpringBootTest(
-    properties = ["eureka.client.enabled=false", "qr-entry-review.enabled=false", "expo-period-cache.ttl-seconds=0", "entry-replay.window-seconds=0"],
+    properties = [
+        "eureka.client.enabled=false",
+        "qr-entry-review.enabled=false",
+        "expo-period-cache.ttl-seconds=0",
+        "entry-replay.window-seconds=0",
+    ],
 )
 @AutoConfigureMockMvc
 @Import(IntegrationTestSupport.ContainersConfig::class)
