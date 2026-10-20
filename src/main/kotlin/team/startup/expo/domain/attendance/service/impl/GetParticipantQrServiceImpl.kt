@@ -26,10 +26,10 @@ class GetParticipantQrServiceImpl(
         reqDto: GetParticipantQrReqDto,
     ): ParticipantQrResDto {
         val notFound = ExpectedException(HttpStatus.NOT_FOUND, "QR을 찾지 못 했습니다.")
-        // 회차 기록은 확정·승급 때만 생기므로, 기록이 없거나 취소된 참가자(대기 포함)에게는 QR을 내주지 않는다
-        // 회차가 여러 개면 확정 상태인 회차가 하나라도 있어야 한다(#160)
+        // 입장 판정(PreregisterSessionValidator)과 같다: 회차 기록이 없는 참가자(현장등록)는 확인하지 않고(Application #250),
+        // 기록이 있으면 확정 상태인 회차가 하나라도 있어야 한다(#160). 대기·미확정 여부는 호출하는 신청 서비스가 먼저 판정한다
         val assignments = preregisterSessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId)
-        if (assignments.none { it.status == PreregisterSessionStatus.ACTIVE }) throw notFound
+        if (assignments.isNotEmpty() && assignments.none { it.status == PreregisterSessionStatus.ACTIVE }) throw notFound
 
         val qr =
             userCircuitBreaker.callService("유저", notFound) {
