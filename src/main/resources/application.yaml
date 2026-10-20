@@ -58,6 +58,8 @@ qr-entry-review:
 cancellation-aborted-retention:
   # 중단된 취소 작업 기록(tb_cancellation_aborted)을 이 일수가 지나면 지운다. 0이면 지우지 않는다(기본)
   days: ${CANCELLATION_ABORTED_RETENTION_DAYS:0}
+entry-replay:
+  window-seconds: ${ENTRY_REPLAY_WINDOW_SECONDS:30}
 expo-period-cache:
   ttl-seconds: ${EXPO_PERIOD_CACHE_TTL_SECONDS:30}
 # #141 실시간 입·퇴장 현황 변경 SSE(docs/admin-data-change-events.md). Gateway의 text/event-stream 전달을 확인한 뒤 켠다
