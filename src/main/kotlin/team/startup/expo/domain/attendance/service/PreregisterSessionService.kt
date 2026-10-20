@@ -2,6 +2,7 @@ package team.startup.expo.domain.attendance.service
 
 import team.startup.expo.domain.attendance.presentation.dto.request.AssignPreregisterSessionReqDto
 import team.startup.expo.domain.attendance.presentation.dto.request.CancelPreregisterSessionReqDto
+import team.startup.expo.domain.attendance.presentation.dto.request.FieldRegisterPreregisterSessionReqDto
 
 interface PreregisterSessionService {
     /**
@@ -13,6 +14,16 @@ interface PreregisterSessionService {
         expoId: String,
         participantId: Long,
         reqDto: AssignPreregisterSessionReqDto,
+    )
+
+    /**
+     * 취소한 참가자가 현장등록으로 다시 등록했다(#249). `revision`보다 오래된 취소 회차와 확정된 취소 보호를 풀어 현장등록자처럼 입장하게 한다.
+     * 확정 회차는 그대로 두고, 같은 요청을 다시 보내도 결과는 같다.
+     */
+    fun fieldRegister(
+        expoId: String,
+        participantId: Long,
+        reqDto: FieldRegisterPreregisterSessionReqDto,
     )
 
     /**

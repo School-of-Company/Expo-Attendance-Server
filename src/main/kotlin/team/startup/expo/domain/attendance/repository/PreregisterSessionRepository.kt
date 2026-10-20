@@ -113,11 +113,31 @@ interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long>
             INSERT INTO tb_preregister_session (expo_id, participant_id, session_id, status, revision, updated_at)
             VALUES (:expoId, :participantId, NULL, 'CANCELLED', :revision, :now)
             ON CONFLICT ON CONSTRAINT uk_preregister_session_participant_session
-            DO UPDATE SET revision = EXCLUDED.revision, updated_at = EXCLUDED.updated_at
+            DO UPDATE SET status = 'CANCELLED', revision = EXCLUDED.revision, updated_at = EXCLUDED.updated_at
             WHERE tb_preregister_session.revision < EXCLUDED.revision
         """,
     )
     fun recordCancelWithoutSessionIfNewer(
+        @Param("expoId") expoId: String,
+        @Param("participantId") participantId: Long,
+        @Param("revision") revision: Long,
+        @Param("now") now: LocalDateTime,
+    ): Int
+
+    /**
+     * 취소 뒤 현장등록으로 다시 등록했다(#249): revision이 더 큰 취소 기록만 현장 재등록으로 바꾼다. 확정 회차는 그대로 둔다.
+     * 행과 revision을 남겨 그보다 오래된 회차 PUT·DELETE와 늦게 온 취소 보호 확정이 다시 막지 못하게 한다.
+     */
+    @Transactional
+    @Modifying
+    @Query(
+        nativeQuery = true,
+        value = """
+            UPDATE tb_preregister_session SET status = 'FIELD_REGISTERED', revision = :revision, updated_at = :now
+            WHERE expo_id = :expoId AND participant_id = :participantId AND status = 'CANCELLED' AND revision < :revision
+        """,
+    )
+    fun fieldRegisterIfNewer(
         @Param("expoId") expoId: String,
         @Param("participantId") participantId: Long,
         @Param("revision") revision: Long,

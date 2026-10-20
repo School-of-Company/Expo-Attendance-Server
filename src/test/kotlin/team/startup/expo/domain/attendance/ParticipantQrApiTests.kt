@@ -59,22 +59,34 @@ class ParticipantQrApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `회차 기록이 없거나 취소된 참가자는 유저 서비스를 부르지 않고 같은 404이다`() {
-        val noRecord =
-            lookup()
-                .andExpect(status().isNotFound)
-                .andReturn()
-                .response.contentAsString
+    fun `회차 기록이 없는 현장등록 참가자는 입장 판정처럼 회차 확인 없이 QR 값을 돌려준다`() {
+        lookup()
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.participantId").value(PARTICIPANT))
+            .andExpect(jsonPath("$.code").value(CODE))
 
+        verify(userClient).getParticipantQr(ParticipantQrReqDto(EXPO, REPRESENTATIVE, PARTICIPANT))
+    }
+
+    @Test
+    fun `회차가 모두 취소된 참가자는 유저 서비스를 부르지 않고 소유권이 다른 경우와 같은 404이다`() {
         insert("CANCELLED")
         val cancelled =
             lookup()
                 .andExpect(status().isNotFound)
                 .andReturn()
                 .response.contentAsString
-
-        listOf(noRecord, cancelled).toSet().size shouldBe 1
         verify(userClient, never()).getParticipantQr(ParticipantQrReqDto(EXPO, REPRESENTATIVE, PARTICIPANT))
+
+        jdbcTemplate.update("DELETE FROM tb_preregister_session")
+        doThrow(feignException(404)).`when`(userClient).getParticipantQr(ParticipantQrReqDto(EXPO, OTHER_REPRESENTATIVE, PARTICIPANT))
+        val notOwner =
+            lookup(OTHER_REPRESENTATIVE)
+                .andExpect(status().isNotFound)
+                .andReturn()
+                .response.contentAsString
+
+        listOf(cancelled, notOwner).toSet().size shouldBe 1
     }
 
     @Test
