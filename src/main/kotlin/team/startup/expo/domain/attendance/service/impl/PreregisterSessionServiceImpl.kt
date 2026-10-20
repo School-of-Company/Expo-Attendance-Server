@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.entity.PreregisterSessionStatus
 import team.startup.expo.domain.attendance.presentation.dto.request.AssignPreregisterSessionReqDto
 import team.startup.expo.domain.attendance.presentation.dto.request.CancelPreregisterSessionReqDto
+import team.startup.expo.domain.attendance.presentation.dto.request.FieldRegisterPreregisterSessionReqDto
 import team.startup.expo.domain.attendance.repository.PreregisterSessionRepository
 import team.startup.expo.domain.attendance.service.CancellationGuardService
 import team.startup.expo.domain.attendance.service.PreregisterSessionService
@@ -53,6 +54,20 @@ class PreregisterSessionServiceImpl(
         } else {
             cancellationGuardService.releaseCommitted(expoId, participantId, revision)
         }
+    }
+
+    @Transactional
+    override fun fieldRegister(
+        expoId: String,
+        participantId: Long,
+        reqDto: FieldRegisterPreregisterSessionReqDto,
+    ) {
+        deletedExpoRepository.lockExpo(expoId)
+        if (deletedExpoRepository.existsById(expoId)) {
+            throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
+        }
+        preregisterSessionRepository.fieldRegisterIfNewer(expoId, participantId, reqDto.revision, LocalDateTime.now(clock))
+        cancellationGuardService.releaseCommitted(expoId, participantId, reqDto.revision)
     }
 
     @Transactional

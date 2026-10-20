@@ -506,6 +506,68 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
                 .content("""{"sessionId":$SESSION,"revision":$revision}"""),
         )
 
+    @Test
+    fun `취소 뒤 현장 재등록하면 오래된 취소만 풀려 회차 시간 확인 없이 입장하고 늦게 온 오래된 취소는 다시 막지 못한다`() {
+        // 회차 응답을 주지 않으므로 회차 시간을 확인하면 실패한다
+        putSession(2).andExpect(status().isNoContent)
+        acquire().andExpect(status().isNoContent)
+        deleteSession(3).andExpect(status().isNoContent)
+        commit(revision = 3).andExpect(status().isNoContent)
+        entryScan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("취소된 신청입니다."))
+
+        // 취소보다 오래된(같은) 재등록은 풀지 못한다
+        fieldRegister(3).andExpect(status().isNoContent)
+        entryScan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("취소된 신청입니다."))
+
+        fieldRegister(4).andExpect(status().isNoContent)
+        fieldRegister(4).andExpect(status().isNoContent)
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
+        entryScan().andExpect(status().isOk)
+
+        // 늦게 다시 온 같은 취소 통지는 아무것도 바꾸지 않는다. 풀린 보호의 확정 재전송은 409이고 신청 서비스는 abort로 끝낸다
+        deleteSession(3).andExpect(status().isNoContent)
+        commit(revision = 3).andExpect(status().isConflict)
+        entryScan().andExpect(status().isOk)
+
+        // 재등록 뒤의 새 취소는 다시 막는다
+        deleteSession(5).andExpect(status().isNoContent)
+        entryScan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("취소된 신청입니다."))
+
+        mockMvc
+            .perform(put(FIELD_PATH).contentType(MediaType.APPLICATION_JSON).content("""{"revision":6}"""))
+            .andExpect(status().isUnauthorized)
+        mockMvc
+            .perform(put(FIELD_PATH).header("X-Internal-Token", INTERNAL_TOKEN).contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isBadRequest)
+    }
+
+    @Test
+    fun `취소 보호 확정보다 현장 재등록이 먼저 도착하면 늦은 확정은 보호를 풀고 입장한다`() {
+        putSession(2).andExpect(status().isNoContent)
+        acquire().andExpect(status().isNoContent)
+        deleteSession(3).andExpect(status().isNoContent)
+        fieldRegister(4).andExpect(status().isNoContent)
+        entryScan().andExpect(status().isConflict)
+
+        commit(revision = 3).andExpect(status().isNoContent)
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
+        entryScan().andExpect(status().isOk)
+    }
+
+    private fun fieldRegister(revision: Long): ResultActions =
+        mockMvc.perform(
+            put(FIELD_PATH)
+                .header("X-Internal-Token", INTERNAL_TOKEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"revision":$revision}"""),
+        )
+
+    private fun deleteSession(revision: Long): ResultActions =
+        mockMvc.perform(
+            delete("/internal/expos/$EXPO/participants/$PARTICIPANT/preregister-session?sessionId=$SESSION&revision=$revision")
+                .header("X-Internal-Token", INTERNAL_TOKEN),
+        )
+
     private fun cancellationStatus(): ResultActions =
         mockMvc.perform(
             post(STATUS_PATH)
@@ -699,5 +761,6 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         const val ADMIN_PATH = "/internal/expos/$EXPO/participants/$PARTICIPANT/admin-cancellation-guard/$OPERATION"
         const val STATUS_PATH = "/internal/expos/$EXPO/participants/$PARTICIPANT/cancellation-status"
         const val SESSION = 11L
+        const val FIELD_PATH = "/internal/expos/$EXPO/participants/$PARTICIPANT/preregister-session/field-registration"
     }
 }
