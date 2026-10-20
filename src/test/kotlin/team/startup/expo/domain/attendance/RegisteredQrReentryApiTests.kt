@@ -179,6 +179,28 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `퇴장한 뒤 다른 회차로 입장하면 유저 서비스가 200이어도 입장 로그를 다시 연다`() {
+        // 다른 회차 입장은 유저 서비스가 새로 기록하고 200으로 답한다(#174)
+        doReturn(RecordEntryResDto(PARTICIPANT, "홍길동", "01012345678", true, "STANDARD", "TEACHER", "한빛중"))
+            .`when`(userClient)
+            .recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+        standardEntry().andExpect(status().isOk)
+        standardExit().andExpect(status().isOk)
+
+        standardEntry().andExpect(status().isOk)
+        summary()
+            .andExpect(jsonPath("$.totals.entered").value(1))
+            .andExpect(jsonPath("$.totals.stillInside").value(1))
+            .andExpect(jsonPath("$.reentered").value(1))
+        standardExit().andExpect(status().isOk)
+
+        // 퇴장하지 않은 채 다른 회차로 입장하면 로그는 그대로다
+        standardEntry().andExpect(status().isOk)
+        standardEntry().andExpect(status().isOk)
+        events() shouldBe listOf("ENTER", "EXIT", "RE_ENTER", "EXIT", "RE_ENTER")
+    }
+
+    @Test
     fun `입장 로그가 없는 입장자의 재스캔은 재입장이 아니라 400이다`() {
         standardEntry().andExpect(status().isOk)
         // 입장 로그 도입 전 입장이나 로그 유실을 흉내 낸다
