@@ -16,7 +16,7 @@ import java.time.Duration
 import java.time.Instant
 
 /**
- * 사전등록 참가자가 신청한 회차의 입장 시간인지 확인한다. 회차 기록이 없는 참가자(현장등록, 연동 전 등록)는 확인하지 않는다.
+ * 사전등록 참가자가 신청한 회차의 입장 시간인지 확인한다. 회차 기록이 없는 참가자(현장등록, 연동 전 등록, 취소 뒤 현장 재등록)는 확인하지 않는다.
  * 신청 상태는 참가자 ID와 code가 맞는 사람에게만 알려야 하므로, 회차 기록이 있으면 먼저 `verifyCode`로 확인한 뒤에 검사한다.
  * 한 사람이 여러 회차에 배정될 수 있고(#160), 확정 상태인 회차 중 지금이 입장 시간인 회차로 입장한다.
  * 허용 시간은 회차 시작 `leadMinutes`분 전부터 종료 시각까지이고, 시각은 모두 `Instant`(UTC)로 비교한다.
@@ -40,7 +40,7 @@ class PreregisterSessionValidator(
         participantId: Long,
         checkedSessionId: Long? = null,
     ): Long? {
-        val records = preregisterSessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId)
+        val records = records(expoId, participantId)
         if (records.isEmpty()) return null
         val active = activeSessionIds(records)
         if (active.isEmpty() || (checkedSessionId != null && checkedSessionId !in active)) throw cancelled()
@@ -56,7 +56,7 @@ class PreregisterSessionValidator(
         participantId: Long,
         verifyCode: () -> Unit,
     ): Long? {
-        val records = preregisterSessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId)
+        val records = records(expoId, participantId)
         if (records.isEmpty()) return null
         verifyCode()
         val sessionIds = activeSessionIds(records)
@@ -78,6 +78,14 @@ class PreregisterSessionValidator(
         }
         throw ExpectedException(HttpStatus.BAD_REQUEST, "입장 시간이 아닙니다. 신청한 회차 시작 ${properties.leadMinutes}분 전부터 입장할 수 있습니다.")
     }
+
+    /** 현장 재등록으로 끝난 기록은 회차 기록이 없는 것과 같다. */
+    private fun records(
+        expoId: String,
+        participantId: Long,
+    ) = preregisterSessionRepository
+        .findAllByExpoIdAndParticipantId(expoId, participantId)
+        .filter { it.status != PreregisterSessionStatus.FIELD_REGISTERED }
 
     /** 확정 상태인 회차 ID. 확정 상태인데 회차가 없는 기록은 있을 수 없는 상태라 호출 실패(503)로 본다. */
     private fun activeSessionIds(records: List<PreregisterSession>): List<Long> =

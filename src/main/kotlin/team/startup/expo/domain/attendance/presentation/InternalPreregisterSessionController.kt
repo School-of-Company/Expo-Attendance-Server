@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import team.startup.expo.domain.attendance.presentation.dto.request.AssignPreregisterSessionReqDto
 import team.startup.expo.domain.attendance.presentation.dto.request.CancelPreregisterSessionReqDto
+import team.startup.expo.domain.attendance.presentation.dto.request.FieldRegisterPreregisterSessionReqDto
 import team.startup.expo.domain.attendance.service.PreregisterSessionService
 import team.startup.expo.global.swagger.ApiError
 
@@ -39,6 +40,22 @@ class InternalPreregisterSessionController(
         @PathVariable participantId: Long,
         @Valid @RequestBody reqDto: AssignPreregisterSessionReqDto,
     ) = preregisterSessionService.assign(expoId, participantId, reqDto)
+
+    @Operation(
+        summary = "취소 뒤 현장 재등록",
+        description =
+            "사전등록을 취소한 참가자가 현장등록으로 다시 등록했을 때 보냅니다. revision보다 오래된 취소 회차와 확정된 취소 보호를 풀어 " +
+                "현장등록자처럼 회차 시간 확인 없이 입장할 수 있게 합니다. 확정 회차는 그대로 두고, 같은 요청을 다시 보내도 결과는 같습니다.",
+    )
+    @ApiError(400, "요청 값이 올바르지 않다.")
+    @ApiError(404, "삭제된 박람회다.")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PutMapping("/field-registration")
+    fun fieldRegister(
+        @PathVariable expoId: String,
+        @PathVariable participantId: Long,
+        @Valid @RequestBody reqDto: FieldRegisterPreregisterSessionReqDto,
+    ) = preregisterSessionService.fieldRegister(expoId, participantId, reqDto)
 
     @Operation(
         summary = "신청 취소 표시",
