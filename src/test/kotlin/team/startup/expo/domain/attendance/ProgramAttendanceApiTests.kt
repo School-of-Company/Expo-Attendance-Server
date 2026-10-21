@@ -20,10 +20,10 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.startup.expo.domain.attendance.entity.ProgramType
-import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
 import team.startup.expo.domain.attendance.service.DeleteProgramAttendancesService
+import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
 import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
 import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.application.ProgramApplicationResDto
