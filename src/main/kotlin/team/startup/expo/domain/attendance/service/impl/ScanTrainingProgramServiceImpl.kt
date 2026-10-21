@@ -63,7 +63,7 @@ class ScanTrainingProgramServiceImpl(
                 recordProgramAttendanceService.record(ProgramType.TRAINING, programId, traineeId, LocalDate.now(clock), now)
             }
         when (result) {
-            ProgramAttendanceResult.ENTERED, ProgramAttendanceResult.ALREADY_ENTERED -> Unit
+            ProgramAttendanceResult.ENTERED, ProgramAttendanceResult.LEFT, ProgramAttendanceResult.ALREADY_ENTERED -> Unit
             ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, "연수 프로그램을 찾지 못했습니다.")
         }
     }
