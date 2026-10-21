@@ -254,6 +254,14 @@ class ScanTrainingProgramServiceImplSpec : BehaviorSpec() {
                 }
             }
 
+            `when`("퇴실을 기록한 연수자이면") {
+                givenHappyPath(ProgramAttendanceResult.LEFT)
+
+                then("에러 없이 성공한다") {
+                    shouldNotThrowAny { service.scan(programId, byTrainee) }
+                }
+            }
+
             `when`("기록 도중 프로그램이 삭제되었으면") {
                 givenHappyPath(ProgramAttendanceResult.PROGRAM_DELETED)
 
