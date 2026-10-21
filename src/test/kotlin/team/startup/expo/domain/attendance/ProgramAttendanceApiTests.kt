@@ -41,6 +41,7 @@ import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.support.IntegrationTestSupport
+import tools.jackson.databind.json.JsonMapper
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
@@ -350,6 +351,47 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.length()").value(0))
     }
+
+    @Test
+    fun `프로그램별 출석 시간 조회는 예정일이 아닌 실제 기록한 날짜를 attendanceDate로 돌려준다`() {
+        val recordedOn = LocalDate.of(2026, 3, 2)
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1008, 509, recordedOn, LocalTime.of(9, 5))
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1008, 509, recordedOn, LocalTime.of(10, 40))
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1008, 510, recordedOn.plusDays(1), LocalTime.of(13, 0))
+        recordProgramAttendanceService.record(ProgramType.TRAINING, 2008, 509, recordedOn, LocalTime.of(14, 30))
+
+        mockMvc
+            .perform(get("/internal/program-attendances/standard/1008").header("X-Internal-Token", INTERNAL_TOKEN))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.length()").value(2))
+            .andExpect(jsonPath("$[?(@.participantId==509)].attendanceDate").value(org.hamcrest.Matchers.contains("2026-03-02")))
+            .andExpect(jsonPath("$[?(@.participantId==509)].entryTime").value(org.hamcrest.Matchers.contains("09:05")))
+            .andExpect(jsonPath("$[?(@.participantId==509)].leaveTime").value(org.hamcrest.Matchers.contains("10:40")))
+            .andExpect(jsonPath("$[?(@.participantId==510)].attendanceDate").value(org.hamcrest.Matchers.contains("2026-03-03")))
+            .andExpect(
+                jsonPath("$[?(@.participantId==510)].leaveTime").value(org.hamcrest.Matchers.contains(org.hamcrest.Matchers.nullValue())),
+            ).andExpect(jsonPath("$[0].traineeId").doesNotExist())
+
+        val training =
+            mockMvc
+                .perform(get("/internal/program-attendances/training/2008").header("X-Internal-Token", INTERNAL_TOKEN))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$[0].traineeId").value(509))
+                .andExpect(jsonPath("$[0].participantId").doesNotExist())
+                .andExpect(jsonPath("$[0].attendanceDate").value("2026-03-02"))
+                .andReturn()
+                .response.contentAsString
+
+        // 날짜를 모르는 기존 소비자(Expo-Expo-Server `ProgramAttendanceClient`) 모양으로도 읽힌다.
+        val legacy = JsonMapper.builder().build().readValue(training, Array<LegacyTrainingAttendance>::class.java)
+        legacy.single() shouldBe LegacyTrainingAttendance(509, "14:30", null)
+    }
+
+    private data class LegacyTrainingAttendance(
+        val traineeId: Long?,
+        val entryTime: String?,
+        val leaveTime: String?,
+    )
 
     @Test
     fun `프로그램 출석 정리는 내부 토큰이 필요하고 그 프로그램의 출석만 지우며 여러 번 불러도 같다`() {
