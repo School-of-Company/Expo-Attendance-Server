@@ -554,6 +554,25 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         entryScan().andExpect(status().isOk)
     }
 
+    @Test
+    fun `다른 날 회차로 확정된 참가자가 현장 재등록하면 그 회차 시간 없이 회차 없음으로 입장하고 재등록 전에는 회차 시간을 확인한다`() {
+        // 확정 회차는 어제 끝났다(다른 날 회차)
+        doReturn(PreregisterSessionResDto(SESSION, Instant.now(clock).minusSeconds(30 * 3600), Instant.now(clock).minusSeconds(27 * 3600)))
+            .`when`(expoClient)
+            .getPreregisterSession(EXPO, SESSION)
+        putSession(2).andExpect(status().isNoContent)
+        entryScan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("신청한 회차가 이미 끝났습니다."))
+
+        // 확정보다 오래된(같은) 재등록은 확정 회차를 바꾸지 못한다
+        fieldRegister(2).andExpect(status().isNoContent)
+        entryScan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("신청한 회차가 이미 끝났습니다."))
+
+        fieldRegister(3).andExpect(status().isNoContent)
+        entryScan().andExpect(status().isOk)
+        verify(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+        jdbcTemplate.queryForObject("SELECT status FROM tb_preregister_session", String::class.java) shouldBe "FIELD_REGISTERED"
+    }
+
     private fun fieldRegister(revision: Long): ResultActions =
         mockMvc.perform(
             put(FIELD_PATH)
