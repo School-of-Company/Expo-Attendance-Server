@@ -16,7 +16,7 @@ import java.time.Duration
 import java.time.Instant
 
 /**
- * 사전등록 참가자가 신청한 회차의 입장 시간인지 확인한다. 회차 기록이 없는 참가자(현장등록, 연동 전 등록, 취소 뒤 현장 재등록)는 확인하지 않는다.
+ * 사전등록 참가자가 신청한 회차의 입장 시간인지 확인한다. 회차 기록이 없는 참가자(현장등록, 연동 전 등록, 취소 뒤나 다른 날 회차 확정 뒤 현장 재등록)는 확인하지 않는다.
  * 신청 상태는 참가자 ID와 code가 맞는 사람에게만 알려야 하므로, 회차 기록이 있으면 먼저 `verifyCode`로 확인한 뒤에 검사한다.
  * 한 사람이 여러 회차에 배정될 수 있고(#160), 확정 상태인 회차 중 지금이 입장 시간인 회차로 입장한다.
  * 허용 시간은 회차 시작 `leadMinutes`분 전부터 종료 시각까지이고, 시각은 모두 `Instant`(UTC)로 비교한다.
@@ -45,6 +45,15 @@ class PreregisterSessionValidator(
         val active = activeSessionIds(records)
         if (active.isEmpty() || (checkedSessionId != null && checkedSessionId !in active)) throw cancelled()
         return checkedSessionId
+    }
+
+    /** 회차 기록이 있는데 확정 상태인 회차가 하나도 없으면 취소된 신청이다. QR 조회도 입장 판정과 같은 기준으로 이것을 쓴다(#186). */
+    fun isCancelled(
+        expoId: String,
+        participantId: Long,
+    ): Boolean {
+        val records = records(expoId, participantId)
+        return records.isNotEmpty() && records.none { it.status == PreregisterSessionStatus.ACTIVE }
     }
 
     /**

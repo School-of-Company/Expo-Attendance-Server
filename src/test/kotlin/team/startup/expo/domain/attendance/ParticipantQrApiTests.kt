@@ -90,6 +90,17 @@ class ParticipantQrApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `취소 뒤 현장 재등록한 참가자는 입장 판정처럼 QR 값을 돌려주고 다시 취소된 회차가 있으면 404이다`() {
+        insert("FIELD_REGISTERED")
+        lookup()
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.code").value(CODE))
+
+        insert("CANCELLED", sessionId = 12)
+        lookup().andExpect(status().isNotFound)
+    }
+
+    @Test
     fun `유저 서비스가 모른다고 하면 소유권이 다른 경우와 구분 없이 404이다`() {
         insert("ACTIVE")
         doThrow(feignException(404)).`when`(userClient).getParticipantQr(ParticipantQrReqDto(EXPO, OTHER_REPRESENTATIVE, PARTICIPANT))
@@ -148,11 +159,15 @@ class ParticipantQrApiTests : IntegrationTestSupport() {
         verify(userClient, never()).getParticipantQr(ParticipantQrReqDto(EXPO, REPRESENTATIVE, PARTICIPANT))
     }
 
-    private fun insert(status: String) {
+    private fun insert(
+        status: String,
+        sessionId: Long = 11,
+    ) {
         jdbcTemplate.update(
-            "INSERT INTO tb_preregister_session (expo_id, participant_id, session_id, status, updated_at) VALUES (?, ?, 11, ?, now())",
+            "INSERT INTO tb_preregister_session (expo_id, participant_id, session_id, status, updated_at) VALUES (?, ?, ?, ?, now())",
             EXPO,
             PARTICIPANT,
+            sessionId,
             status,
         )
     }
