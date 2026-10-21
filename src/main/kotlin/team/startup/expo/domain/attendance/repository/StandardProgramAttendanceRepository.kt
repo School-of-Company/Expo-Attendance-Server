@@ -46,6 +46,25 @@ interface StandardProgramAttendanceRepository : JpaRepository<StandardProgramAtt
         @Param("entryTime") entryTime: LocalTime,
     ): Int
 
+    /**
+     * 입실했고 아직 퇴실하지 않았으면 퇴실을 기록한다. 입실과 같은 분 안의 스캔(연속 스캔)은 퇴실로 치지 않는다.
+     * 반환값 0이면 기록하지 않았다.
+     */
+    @Transactional
+    @Modifying
+    @Query(
+        nativeQuery = true,
+        value = """
+            UPDATE tb_standard_program_attendance SET leave_time = :leaveTime
+            WHERE participant_id = :participantId AND standard_program_id = :programId AND leave_time IS NULL AND entry_time < :leaveTime
+        """,
+    )
+    fun markLeaveIfPresent(
+        @Param("programId") programId: Long,
+        @Param("participantId") participantId: Long,
+        @Param("leaveTime") leaveTime: LocalTime,
+    ): Int
+
     /** 프로그램의 출석 기록을 모두 지운다. */
     @Transactional
     @Modifying

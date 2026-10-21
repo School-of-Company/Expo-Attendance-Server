@@ -23,6 +23,7 @@ import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
 import team.startup.expo.domain.attendance.service.DeleteProgramAttendancesService
+import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
 import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
 import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.application.ProgramApplicationResDto
@@ -83,7 +84,7 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `일반 프로그램은 첫 스캔에 입실을 기록하고 다시 찍어도 퇴실을 기록하지 않는다`() {
+    fun `일반 프로그램은 첫 스캔에 입실을 기록하고 같은 분 안에 다시 찍어도 변하지 않는다`() {
         standardAllowed(expoId = "expo-a", programId = 1001, participantId = 501)
 
         mockMvc.perform(scanStandard(1001, "expo-a", 501)).andExpect(status().isOk)
@@ -91,12 +92,34 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
         entered.leaveTime shouldBe null
         entered.attendanceDate shouldBe today
 
-        // 두 번 세 번 찍어도 에러 없이 성공하고 기록은 그대로다
+        // 연속 스캔은 에러 없이 성공하고 기록은 그대로다(같은 분이라 퇴실로 치지 않는다)
         repeat(2) { mockMvc.perform(scanStandard(1001, "expo-a", 501)).andExpect(status().isOk) }
         val again = standardRepository.findByParticipantIdAndStandardProgramId(501, 1001)!!
         again.leaveTime shouldBe null
         again.entryTime shouldBe entered.entryTime
         standardRepository.findAllByStandardProgramId(1001).size shouldBe 1
+    }
+
+    @Test
+    fun `프로그램 출석은 다음 스캔에 퇴실을 기록하고 그 뒤 스캔은 변하지 않는다`() {
+        val day = today
+        val enter = LocalTime.of(9, 0)
+        val leave = LocalTime.of(10, 30)
+
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1901, 901, day, enter) shouldBe ProgramAttendanceResult.ENTERED
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1901, 901, day, enter) shouldBe ProgramAttendanceResult.ALREADY_ENTERED
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1901, 901, day, leave) shouldBe ProgramAttendanceResult.LEFT
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1901, 901, day, leave.plusMinutes(5)) shouldBe
+            ProgramAttendanceResult.ALREADY_ENTERED
+        val standard = standardRepository.findByParticipantIdAndStandardProgramId(901, 1901)!!
+        standard.entryTime shouldBe enter
+        standard.leaveTime shouldBe leave
+
+        recordProgramAttendanceService.record(ProgramType.TRAINING, 2901, 902, day, enter) shouldBe ProgramAttendanceResult.ENTERED
+        recordProgramAttendanceService.record(ProgramType.TRAINING, 2901, 902, day, leave) shouldBe ProgramAttendanceResult.LEFT
+        recordProgramAttendanceService.record(ProgramType.TRAINING, 2901, 902, day, leave.plusMinutes(5)) shouldBe
+            ProgramAttendanceResult.ALREADY_ENTERED
+        trainingRepository.findByTraineeIdAndTrainingProgramId(902, 2901)!!.leaveTime shouldBe leave
     }
 
     @Test
@@ -207,7 +230,7 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `연수 프로그램도 입실만 기록하고 다시 찍어도 변하지 않는다`() {
+    fun `연수 프로그램도 같은 분 안에 다시 찍어도 변하지 않는다`() {
         trainingAllowed(expoId = "expo-b", programId = 2001, traineeId = 601)
 
         mockMvc.perform(scanTraining(2001, "expo-b", 601)).andExpect(status().isOk)
