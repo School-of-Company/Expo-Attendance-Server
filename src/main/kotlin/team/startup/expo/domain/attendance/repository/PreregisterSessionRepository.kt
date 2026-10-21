@@ -125,7 +125,8 @@ interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long>
     ): Int
 
     /**
-     * 취소 뒤 현장등록으로 다시 등록했다(#249): revision이 더 큰 취소 기록만 현장 재등록으로 바꾼다. 확정 회차는 그대로 둔다.
+     * 현장등록으로 다시 등록했다(#249, #186): revision이 더 큰 취소 기록과 확정 회차를 모두 현장 재등록으로 바꾼다.
+     * 확정 회차도 바꾸는 것은 다른 날 회차로 확정된 사람이 현장등록하면 그 회차 시간 없이 입장해야 하기 때문이다(그날 회차 확정자는 신청 서비스가 현장등록을 거절한다).
      * 행과 revision을 남겨 그보다 오래된 회차 PUT·DELETE와 늦게 온 취소 보호 확정이 다시 막지 못하게 한다.
      */
     @Transactional
@@ -134,7 +135,7 @@ interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long>
         nativeQuery = true,
         value = """
             UPDATE tb_preregister_session SET status = 'FIELD_REGISTERED', revision = :revision, updated_at = :now
-            WHERE expo_id = :expoId AND participant_id = :participantId AND status = 'CANCELLED' AND revision < :revision
+            WHERE expo_id = :expoId AND participant_id = :participantId AND status IN ('CANCELLED', 'ACTIVE') AND revision < :revision
         """,
     )
     fun fieldRegisterIfNewer(

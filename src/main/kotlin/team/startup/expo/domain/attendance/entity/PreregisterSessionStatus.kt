@@ -7,6 +7,6 @@ enum class PreregisterSessionStatus {
     /** 취소된 신청. QR로 입장할 수 없다. */
     CANCELLED,
 
-    /** 취소한 뒤 현장등록으로 다시 등록했다(Application #249). 회차 확인 대상이 아니라 현장등록자처럼 입장하고, revision은 순서 비교에 남긴다. */
+    /** 취소했거나 다른 날 회차로 확정된 뒤 현장등록으로 다시 등록했다(Application #249, #186). 회차 확인 대상이 아니라 현장등록자처럼 입장하고, revision은 순서 비교에 남긴다. */
     FIELD_REGISTERED,
 }
