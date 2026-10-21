@@ -18,13 +18,13 @@ class GetProgramAttendancesServiceImpl(
     @Transactional(readOnly = true)
     override fun getStandard(programId: Long): List<StandardProgramAttendanceResDto> =
         standardRepository.findAllByStandardProgramId(programId).map {
-            StandardProgramAttendanceResDto(it.participantId, it.entryTime.text(), it.leaveTime?.text())
+            StandardProgramAttendanceResDto(it.participantId, it.attendanceDate, it.entryTime.text(), it.leaveTime?.text())
         }
 
     @Transactional(readOnly = true)
     override fun getTraining(programId: Long): List<TrainingProgramAttendanceResDto> =
         trainingRepository.findAllByTrainingProgramId(programId).map {
-            TrainingProgramAttendanceResDto(it.traineeId, it.entryTime.text(), it.leaveTime?.text())
+            TrainingProgramAttendanceResDto(it.traineeId, it.attendanceDate, it.entryTime.text(), it.leaveTime?.text())
         }
 
     private fun LocalTime.text(): String = format(TIME_FORMAT)
