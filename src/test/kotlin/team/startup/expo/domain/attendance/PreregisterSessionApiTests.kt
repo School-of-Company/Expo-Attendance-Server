@@ -15,6 +15,10 @@ import org.mockito.Mockito.reset
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.bean.override.mockito.MockitoBean
@@ -41,7 +45,9 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 
+@Import(PreregisterSessionApiTests.FixedClockConfig::class)
 class PreregisterSessionApiTests : IntegrationTestSupport() {
     @Autowired
     private lateinit var mockMvc: MockMvc
@@ -439,6 +445,13 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
         deleteExpoDataService.delete(EXPO)
 
         jdbcTemplate.queryForList("SELECT expo_id FROM tb_preregister_session", String::class.java) shouldBe listOf("other-expo")
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    class FixedClockConfig {
+        @Bean
+        @Primary
+        fun testClock(): Clock = Clock.fixed(Instant.parse("2026-10-22T03:00:00Z"), ZoneId.of("Asia/Seoul"))
     }
 
     private fun sessionAt(
