@@ -67,13 +67,13 @@ class ScanTrainingProgramServiceImpl(
                 }
                 recordProgramAttendanceService.record(ProgramType.TRAINING, programId, traineeId, LocalDate.now(clock), now)
             }
+        // 연수 프로그램은 시간대 검사를 하지 않아 ENTRY_NOT_ALLOWED가 오는 일은 없다
         val scanResult =
             when (result) {
                 ProgramAttendanceResult.ENTERED -> ProgramScanResult.ENTERED
                 ProgramAttendanceResult.LEFT -> ProgramScanResult.LEFT
                 ProgramAttendanceResult.ALREADY_ENTERED -> ProgramScanResult.UNCHANGED
                 ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, "연수 프로그램을 찾지 못했습니다.")
-                // 연수 프로그램은 시간대 검사를 하지 않아 입실이 거절되는 일이 없다
                 ProgramAttendanceResult.ENTRY_NOT_ALLOWED -> throw ExpectedException(HttpStatus.BAD_REQUEST, "출석 가능한 시간이 아닙니다.")
             }
         return ProgramScanResDto(
