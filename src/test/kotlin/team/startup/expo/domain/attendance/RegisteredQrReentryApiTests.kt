@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
+import team.startup.expo.global.client.expo.PreregisterSessionResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.ResolveParticipantReqDto
@@ -234,7 +235,37 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `취소 보호가 걸린 참가자는 재입장도 거절한다`() {
+    fun `독립 FIELD가 없는 PRE 참가자는 취소 보호로 재입장도 거절한다`() {
+        jdbcTemplate.update("DELETE FROM tb_field_visit WHERE expo_id = ? AND participant_id = ?", EXPO, PARTICIPANT)
+        jdbcTemplate.update(
+            "INSERT INTO tb_preregister_session (expo_id,participant_id,session_id,status,updated_at) VALUES (?, ?, 11, 'ACTIVE', now())",
+            EXPO,
+            PARTICIPANT,
+        )
+        val starts = today.atStartOfDay(clock.zone).toInstant()
+        val ends =
+            today
+                .plusDays(1)
+                .atStartOfDay(clock.zone)
+                .toInstant()
+                .minusSeconds(1)
+        doReturn(PreregisterSessionResDto(11, starts, ends))
+            .`when`(expoClient)
+            .getPreregisterSession(EXPO, 11)
+        org.mockito.Mockito
+            .doReturn(RecordEntryResDto(PARTICIPANT, "홍길동", PHONE, true, "STANDARD", "TEACHER", "한빛중"))
+            .doThrow(feign(409))
+            .`when`(userClient)
+            .recordEntry(
+                RecordEntryReqDto(
+                    EXPO,
+                    "STANDARD",
+                    participantId = PARTICIPANT,
+                    code = CODE,
+                    preregisterSessionId = 11,
+                    attendanceDate = today,
+                ),
+            )
         standardEntry().andExpect(status().isOk)
         standardExit().andExpect(status().isOk)
 
@@ -246,6 +277,16 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
         events() shouldBe listOf("ENTER", "EXIT")
         jdbcTemplate.update("DELETE FROM tb_cancellation_guard")
         standardEntry().andExpect(status().isOk).andExpect(jsonPath("$.entryStatus").value("RE_ENTRY"))
+    }
+
+    @Test
+    fun `오늘 독립 FIELD가 유효하면 과거 PRE 취소 확정은 재입장을 막지 않는다`() {
+        standardEntry().andExpect(status().isOk)
+        standardExit().andExpect(status().isOk)
+        guard("COMMITTED")
+
+        standardEntry().andExpect(status().isOk).andExpect(jsonPath("$.entryStatus").value("RE_ENTRY"))
+        events() shouldBe listOf("ENTER", "EXIT", "RE_ENTER")
     }
 
     @Test

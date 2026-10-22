@@ -12,21 +12,26 @@ import org.springframework.dao.CannotAcquireLockException
 import org.springframework.http.HttpStatus
 import team.startup.expo.domain.attendance.entity.CancellationGuard
 import team.startup.expo.domain.attendance.entity.CancellationGuardState
+import team.startup.expo.domain.attendance.presentation.dto.request.FieldVisitStatus
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
+import team.startup.expo.domain.attendance.repository.FieldVisit
 import team.startup.expo.support.UnitTestSupport
 import team.startup.expo.support.shouldFailWith
+import java.time.LocalDate
 import java.time.LocalDateTime
+import java.util.UUID
 
 class CancellationGuardGateSpec : BehaviorSpec() {
     override fun isolationMode() = IsolationMode.InstancePerLeaf
 
     private val repository = mockk<CancellationGuardRepository>(relaxed = true)
+    private val validator = UnitTestSupport.preregisterValidator()
     private val gate =
         CancellationGuardGate(
             UnitTestSupport.transactionManager(),
             repository,
             mockk(relaxed = true),
-            UnitTestSupport.preregisterValidator(),
+            validator,
             UnitTestSupport.fixedClock(),
         )
     private val expoId = "expo-1"
@@ -42,6 +47,35 @@ class CancellationGuardGateSpec : BehaviorSpec() {
         )
 
     init {
+        given("오늘 독립 FIELD가 유효한 참가자") {
+            every { validator.activeField(expoId, 7L, any()) } returns
+                FieldVisit(
+                    UUID.randomUUID(),
+                    expoId,
+                    7L,
+                    LocalDate.now(UnitTestSupport.fixedClock()),
+                    1,
+                    FieldVisitStatus.ACTIVE,
+                    UUID.randomUUID(),
+                )
+            CancellationGuardState.entries.forEach { state ->
+                `when`("기존 PRE 보호가 $state 이면") {
+                    every { repository.findByExpoIdAndParticipantId(expoId, 7L) } returns guard(state)
+                    then("진행 중 취소만 막고 과거 확정 취소는 독립 FIELD 권한을 보존한다") {
+                        var ran = false
+                        if (state == CancellationGuardState.HELD) {
+                            shouldFailWith(HttpStatus.CONFLICT, "신청 취소를 처리 중입니다.") {
+                                gate.scanning(expoId, participantId = 7L) { ran = true }
+                            }
+                            ran shouldBe false
+                        } else {
+                            gate.scanning(expoId, participantId = 7L) { ran = true }
+                            ran shouldBe true
+                        }
+                    }
+                }
+            }
+        }
         given("취소 보호 관문에서 참가자를 스캔할 때") {
             `when`("보호가 없으면") {
                 every { repository.findByExpoIdAndParticipantId(expoId, 7L) } returns null
