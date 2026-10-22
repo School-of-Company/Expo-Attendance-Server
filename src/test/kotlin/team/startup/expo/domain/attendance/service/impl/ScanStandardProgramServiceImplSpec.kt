@@ -17,6 +17,7 @@ import team.startup.expo.domain.attendance.repository.CancellationGuardRepositor
 import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
+import team.startup.expo.domain.attendance.service.ProgramScanNameResolver
 import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
 import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.application.ProgramApplicationResDto
@@ -42,6 +43,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
     private val expoClient = mockk<ExpoClient>()
     private val applicationClient = mockk<ApplicationClient>()
     private val recordService = mockk<RecordProgramAttendanceService>()
+    private val nameResolver = mockk<ProgramScanNameResolver>(relaxed = true)
     private val guardRepository = mockk<CancellationGuardRepository>(relaxed = true)
 
     // 03:07:42 UTC. 기록 시각은 분 단위로 잘린다
@@ -59,6 +61,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
             recordService,
             CancellationGuardGate(UnitTestSupport.transactionManager(), guardRepository),
             ProgramAttendanceProperties(requireCode),
+            nameResolver,
             clock,
         )
 
