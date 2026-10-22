@@ -239,6 +239,30 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
                 }
             }
 
+            `when`("프로그램 일정 시작 10분 전보다 이르면") {
+                givenHappyPath()
+                // 시계는 한국 시간 12:07이다
+                every { expoClient.getStandardProgram(expoId, programId) } returns
+                    StandardProgramResDto(programId, "프로그램", "2026-05-10T14:00", "2026-05-10T15:00")
+                every { recordService.record(any(), any(), any(), any(), any(), false) } returns ProgramAttendanceResult.ENTRY_NOT_ALLOWED
+
+                then("입실을 막도록 넘기고 400을 던진다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "출석 가능한 시간이 아닙니다.") { service().scan(programId, withCode) }
+                    verify(exactly = 1) { recordService.record(any(), any(), any(), any(), any(), false) }
+                }
+            }
+
+            `when`("프로그램 일정 시간대 안이면") {
+                givenHappyPath()
+                every { expoClient.getStandardProgram(expoId, programId) } returns
+                    StandardProgramResDto(programId, "프로그램", "2026-05-10T12:00", "2026-05-10T13:00")
+
+                then("입실을 허용하도록 넘긴다") {
+                    shouldNotThrowAny { service().scan(programId, withCode) }
+                    verify(exactly = 1) { recordService.record(any(), any(), any(), any(), any(), true) }
+                }
+            }
+
             `when`("기록 도중 프로그램이 삭제되었으면") {
                 givenHappyPath(ProgramAttendanceResult.PROGRAM_DELETED)
 

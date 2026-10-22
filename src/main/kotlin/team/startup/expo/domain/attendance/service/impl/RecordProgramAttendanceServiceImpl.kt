@@ -25,15 +25,20 @@ class RecordProgramAttendanceServiceImpl(
         personId: Long,
         attendanceDate: LocalDate,
         time: LocalTime,
+        entryAllowed: Boolean,
     ): ProgramAttendanceResult {
         val programKey = type.keyOf(programId)
         deletedProgramRepository.lockProgram(programKey)
         if (deletedProgramRepository.existsById(programKey)) return ProgramAttendanceResult.PROGRAM_DELETED
 
         val entered =
-            when (type) {
-                ProgramType.STANDARD -> standardRepository.insertEntryIfAbsent(programId, personId, attendanceDate, time)
-                ProgramType.TRAINING -> trainingRepository.insertEntryIfAbsent(programId, personId, attendanceDate, time)
+            if (!entryAllowed) {
+                0
+            } else {
+                when (type) {
+                    ProgramType.STANDARD -> standardRepository.insertEntryIfAbsent(programId, personId, attendanceDate, time)
+                    ProgramType.TRAINING -> trainingRepository.insertEntryIfAbsent(programId, personId, attendanceDate, time)
+                }
             }
         if (entered == 1) return ProgramAttendanceResult.ENTERED
 
@@ -42,6 +47,18 @@ class RecordProgramAttendanceServiceImpl(
                 ProgramType.STANDARD -> standardRepository.markLeaveIfPresent(programId, personId, time)
                 ProgramType.TRAINING -> trainingRepository.markLeaveIfPresent(programId, personId, time)
             }
-        return if (left == 1) ProgramAttendanceResult.LEFT else ProgramAttendanceResult.ALREADY_ENTERED
+        if (left == 1) return ProgramAttendanceResult.LEFT
+        if (!entryAllowed && !hasEntry(type, programId, personId)) return ProgramAttendanceResult.ENTRY_NOT_ALLOWED
+        return ProgramAttendanceResult.ALREADY_ENTERED
     }
+
+    private fun hasEntry(
+        type: ProgramType,
+        programId: Long,
+        personId: Long,
+    ): Boolean =
+        when (type) {
+            ProgramType.STANDARD -> standardRepository.findByParticipantIdAndStandardProgramId(personId, programId) != null
+            ProgramType.TRAINING -> trainingRepository.findByTraineeIdAndTrainingProgramId(personId, programId) != null
+        }
 }

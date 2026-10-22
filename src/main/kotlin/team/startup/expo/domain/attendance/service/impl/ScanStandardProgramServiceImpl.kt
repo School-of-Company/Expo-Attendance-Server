@@ -11,6 +11,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScan
 import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
+import team.startup.expo.domain.attendance.service.ProgramEntryWindow
 import team.startup.expo.domain.attendance.service.ProgramScanNameResolver
 import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
 import team.startup.expo.domain.attendance.service.ScanStandardProgramService
@@ -72,11 +73,15 @@ class ScanStandardProgramServiceImpl(
         reqDto: ScanStandardProgramReqDto,
     ): ProgramScanResDto {
         checkParticipant(reqDto)
-        expoCircuitBreaker.callService("박람회", ExpectedException(HttpStatus.NOT_FOUND, "일반 프로그램을 찾지 못 했습니다.")) {
-            expoClient.getStandardProgram(reqDto.expoId, programId)
-        }
+        val program =
+            expoCircuitBreaker.callService("박람회", ExpectedException(HttpStatus.NOT_FOUND, "일반 프로그램을 찾지 못 했습니다.")) {
+                expoClient.getStandardProgram(reqDto.expoId, programId)
+            }
         expoPeriodValidator.checkInProgress(reqDto.expoId)
 
+        // 입실만 일정 시간대 안에서 받는다. 이미 입실한 사람의 퇴실은 시각을 보지 않는다(#198)
+        val entryAllowed =
+            ProgramEntryWindow.allowsEntry(program.startedAt, program.endedAt, clock.instant(), properties.leadMinutes)
         // 분 단위로 기록한다(v1과 같음)
         val now = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES)
         // 신청 확인과 기록을 같은 취소 보호 락 안에서 한다. 이미 락 안에 있는 스캔은 신청 취소(acquire)가 기다리고, 취소가 끝난 뒤 들어온
@@ -90,7 +95,14 @@ class ScanStandardProgramServiceImpl(
                 if (!applied.applied) {
                     throw ExpectedException(HttpStatus.NOT_FOUND, "일반 프로그램을 참가 중인 유저를 찾지 못 했습니다.")
                 }
-                recordProgramAttendanceService.record(ProgramType.STANDARD, programId, reqDto.participantId, LocalDate.now(clock), now)
+                recordProgramAttendanceService.record(
+                    ProgramType.STANDARD,
+                    programId,
+                    reqDto.participantId,
+                    LocalDate.now(clock),
+                    now,
+                    entryAllowed,
+                )
             }
         val scanResult =
             when (result) {
@@ -98,6 +110,7 @@ class ScanStandardProgramServiceImpl(
                 ProgramAttendanceResult.LEFT -> ProgramScanResult.LEFT
                 ProgramAttendanceResult.ALREADY_ENTERED -> ProgramScanResult.UNCHANGED
                 ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, "일반 프로그램을 찾지 못 했습니다.")
+                ProgramAttendanceResult.ENTRY_NOT_ALLOWED -> throw ExpectedException(HttpStatus.BAD_REQUEST, "출석 가능한 시간이 아닙니다.")
             }
         return ProgramScanResDto(
             result = scanResult,
