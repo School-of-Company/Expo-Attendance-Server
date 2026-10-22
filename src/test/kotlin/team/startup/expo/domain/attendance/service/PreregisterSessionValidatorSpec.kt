@@ -35,6 +35,7 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
             UnitTestSupport.circuitBreaker("expo"),
             PreregisterEntryProperties(leadMinutes = 30),
             clock,
+            mockk(relaxed = true),
         )
 
     private val expoId = "expo-1"
@@ -57,6 +58,9 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
 
     private fun givenRecords(records: List<PreregisterSession>) {
         every { sessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId) } returns records
+        records.filter { it.status == PreregisterSessionStatus.ACTIVE }.mapNotNull { it.sessionId }.forEach {
+            givenSession(now.minusSeconds(600), now.plusSeconds(3600), it)
+        }
     }
 
     private fun givenSession(
@@ -74,15 +78,24 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
             listOf(null, PreregisterSessionStatus.ACTIVE, PreregisterSessionStatus.CANCELLED).forEach { status ->
                 `when`("기록 상태가 $status 이면") {
                     givenRecord(status?.let { record(status = it) })
-                    then("취소만 거절하고 회차는 붙이지도 조회하지도 않는다") {
-                        if (status == PreregisterSessionStatus.CANCELLED) {
+                    then("오늘의 ACTIVE 회차만 허용하고 시간검사 없이 회차를 붙인다") {
+                        if (status != PreregisterSessionStatus.ACTIVE) {
                             shouldFailWith(HttpStatus.BAD_REQUEST, "취소된 신청입니다.") {
                                 validator.checkNotCancelled(expoId, participantId)
                             }
                         } else {
-                            validator.checkNotCancelled(expoId, participantId) shouldBe null
+                            validator.checkNotCancelled(expoId, participantId) shouldBe 11L
                         }
-                        verify(exactly = 0) { expoClient.getPreregisterSession(any(), any()) }
+                        verify(
+                            exactly =
+                                if (status ==
+                                    PreregisterSessionStatus.ACTIVE
+                                ) {
+                                    1
+                                } else {
+                                    0
+                                },
+                        ) { expoClient.getPreregisterSession(any(), any()) }
                     }
                 }
             }
@@ -188,9 +201,9 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
             `when`("회차 기록이 없는 참가자이면") {
                 givenRecord(null)
 
-                then("아무것도 확인하지 않고 회차 없이 통과한다") {
-                    check() shouldBe null
-                    verifyCalls shouldBe 0
+                then("미상 날짜를 오늘 권한으로 추정하지 않고 거절한다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "취소된 신청입니다.") { check() }
+                    verifyCalls shouldBe 1
                     verify(exactly = 0) { expoClient.getPreregisterSession(any(), any()) }
                 }
             }

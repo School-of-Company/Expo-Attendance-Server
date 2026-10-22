@@ -22,8 +22,9 @@ class EntryLogServiceImpl(
         subjectId: String,
         category: String?,
         scannerName: String?,
+        enteredAt: LocalDateTime?,
     ) {
-        val now = LocalDateTime.now(clock)
+        val now = enteredAt ?: LocalDateTime.now(clock)
         // 유저 서비스는 이미 입장을 기록했다. 일시적인 DB 오류로 로그가 빠지면 퇴장 스캔이 "입장 기록 없음"이 되므로 몇 번 다시 시도한다.
         var failure: Exception? = null
         repeat(ATTEMPTS) {

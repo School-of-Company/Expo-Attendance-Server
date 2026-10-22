@@ -57,7 +57,13 @@ class ScanTrainingProgramServiceImplSpec : BehaviorSpec() {
             UnitTestSupport.circuitBreaker("application"),
             ExpoPeriodValidator(expoClient, UnitTestSupport.circuitBreaker("period"), ExpoPeriodCacheProperties(0), clock),
             recordService,
-            CancellationGuardGate(UnitTestSupport.transactionManager(), guardRepository),
+            CancellationGuardGate(
+                UnitTestSupport.transactionManager(),
+                guardRepository,
+                mockk(relaxed = true),
+                UnitTestSupport.preregisterValidator(),
+                clock,
+            ),
             nameResolver,
             clock,
         )

@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
+import team.startup.expo.domain.attendance.repository.FieldVisitRepository
 import team.startup.expo.domain.attendance.repository.PreregisterSessionRepository
 import team.startup.expo.domain.attendance.repository.WalkInLogRepository
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
@@ -26,6 +27,7 @@ class DeleteExpoDataServiceImpl(
     private val walkInLogRepository: WalkInLogRepository,
     private val deletedExpoRepository: DeletedExpoRepository,
     private val clock: Clock,
+    private val fieldVisits: FieldVisitRepository,
 ) : DeleteExpoDataService {
     @Transactional
     override fun delete(expoId: String) {
@@ -38,5 +40,6 @@ class DeleteExpoDataServiceImpl(
         entryLogRepository.deleteEventsByExpoId(expoId)
         entryLogRepository.deleteByExpoId(expoId)
         walkInLogRepository.deleteByExpoId(expoId)
+        fieldVisits.deleteExpo(expoId)
     }
 }

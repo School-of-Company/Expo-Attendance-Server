@@ -11,6 +11,7 @@ import io.mockk.mockk
 import org.springframework.http.HttpStatus
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
+import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.Instant
@@ -22,6 +23,11 @@ object UnitTestSupport {
     val NOW: Instant = Instant.parse("2026-05-10T03:00:00Z")
 
     fun fixedClock(instant: Instant = NOW): Clock = Clock.fixed(instant, ZoneOffset.UTC)
+
+    fun preregisterValidator(): PreregisterSessionValidator =
+        mockk<PreregisterSessionValidator>(relaxed = true).also {
+            every { it.activeField(any(), any(), any()) } returns null
+        }
 
     /** `TransactionTemplate.execute`가 콜백을 그대로 실행하도록 트랜잭션 매니저를 흉내 낸다. */
     fun transactionManager(): PlatformTransactionManager =

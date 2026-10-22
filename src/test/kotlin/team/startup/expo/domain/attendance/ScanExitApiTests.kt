@@ -28,6 +28,7 @@ import team.startup.expo.global.client.user.TraineeNameResDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
+import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
 import java.time.LocalDate
@@ -56,6 +57,7 @@ class ScanExitApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
+        FieldVisitFixtures.clear(jdbcTemplate)
         jdbcTemplate.execute(
             "TRUNCATE TABLE tb_entry_log, tb_entry_event, tb_qr_entry, tb_qr_token, tb_deleted_expo RESTART IDENTITY CASCADE",
         )
@@ -100,7 +102,11 @@ class ScanExitApiTests : IntegrationTestSupport() {
     fun `일반 참가자는 코드를 확인하고 입장한 뒤에만 퇴장한다`() {
         doReturn(
             entry(PARTICIPANT, "STANDARD"),
-        ).`when`(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+        ).`when`(
+            userClient,
+        ).recordEntry(
+            fieldEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE)),
+        )
 
         // 입장 전 퇴장은 400
         exit("""{"participantId":$PARTICIPANT,"code":"$CODE"}""").andExpect(status().isBadRequest)
@@ -222,4 +228,9 @@ class ScanExitApiTests : IntegrationTestSupport() {
         const val TRAINEE = 9001L
         const val CODE = "codePPPPPPPPPPPPPPPPPP"
     }
+
+    private fun fieldEntry(
+        request: RecordEntryReqDto,
+        participantId: Long = requireNotNull(request.participantId),
+    ) = FieldVisitFixtures.entry(jdbcTemplate, clock, request, participantId)
 }
