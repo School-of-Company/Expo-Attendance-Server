@@ -26,6 +26,7 @@ import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.StandardParticipantNameResDto
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.UserClient
+import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
 import java.time.LocalDate
@@ -52,6 +53,7 @@ class EntryStatsApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
+        FieldVisitFixtures.clear(jdbcTemplate)
         jdbcTemplate.execute(
             "TRUNCATE TABLE tb_walk_in_log, tb_entry_log, tb_entry_event, tb_qr_entry, tb_qr_token, tb_deleted_expo RESTART IDENTITY CASCADE",
         )
@@ -76,7 +78,13 @@ class EntryStatsApiTests : IntegrationTestSupport() {
         exitPaper("paper-a1", "gate-1")
         doReturn(RecordEntryResDto(7001, "홍길동", "01012345678", true, "STANDARD", "STUDENT", null))
             .`when`(userClient)
-            .recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = 7001, code = "codePPPPPPPPPPPPPPPPPP"))
+            .recordEntry(
+                FieldVisitFixtures.entry(
+                    jdbcTemplate,
+                    clock,
+                    RecordEntryReqDto(EXPO, "STANDARD", participantId = 7001, code = "codePPPPPPPPPPPPPPPPPP"),
+                ),
+            )
         mockMvc
             .perform(
                 patch("/attendance/$EXPO")
@@ -306,4 +314,9 @@ class EntryStatsApiTests : IntegrationTestSupport() {
     private companion object {
         const val EXPO = "0b1f6c3e-52a4-4d6e-9d57-4b7a1e5c9a11"
     }
+
+    private fun fieldEntry(
+        request: RecordEntryReqDto,
+        participantId: Long = requireNotNull(request.participantId),
+    ) = FieldVisitFixtures.entry(jdbcTemplate, clock, request, participantId)
 }

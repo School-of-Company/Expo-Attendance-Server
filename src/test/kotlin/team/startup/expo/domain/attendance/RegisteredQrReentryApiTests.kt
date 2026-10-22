@@ -32,6 +32,7 @@ import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.TraineeNameResDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
+import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
 import java.time.LocalDate
@@ -60,22 +61,39 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
+        FieldVisitFixtures.clear(jdbcTemplate)
         jdbcTemplate.execute(
             "TRUNCATE TABLE tb_entry_log, tb_entry_event, tb_cancellation_guard, tb_preregister_session, tb_deleted_expo RESTART IDENTITY CASCADE",
         )
         reset(userClient, expoClient)
+        doReturn(
+            team.startup.expo.global.client.user
+                .ParticipantEntryStatusResDto(PARTICIPANT, today, true),
+        ).`when`(userClient)
+            .getEntryStatus(
+                team.startup.expo.global.client.user
+                    .ParticipantEntryStatusReqDto(EXPO, PARTICIPANT, today),
+            )
         doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString())).`when`(expoClient).getPeriod(anyString())
         // 유저 서비스는 처음에는 입장을 기록하고 이후에는 오늘 이미 입장했다고(409) 답한다
         org.mockito.Mockito
             .doReturn(RecordEntryResDto(PARTICIPANT, "홍길동", "01012345678", true, "STANDARD", "TEACHER", "한빛중"))
             .doThrow(feign(409))
             .`when`(userClient)
-            .recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+            .recordEntry(
+                FieldVisitFixtures.entry(
+                    jdbcTemplate,
+                    clock,
+                    RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE),
+                ),
+            )
         org.mockito.Mockito
             .doReturn(RecordEntryResDto(PARTICIPANT, "홍길동", "01012345678", true, "STANDARD", "TEACHER", "한빛중"))
             .doThrow(feign(409))
             .`when`(userClient)
-            .recordEntry(RecordEntryReqDto(EXPO, "STANDARD", phoneNumber = PHONE))
+            .recordEntry(
+                fieldEntry(RecordEntryReqDto(EXPO, "STANDARD", phoneNumber = PHONE), PARTICIPANT),
+            )
         doReturn(ResolveStandardParticipantResDto(PARTICIPANT))
             .`when`(userClient)
             .resolveStandardParticipant(ResolveStandardParticipantReqDto(EXPO, PHONE))
@@ -183,7 +201,13 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
         // 다른 회차 입장은 유저 서비스가 새로 기록하고 200으로 답한다(#174)
         doReturn(RecordEntryResDto(PARTICIPANT, "홍길동", "01012345678", true, "STANDARD", "TEACHER", "한빛중"))
             .`when`(userClient)
-            .recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+            .recordEntry(
+                FieldVisitFixtures.entry(
+                    jdbcTemplate,
+                    clock,
+                    RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE),
+                ),
+            )
         standardEntry().andExpect(status().isOk)
         standardExit().andExpect(status().isOk)
 
@@ -312,4 +336,9 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
         const val CODE = "codePPPPPPPPPPPPPPPPPP"
         const val PHONE = "01012345678"
     }
+
+    private fun fieldEntry(
+        request: RecordEntryReqDto,
+        participantId: Long = requireNotNull(request.participantId),
+    ) = FieldVisitFixtures.entry(jdbcTemplate, clock, request, participantId)
 }

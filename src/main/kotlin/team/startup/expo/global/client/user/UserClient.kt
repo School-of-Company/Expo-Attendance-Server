@@ -10,6 +10,11 @@ import org.springframework.web.bind.annotation.RequestBody
     configuration = [UserClientConfiguration::class],
 )
 interface UserClient {
+    @PostMapping("/internal/standard-participants/entry-status")
+    fun getEntryStatus(
+        @RequestBody request: ParticipantEntryStatusReqDto,
+    ): ParticipantEntryStatusResDto
+
     /** 전화번호로 일반 참가자 ID만 조회한다. 입장을 기록하지 않고, 없으면 404다. */
     @PostMapping("/internal/standard-participants/resolve")
     fun resolveStandardParticipant(

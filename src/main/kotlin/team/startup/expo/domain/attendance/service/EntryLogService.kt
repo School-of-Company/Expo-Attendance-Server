@@ -1,6 +1,7 @@
 package team.startup.expo.domain.attendance.service
 
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
+import java.time.LocalDateTime
 
 interface EntryLogService {
     /**
@@ -13,5 +14,6 @@ interface EntryLogService {
         subjectId: String,
         category: String? = null,
         scannerName: String? = null,
+        enteredAt: LocalDateTime? = null,
     )
 }

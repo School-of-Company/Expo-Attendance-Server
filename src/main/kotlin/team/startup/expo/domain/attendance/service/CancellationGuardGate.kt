@@ -8,8 +8,11 @@ import org.springframework.transaction.support.TransactionTemplate
 import team.startup.expo.domain.attendance.entity.CancellationGuard
 import team.startup.expo.domain.attendance.entity.CancellationGuardState
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
+import team.startup.expo.domain.attendance.repository.FieldVisitRepository
 import team.startup.expo.global.exception.ExpectedException
 import team.startup.expo.global.metrics.AttendanceMetrics
+import java.time.Clock
+import java.time.LocalDate
 
 /**
  * 입장·프로그램 스캔이 취소 보호와 겹치지 않게 하는 관문이다. 스캔은 참가자(연수는 연수자) 단위 공유 락을 잡은 채 취소 보호를 확인하고
@@ -22,6 +25,9 @@ import team.startup.expo.global.metrics.AttendanceMetrics
 class CancellationGuardGate(
     transactionManager: PlatformTransactionManager,
     private val cancellationGuardRepository: CancellationGuardRepository,
+    private val fieldVisits: FieldVisitRepository,
+    private val preregisterSessionValidator: PreregisterSessionValidator,
+    private val clock: Clock,
 ) {
     private val transaction = TransactionTemplate(transactionManager)
 
@@ -29,19 +35,42 @@ class CancellationGuardGate(
         expoId: String,
         participantId: Long? = null,
         traineeId: Long? = null,
+        attendanceDate: LocalDate? = null,
         block: () -> T,
     ): T {
+        val date = attendanceDate ?: LocalDate.now(clock)
         try {
             return requireNotNull(
                 transaction.execute {
                     cancellationGuardRepository.setLockTimeout(LOCK_TIMEOUT)
                     if (participantId != null) {
                         timedLock { cancellationGuardRepository.lockShared(participantKey(expoId, participantId)) }
-                        cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId)?.let { reject(it) }
+                        cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId)?.let {
+                            if (it.state == CancellationGuardState.HELD ||
+                                preregisterSessionValidator.activeField(expoId, participantId, date) == null
+                            ) {
+                                reject(it)
+                            }
+                        }
                     }
                     if (traineeId != null) {
                         timedLock { cancellationGuardRepository.lockShared(traineeKey(expoId, traineeId)) }
-                        cancellationGuardRepository.findByExpoIdAndTraineeId(expoId, traineeId)?.let { reject(it) }
+                        cancellationGuardRepository.findByExpoIdAndTraineeId(expoId, traineeId)?.let {
+                            if (it.state == CancellationGuardState.HELD ||
+                                preregisterSessionValidator.activeField(expoId, it.participantId, date) == null
+                            ) {
+                                reject(it)
+                            }
+                        }
+                    }
+                    if (fieldVisits.held(expoId, participantId, traineeId, date)) {
+                        throw ExpectedException(HttpStatus.CONFLICT, "신청 취소를 처리 중입니다.")
+                    }
+                    if (participantId != null) preregisterSessionValidator.checkToday(expoId, participantId, date)
+                    if (participantId == null && traineeId != null) {
+                        fieldVisits.linkedParticipants(expoId, traineeId, date).forEach {
+                            preregisterSessionValidator.checkToday(expoId, it, date)
+                        }
                     }
                     block()
                 },

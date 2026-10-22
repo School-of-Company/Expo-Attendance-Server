@@ -26,12 +26,16 @@ import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.ResolveStandardParticipantReqDto
 import team.startup.expo.global.client.user.ResolveStandardParticipantResDto
 import team.startup.expo.global.client.user.UserClient
+import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
 
 class ScanEntryApiTests : IntegrationTestSupport() {
+    @Autowired
+    private lateinit var jdbcTemplate: org.springframework.jdbc.core.JdbcTemplate
+
     @Autowired
     lateinit var mockMvc: MockMvc
 
@@ -51,6 +55,17 @@ class ScanEntryApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
+        FieldVisitFixtures.clear(jdbcTemplate)
+        listOf("expo-i5" to 5005L, "expo-dup" to 9999L, "expo-msg" to 9999L).forEach { (expo, id) ->
+            doReturn(
+                team.startup.expo.global.client.user
+                    .ParticipantEntryStatusResDto(id, today, true),
+            ).`when`(userClient)
+                .getEntryStatus(
+                    team.startup.expo.global.client.user
+                        .ParticipantEntryStatusReqDto(expo, id, today),
+                )
+        }
         periodReturns(ExpoPeriodResDto(startedDay = today.minusDays(1).toString(), finishedDay = today.plusDays(1).toString()))
     }
 
@@ -159,7 +174,13 @@ class ScanEntryApiTests : IntegrationTestSupport() {
     fun `코드가 틀리거나 참가자가 없으면 404이고 이미 입장했으면 400이다`() {
         doThrow(feignException(404))
             .`when`(userClient)
-            .recordEntry(RecordEntryReqDto("expo-i4", "STANDARD", participantId = 5004, code = "wrongWrongWrongWrong"))
+            .recordEntry(
+                FieldVisitFixtures.entry(
+                    jdbcTemplate,
+                    clock,
+                    RecordEntryReqDto("expo-i4", "STANDARD", participantId = 5004, code = "wrongWrongWrongWrong"),
+                ),
+            )
         mockMvc
             .perform(scanById("expo-i4", 5004, "wrongWrongWrongWrong"))
             .andExpect(status().isNotFound)
@@ -167,7 +188,13 @@ class ScanEntryApiTests : IntegrationTestSupport() {
 
         doThrow(feignException(409))
             .`when`(userClient)
-            .recordEntry(RecordEntryReqDto("expo-i5", "STANDARD", participantId = 5005, code = "codeEEEEEEEEEEEEEEEEEE"))
+            .recordEntry(
+                FieldVisitFixtures.entry(
+                    jdbcTemplate,
+                    clock,
+                    RecordEntryReqDto("expo-i5", "STANDARD", participantId = 5005, code = "codeEEEEEEEEEEEEEEEEEE"),
+                ),
+            )
         mockMvc
             .perform(scanById("expo-i5", 5005, "codeEEEEEEEEEEEEEEEEEE"))
             .andExpect(status().isBadRequest)
@@ -265,7 +292,9 @@ class ScanEntryApiTests : IntegrationTestSupport() {
         doReturn(
             ResolveStandardParticipantResDto(response.id),
         ).`when`(userClient).resolveStandardParticipant(ResolveStandardParticipantReqDto(expoId, phone))
-        doReturn(response).`when`(userClient).recordEntry(RecordEntryReqDto(expoId, type, phone))
+        doReturn(
+            response,
+        ).`when`(userClient).recordEntry(fieldEntry(RecordEntryReqDto(expoId, type, phone), response.id))
     }
 
     private fun entryByIdReturns(
@@ -276,7 +305,13 @@ class ScanEntryApiTests : IntegrationTestSupport() {
     ) {
         doReturn(response)
             .`when`(userClient)
-            .recordEntry(RecordEntryReqDto(expoId, "STANDARD", participantId = participantId, code = code))
+            .recordEntry(
+                FieldVisitFixtures.entry(
+                    jdbcTemplate,
+                    clock,
+                    RecordEntryReqDto(expoId, "STANDARD", participantId = participantId, code = code),
+                ),
+            )
     }
 
     private fun scanById(
@@ -296,7 +331,9 @@ class ScanEntryApiTests : IntegrationTestSupport() {
         doReturn(
             ResolveStandardParticipantResDto(9999L),
         ).`when`(userClient).resolveStandardParticipant(ResolveStandardParticipantReqDto(expoId, phone))
-        doThrow(feignException(status)).`when`(userClient).recordEntry(RecordEntryReqDto(expoId, type, phone))
+        doThrow(
+            feignException(status),
+        ).`when`(userClient).recordEntry(fieldEntry(RecordEntryReqDto(expoId, type, phone), 9999L))
     }
 
     private fun periodReturns(response: ExpoPeriodResDto) {
@@ -331,4 +368,9 @@ class ScanEntryApiTests : IntegrationTestSupport() {
     ) = patch("/attendance/$expoId")
         .contentType(MediaType.APPLICATION_JSON)
         .content("""{"authority": "$authority", "phoneNumber": "$phoneNumber"}""")
+
+    private fun fieldEntry(
+        request: RecordEntryReqDto,
+        participantId: Long = requireNotNull(request.participantId),
+    ) = FieldVisitFixtures.entry(jdbcTemplate, clock, request, participantId)
 }

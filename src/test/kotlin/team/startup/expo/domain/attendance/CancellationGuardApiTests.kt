@@ -46,6 +46,7 @@ import team.startup.expo.global.client.user.ResolveStandardParticipantResDto
 import team.startup.expo.global.client.user.TraineeNameResDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
+import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
 import java.time.Clock
 import java.time.Instant
@@ -84,19 +85,47 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
+        FieldVisitFixtures.clear(jdbcTemplate)
         jdbcTemplate.execute(
             "TRUNCATE TABLE tb_cancellation_guard, tb_cancellation_aborted, tb_preregister_session, tb_deleted_expo, " +
                 "tb_standard_program_attendance, tb_training_program_attendance RESTART IDENTITY CASCADE",
         )
         reset(userClient, expoClient, applicationClient)
+        sessionValid()
+        listOf(PARTICIPANT, OTHER_PARTICIPANT).forEach { id ->
+            jdbcTemplate.update(
+                "INSERT INTO tb_preregister_session (expo_id,participant_id,session_id,status,updated_at) VALUES (?,?,?,'ACTIVE',now())",
+                EXPO,
+                id,
+                SESSION,
+            )
+        }
         doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString())).`when`(expoClient).getPeriod(anyString())
         doReturn(RecordEntryResDto(PARTICIPANT, "홍길동", "01012345678", true, "STANDARD", "STUDENT", null))
             .`when`(userClient)
-            .recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+            .recordEntry(
+                RecordEntryReqDto(
+                    EXPO,
+                    "STANDARD",
+                    participantId = PARTICIPANT,
+                    code = CODE,
+                    preregisterSessionId = SESSION,
+                    attendanceDate = today,
+                ),
+            )
         // 회차 입장 시간 안의 QR 입장은 확인한 회차를 함께 보낸다(#142)
         doReturn(RecordEntryResDto(PARTICIPANT, "홍길동", "01012345678", true, "STANDARD", "STUDENT", null))
             .`when`(userClient)
-            .recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE, preregisterSessionId = SESSION))
+            .recordEntry(
+                RecordEntryReqDto(
+                    EXPO,
+                    "STANDARD",
+                    participantId = PARTICIPANT,
+                    code = CODE,
+                    preregisterSessionId = SESSION,
+                    attendanceDate = today,
+                ),
+            )
         doReturn(ResolveStandardParticipantResDto(PARTICIPANT))
             .`when`(userClient)
             .resolveStandardParticipant(ResolveStandardParticipantReqDto(EXPO, PHONE))
@@ -134,7 +163,6 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"sessionId":11}"""),
             ).andExpect(status().isNoContent)
-        jdbcTemplate.update("DELETE FROM tb_preregister_session")
         entryScan().andExpect(status().isOk)
     }
 
@@ -216,7 +244,18 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
             entering.countDown()
             release.await(10, TimeUnit.SECONDS)
             RecordEntryResDto(PARTICIPANT, "홍길동", "01012345678", true, "STANDARD", "STUDENT", null)
-        }.`when`(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+        }.`when`(
+            userClient,
+        ).recordEntry(
+            RecordEntryReqDto(
+                EXPO,
+                "STANDARD",
+                participantId = PARTICIPANT,
+                code = CODE,
+                preregisterSessionId = SESSION,
+                attendanceDate = today,
+            ),
+        )
 
         val executor = Executors.newFixedThreadPool(2)
         val scan = executor.submit<Int> { entryScan().andReturn().response.status }
@@ -242,7 +281,9 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
             entering.countDown()
             check(release.await(10, TimeUnit.SECONDS))
             RecordEntryResDto(PARTICIPANT, "홍길동", PHONE, true, "STANDARD", "STUDENT", null)
-        }.`when`(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", phoneNumber = PHONE))
+        }.`when`(
+            userClient,
+        ).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", phoneNumber = PHONE, preregisterSessionId = SESSION, attendanceDate = today))
         val executor = Executors.newFixedThreadPool(2)
         try {
             val scan = executor.submit<Int> { phoneEntryScan().andReturn().response.status }
@@ -277,10 +318,30 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
             entering.countDown()
             release.await(10, TimeUnit.SECONDS)
             RecordEntryResDto(PARTICIPANT, "홍길동", "01012345678", true, "STANDARD", "STUDENT", null)
-        }.`when`(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+        }.`when`(
+            userClient,
+        ).recordEntry(
+            RecordEntryReqDto(
+                EXPO,
+                "STANDARD",
+                participantId = PARTICIPANT,
+                code = CODE,
+                preregisterSessionId = SESSION,
+                attendanceDate = today,
+            ),
+        )
         doReturn(RecordEntryResDto(OTHER_PARTICIPANT, "김철수", "01099999999", true, "STANDARD", "STUDENT", null))
             .`when`(userClient)
-            .recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = OTHER_PARTICIPANT, code = CODE))
+            .recordEntry(
+                RecordEntryReqDto(
+                    EXPO,
+                    "STANDARD",
+                    participantId = OTHER_PARTICIPANT,
+                    code = CODE,
+                    preregisterSessionId = SESSION,
+                    attendanceDate = today,
+                ),
+            )
 
         val executor = Executors.newFixedThreadPool(1)
         val first = executor.submit<Int> { entryScan().andReturn().response.status }
@@ -391,7 +452,16 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
         entryScan().andExpect(status().isOk)
         verify(userClient)
-            .recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE, preregisterSessionId = SESSION))
+            .recordEntry(
+                RecordEntryReqDto(
+                    EXPO,
+                    "STANDARD",
+                    participantId = PARTICIPANT,
+                    code = CODE,
+                    preregisterSessionId = SESSION,
+                    attendanceDate = today,
+                ),
+            )
         // 밀려난 취소의 지연된 acquire는 거절된다
         acquire().andExpect(status().isConflict)
     }
@@ -520,6 +590,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         entryScan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("취소된 신청입니다."))
 
         fieldRegister(4).andExpect(status().isNoContent)
+        activateField()
         fieldRegister(4).andExpect(status().isNoContent)
         jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
         entryScan().andExpect(status().isOk)
@@ -529,9 +600,8 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         commit(revision = 3).andExpect(status().isConflict)
         entryScan().andExpect(status().isOk)
 
-        // 재등록 뒤의 새 취소는 다시 막는다
         deleteSession(5).andExpect(status().isNoContent)
-        entryScan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("취소된 신청입니다."))
+        entryScan().andExpect(status().isOk)
 
         mockMvc
             .perform(put(FIELD_PATH).contentType(MediaType.APPLICATION_JSON).content("""{"revision":6}"""))
@@ -547,6 +617,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         acquire().andExpect(status().isNoContent)
         deleteSession(3).andExpect(status().isNoContent)
         fieldRegister(4).andExpect(status().isNoContent)
+        activateField()
         entryScan().andExpect(status().isConflict)
 
         commit(revision = 3).andExpect(status().isNoContent)
@@ -568,9 +639,14 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         entryScan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("신청한 회차가 이미 끝났습니다."))
 
         fieldRegister(3).andExpect(status().isNoContent)
+        activateField()
         entryScan().andExpect(status().isOk)
-        verify(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
-        jdbcTemplate.queryForObject("SELECT status FROM tb_preregister_session", String::class.java) shouldBe "FIELD_REGISTERED"
+        verify(userClient).recordEntry(fieldRequest())
+        jdbcTemplate.queryForObject(
+            "SELECT status FROM tb_preregister_session WHERE participant_id = $PARTICIPANT",
+            String::class.java,
+        ) shouldBe
+            "FIELD_REGISTERED"
     }
 
     private fun fieldRegister(revision: Long): ResultActions =
@@ -646,7 +722,18 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
             entering.countDown()
             release.await(10, TimeUnit.SECONDS)
             RecordEntryResDto(PARTICIPANT, "홍길동", "01012345678", true, "STANDARD", "STUDENT", null)
-        }.`when`(userClient).recordEntry(RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE))
+        }.`when`(
+            userClient,
+        ).recordEntry(
+            RecordEntryReqDto(
+                EXPO,
+                "STANDARD",
+                participantId = PARTICIPANT,
+                code = CODE,
+                preregisterSessionId = SESSION,
+                attendanceDate = today,
+            ),
+        )
 
         val executor = Executors.newFixedThreadPool(2)
         val scan = executor.submit<Int> { entryScan().andReturn().response.status }
@@ -781,5 +868,23 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         const val STATUS_PATH = "/internal/expos/$EXPO/participants/$PARTICIPANT/cancellation-status"
         const val SESSION = 11L
         const val FIELD_PATH = "/internal/expos/$EXPO/participants/$PARTICIPANT/preregister-session/field-registration"
+    }
+
+    private fun fieldRequest() =
+        RecordEntryReqDto(
+            EXPO,
+            "STANDARD",
+            participantId = PARTICIPANT,
+            code = CODE,
+            attendanceDate = today,
+            fieldVisitRegistrationId = java.util.UUID.nameUUIDFromBytes("$EXPO:$PARTICIPANT".toByteArray()),
+            fieldVisitGeneration = 1,
+        )
+
+    private fun activateField() {
+        FieldVisitFixtures.activate(jdbcTemplate, clock, EXPO, PARTICIPANT)
+        doReturn(RecordEntryResDto(PARTICIPANT, "홍길동", PHONE, true, "STANDARD", "STUDENT", null))
+            .`when`(userClient)
+            .recordEntry(fieldRequest())
     }
 }

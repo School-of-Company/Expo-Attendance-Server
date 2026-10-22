@@ -84,10 +84,11 @@ class ScanStandardProgramServiceImpl(
             ProgramEntryWindow.allowsEntry(program.startedAt, program.endedAt, clock.instant(), properties.leadMinutes)
         // 분 단위로 기록한다(v1과 같음)
         val now = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES)
+        val attendanceDate = LocalDate.now(clock)
         // 신청 확인과 기록을 같은 취소 보호 락 안에서 한다. 이미 락 안에 있는 스캔은 신청 취소(acquire)가 기다리고, 취소가 끝난 뒤 들어온
         // 스캔은 최신 신청 상태를 읽는다(#88).
         val result =
-            cancellationGuardGate.scanning(reqDto.expoId, participantId = reqDto.participantId) {
+            cancellationGuardGate.scanning(reqDto.expoId, participantId = reqDto.participantId, attendanceDate = attendanceDate) {
                 val applied =
                     applicationCircuitBreaker.callService(
                         "신청",
@@ -99,7 +100,7 @@ class ScanStandardProgramServiceImpl(
                     ProgramType.STANDARD,
                     programId,
                     reqDto.participantId,
-                    LocalDate.now(clock),
+                    attendanceDate,
                     now,
                     entryAllowed,
                 )

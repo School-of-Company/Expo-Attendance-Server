@@ -21,7 +21,14 @@ class CancellationGuardGateSpec : BehaviorSpec() {
     override fun isolationMode() = IsolationMode.InstancePerLeaf
 
     private val repository = mockk<CancellationGuardRepository>(relaxed = true)
-    private val gate = CancellationGuardGate(UnitTestSupport.transactionManager(), repository)
+    private val gate =
+        CancellationGuardGate(
+            UnitTestSupport.transactionManager(),
+            repository,
+            mockk(relaxed = true),
+            UnitTestSupport.preregisterValidator(),
+            UnitTestSupport.fixedClock(),
+        )
     private val expoId = "expo-1"
 
     private fun guard(state: CancellationGuardState) =
