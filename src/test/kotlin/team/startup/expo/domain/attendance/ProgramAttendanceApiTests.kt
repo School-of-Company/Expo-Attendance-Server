@@ -134,6 +134,22 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `입실이 허용되지 않는 시간이면 입실은 만들지 않고 이미 입실한 사람의 퇴실은 받는다`() {
+        val day = today
+        val enter = LocalTime.of(9, 0)
+        val leave = LocalTime.of(10, 30)
+
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1951, 951, day, enter, false) shouldBe
+            ProgramAttendanceResult.ENTRY_NOT_ALLOWED
+        standardRepository.findByParticipantIdAndStandardProgramId(951, 1951) shouldBe null
+
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1951, 951, day, enter, true) shouldBe ProgramAttendanceResult.ENTERED
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1951, 951, day, enter, false) shouldBe ProgramAttendanceResult.ALREADY_ENTERED
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1951, 951, day, leave, false) shouldBe ProgramAttendanceResult.LEFT
+        standardRepository.findByParticipantIdAndStandardProgramId(951, 1951)!!.leaveTime shouldBe leave
+    }
+
+    @Test
     fun `연수 프로그램은 참가자 ID와 code로도 연결된 연수자를 찾아 입실을 기록한다`() {
         trainingAllowed("expo-pc", 2301, 701)
         doReturn(ResolveTraineeByParticipantResDto(701))
