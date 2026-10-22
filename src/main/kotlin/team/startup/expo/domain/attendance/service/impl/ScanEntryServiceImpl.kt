@@ -16,10 +16,12 @@ import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.service.EntryReplayPolicy
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
+import team.startup.expo.domain.attendance.service.FieldEntryFence
 import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
 import team.startup.expo.domain.attendance.service.ScanEntryService
 import team.startup.expo.domain.attendance.service.ScannerName
 import team.startup.expo.global.client.callService
+import team.startup.expo.global.client.user.ParticipantEntryStatusReqDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.ResolveParticipantReqDto
@@ -53,6 +55,7 @@ class ScanEntryServiceImpl(
     private val entryReplayPolicy: EntryReplayPolicy,
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
+    private val fieldEntryFence: FieldEntryFence,
 ) : ScanEntryService {
     override fun scan(
         expoId: String,
@@ -60,7 +63,8 @@ class ScanEntryServiceImpl(
         scannerName: String?,
     ): ScanEntryResDto {
         checkIdentifier(reqDto)
-        val today = LocalDate.now(clock)
+        val now = LocalDateTime.now(clock)
+        val today = now.toLocalDate()
         expoPeriodValidator.checkInProgress(expoId, today)
         // 사전등록 QR(참가자 ID와 코드)은 신청한 회차 중 하나의 입장 시간이어야 한다. 입장을 기록하기 전에 지금 회차를 고른다.
         val checkedSessionId =
@@ -88,13 +92,11 @@ class ScanEntryServiceImpl(
             } else {
                 null
             }
-        val now = LocalDateTime.now(clock)
         val scanner = ScannerName.of(scannerName)
         val scanned =
             if (participantId != null) {
-                cancellationGuardGate.scanning(expoId, participantId = participantId) {
-                    // 락을 잡기 전에 고른 회차가 취소되었으면 거절한다. 전화번호 입장은 회차를 붙이지 않는다
-                    val sessionId = preregisterSessionValidator.checkNotCancelled(expoId, participantId, checkedSessionId)
+                cancellationGuardGate.scanning(expoId, participantId = participantId, attendanceDate = today) {
+                    val sessionId = preregisterSessionValidator.checkNotCancelled(expoId, participantId, checkedSessionId, today)
                     recordOrReenter(expoId, reqDto, sessionId, participantId, now, scanner)
                 }
             } else {
@@ -104,7 +106,13 @@ class ScanEntryServiceImpl(
         // 재입장은 입장 로그가 이미 있다. 처음 입장만, 퇴장 기록과 집계를 위한 입장 로그를 남긴다. 입장은 이미 기록되었으므로 로그 실패가 입장을 막지 않는다(#120)
         scanned.entry?.let {
             val subjectType = if (it.participationType == TRAINEE) EntrySubjectType.TRAINEE else EntrySubjectType.STANDARD
-            entryLogService.recordEntry(expoId, subjectType, it.id.toString(), scannerName = scannerName)
+            entryLogService.recordEntry(
+                expoId,
+                subjectType,
+                it.id.toString(),
+                scannerName = scannerName,
+                enteredAt = now.takeIf { subjectType == EntrySubjectType.STANDARD },
+            )
         }
         return scanned.response ?: toResponse(requireNotNull(scanned.entry), reqDto, now.format(TIME))
     }
@@ -120,12 +128,31 @@ class ScanEntryServiceImpl(
         participantId: Long?,
         now: LocalDateTime,
         scanner: String?,
-    ): Scanned =
-        try {
-            Scanned(entry = recordEntry(expoId, reqDto, preregisterSessionId))
+    ): Scanned {
+        val attempt = participantId?.let { fieldEntryFence.begin(expoId, it, now.toLocalDate()) }
+        return try {
+            val entry = recordEntry(expoId, reqDto, preregisterSessionId, participantId, now.toLocalDate())
+            attempt?.let { fieldEntryFence.finish(it, true) }
+            Scanned(entry = entry, response = toResponse(entry, reqDto, now.format(TIME)))
         } catch (_: AlreadyEnteredToday) {
+            if (participantId != null) {
+                val status =
+                    userCircuitBreaker.callService("유저") {
+                        userClient.getEntryStatus(ParticipantEntryStatusReqDto(expoId, participantId, now.toLocalDate()))
+                    }
+                if (status.participantId != participantId || status.attendanceDate != now.toLocalDate() || !status.entered) {
+                    throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "입장 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.")
+                }
+            }
+            attempt?.let { fieldEntryFence.finish(it, true) }
             Scanned(response = reenterResponse(expoId, reqDto, participantId, now, scanner))
+        } catch (e: ExpectedException) {
+            if (e.status == HttpStatus.NOT_FOUND || e.status == HttpStatus.BAD_REQUEST) {
+                attempt?.let { fieldEntryFence.finish(it, false) }
+            }
+            throw e
         }
+    }
 
     private fun reenterResponse(
         expoId: String,
@@ -234,8 +261,10 @@ class ScanEntryServiceImpl(
         expoId: String,
         reqDto: ScanEntryReqDto,
         preregisterSessionId: Long?,
+        participantId: Long?,
+        attendanceDate: LocalDate,
     ): RecordEntryResDto {
-        val request = toEntryRequest(expoId, reqDto, preregisterSessionId)
+        val request = toEntryRequest(expoId, reqDto, preregisterSessionId, participantId, attendanceDate)
         return userCircuitBreaker.callService(
             "유저",
             participantNotFound(reqDto),
@@ -245,14 +274,24 @@ class ScanEntryServiceImpl(
 
     /**
      * 일반 참가자가 참가자 ID와 코드로 왔으면 그 값을, 아니면 전화번호를 유저 서비스에 보낸다(ID와 코드가 우선).
-     * 회차는 입장 시간을 확인한 사전등록 QR에만 붙인다. 유저 서비스는 연수자 회차를 400으로 거절하므로 전화번호 경로에는 싣지 않는다.
+     * PRE는 QR의 확인한 회차 또는 전화번호의 오늘 회차를 붙인다. 연수자는 회차와 FIELD 권위를 보내지 않는다.
      */
     private fun toEntryRequest(
         expoId: String,
         reqDto: ScanEntryReqDto,
         preregisterSessionId: Long?,
+        participantId: Long?,
+        attendanceDate: LocalDate,
     ): RecordEntryReqDto {
         val type = reqDto.authority.participationType
+        val field =
+            if (participantId != null &&
+                preregisterSessionId == null
+            ) {
+                preregisterSessionValidator.activeField(expoId, participantId, attendanceDate)
+            } else {
+                null
+            }
         val usesParticipantCode =
             reqDto.authority == EntryAuthority.ROLE_STANDARD && reqDto.participantId != null && !reqDto.code.isNullOrBlank()
         return if (usesParticipantCode) {
@@ -262,9 +301,20 @@ class ScanEntryServiceImpl(
                 participantId = reqDto.participantId,
                 code = reqDto.code,
                 preregisterSessionId = preregisterSessionId,
+                attendanceDate = attendanceDate,
+                fieldVisitRegistrationId = field?.registrationId,
+                fieldVisitGeneration = field?.generation,
             )
         } else {
-            RecordEntryReqDto(expoId, type, phoneNumber = reqDto.phoneNumber)
+            RecordEntryReqDto(
+                expoId,
+                type,
+                phoneNumber = reqDto.phoneNumber,
+                preregisterSessionId = preregisterSessionId,
+                attendanceDate = attendanceDate.takeIf { participantId != null },
+                fieldVisitRegistrationId = field?.registrationId,
+                fieldVisitGeneration = field?.generation,
+            )
         }
     }
 

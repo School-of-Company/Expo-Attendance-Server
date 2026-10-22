@@ -16,14 +16,18 @@ import team.startup.expo.domain.attendance.entity.EntryLog
 import team.startup.expo.domain.attendance.entity.EntryStatus
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.presentation.dto.request.EntryAuthority
+import team.startup.expo.domain.attendance.presentation.dto.request.FieldVisitStatus
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanEntryReqDto
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
+import team.startup.expo.domain.attendance.repository.FieldVisit
 import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.service.EntryReplayPolicy
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
+import team.startup.expo.domain.attendance.service.FieldEntryFence
 import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
+import team.startup.expo.global.client.user.ParticipantEntryStatusResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.ResolveParticipantResDto
@@ -40,6 +44,7 @@ import team.startup.expo.support.shouldFailWith
 import tools.jackson.databind.json.JsonMapper
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.util.UUID
 
 class ScanEntryServiceImplSpec : BehaviorSpec() {
     override fun isolationMode() = IsolationMode.InstancePerLeaf
@@ -51,6 +56,8 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
     private val entryLogService = mockk<EntryLogService>(relaxed = true)
     private val entryLogRepository = mockk<EntryLogRepository>(relaxed = true)
     private val clock = UnitTestSupport.fixedClock()
+    private val fieldFence = mockk<FieldEntryFence>(relaxed = true)
+    private val attemptId = UUID.randomUUID()
     private val today = LocalDate.now(clock)
 
     private val service =
@@ -59,12 +66,19 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
             UnitTestSupport.circuitBreaker("user"),
             expoPeriodValidator,
             preregisterSessionValidator,
-            CancellationGuardGate(UnitTestSupport.transactionManager(), guardRepository),
+            CancellationGuardGate(
+                UnitTestSupport.transactionManager(),
+                guardRepository,
+                mockk(relaxed = true),
+                UnitTestSupport.preregisterValidator(),
+                clock,
+            ),
             entryLogService,
             entryLogRepository,
             EntryReplayPolicy(EntryReplayProperties(windowSeconds = 30)),
             JsonMapper.builder().build(),
             clock,
+            fieldFence,
         )
 
     private val expoId = "expo-1"
@@ -80,16 +94,134 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
     ) = RecordEntryResDto(id, "홍길동", phone, true, type, occupation, "한빛중")
 
     private fun givenPeriodOk() {
+        every { userClient.getEntryStatus(any()) } answers { ParticipantEntryStatusResDto(55L, today, true) }
         every { expoPeriodValidator.checkInProgress(expoId, today) } just Runs
         every { preregisterSessionValidator.check(any(), any(), any()) } returns null
-        every { preregisterSessionValidator.checkNotCancelled(any(), any(), any()) } answers { thirdArg() }
+        every { preregisterSessionValidator.checkNotCancelled(any(), any(), any(), any()) } answers { thirdArg() }
+        every { preregisterSessionValidator.activeField(any(), any(), any()) } returns null
         every { userClient.resolveStandardParticipant(any()) } returns ResolveStandardParticipantResDto(55L)
         every { guardRepository.findByExpoIdAndParticipantId(any(), any()) } returns null
     }
 
     init {
+        every { fieldFence.begin(any(), any(), any()) } returns attemptId
         // 기본은 오늘 입장 로그가 없는 상태
         every { entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(any(), any(), any(), any()) } returns null
+
+        given("FIELD 날짜별 권위 입장") {
+            givenPeriodOk()
+            val registration = UUID.randomUUID()
+            every { preregisterSessionValidator.activeField(expoId, 55L, today) } returns
+                FieldVisit(registration, expoId, 55L, today, 2, FieldVisitStatus.ACTIVE, UUID.randomUUID())
+
+            `when`("첫입장이 성공하면") {
+                every { userClient.recordEntry(any()) } returns entry()
+                then("날짜·등록·세대를 전달하고 guard 안에서 durable fence를 확정한다") {
+                    service.scan(expoId, codeReq)
+                    io.mockk.verifyOrder {
+                        guardRepository.lockShared(CancellationGuardGate.participantKey(expoId, 55L))
+                        fieldFence.begin(expoId, 55L, today)
+                        userClient.recordEntry(
+                            RecordEntryReqDto(
+                                expoId,
+                                "STANDARD",
+                                participantId = 55L,
+                                code = "code-abc",
+                                attendanceDate = today,
+                                fieldVisitRegistrationId = registration,
+                                fieldVisitGeneration = 2,
+                            ),
+                        )
+                        fieldFence.finish(attemptId, true)
+                    }
+                }
+            }
+            `when`("User 응답을 잃거나 5xx이면") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignServerError()
+                then("취소가 late commit을 추월하지 못하게 PENDING을 남긴다") {
+                    io.kotest.assertions.throwables
+                        .shouldThrow<ExpectedException> { service.scan(expoId, codeReq) }
+                        .status shouldBe
+                        HttpStatus.SERVICE_UNAVAILABLE
+                    verify { fieldFence.begin(expoId, 55L, today) }
+                    verify(exactly = 0) { fieldFence.finish(any(), any()) }
+                }
+            }
+            `when`("User가 확정적인 404이면") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignNotFound()
+                then("이 실패한 시도의 fence만 해제한다") {
+                    io.kotest.assertions.throwables
+                        .shouldThrow<ExpectedException> { service.scan(expoId, codeReq) }
+                        .status shouldBe
+                        HttpStatus.NOT_FOUND
+                    verify { fieldFence.finish(attemptId, false) }
+                }
+            }
+            listOf("false", "wrong date", "wrong participant", "error").forEach { outcome ->
+                `when`("User 409 뒤 entry-status가 $outcome 이면") {
+                    every { userClient.recordEntry(any()) } throws UnitTestSupport.feignConflict()
+                    then("저장되지 않은 stale scan을 입장으로 오인하지 않고 PENDING과 503을 유지한다") {
+                        when (outcome) {
+                            "false" -> {
+                                every { userClient.getEntryStatus(any()) } returns ParticipantEntryStatusResDto(55, today, false)
+                            }
+
+                            "wrong date" -> {
+                                every { userClient.getEntryStatus(any()) } returns
+                                    ParticipantEntryStatusResDto(55, today.minusDays(1), true)
+                            }
+
+                            "wrong participant" -> {
+                                every { userClient.getEntryStatus(any()) } returns
+                                    ParticipantEntryStatusResDto(56, today, true)
+                            }
+
+                            else -> {
+                                every { userClient.getEntryStatus(any()) } throws UnitTestSupport.feignServerError()
+                            }
+                        }
+                        io.kotest.assertions.throwables
+                            .shouldThrow<ExpectedException> { service.scan(expoId, codeReq) }
+                            .status shouldBe
+                            HttpStatus.SERVICE_UNAVAILABLE
+                        verify(exactly = 0) { fieldFence.finish(any(), any()) }
+                        verify(exactly = 0) { entryLogRepository.reenter(any(), any(), any(), any(), any(), any()) }
+                    }
+                }
+            }
+            `when`("User 409 뒤 entry-status가 오늘 첫입장을 확인하면 오늘 로그가 없어도") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignConflict()
+                then("이미 기록된 첫입장은 취소 권위로 남기고 중복 입장 응답은 거절한다") {
+                    io.kotest.assertions.throwables
+                        .shouldThrow<ExpectedException> { service.scan(expoId, codeReq) }
+                        .status shouldBe
+                        HttpStatus.BAD_REQUEST
+                    verify { fieldFence.finish(attemptId, true) }
+                }
+            }
+        }
+
+        given("PRE 전화번호의 날짜별 권위 입장") {
+            givenPeriodOk()
+            every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, null, today) } returns 11L
+            every { userClient.recordEntry(any()) } returns entry()
+            `when`("오늘 earliest-start 회차를 선택했으면") {
+                then("날짜와 회차를 보내고 FIELD tuple은 보내지 않는다") {
+                    service.scan(expoId, phoneReq)
+                    verify {
+                        userClient.recordEntry(
+                            RecordEntryReqDto(
+                                expoId,
+                                "STANDARD",
+                                phoneNumber = phoneReq.phoneNumber,
+                                preregisterSessionId = 11,
+                                attendanceDate = today,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
 
         given("409를 받고 오늘 입장 로그에 퇴장 기록이 있으면(재입장, #148)") {
             fun log(
@@ -127,7 +259,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                     res.id shouldBe 55L
                     res.name shouldBe "홍길동"
                     res.badge shouldBe null
-                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any()) }
+                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any(), any()) }
                 }
             }
 
@@ -223,7 +355,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                     res.firstEnteredTime shouldBe "02:59"
                     res.id shouldBe 55L
                     res.name shouldBe "홍길동"
-                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any()) }
+                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any(), any()) }
                     verify(exactly = 0) { entryLogRepository.reenter(any(), any(), any(), any(), any(), any()) }
                 }
             }
@@ -270,7 +402,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
 
         given("신청이 취소된 참가자가 재생 구간 안에 다시 찍으면(#176)") {
             givenPeriodOk()
-            every { preregisterSessionValidator.checkNotCancelled(any(), any(), any()) } throws
+            every { preregisterSessionValidator.checkNotCancelled(any(), any(), any(), any()) } throws
                 ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청입니다.")
 
             `when`("스캔하면") {
@@ -325,7 +457,13 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
 
                 then("전화번호로 입장을 기록하고 회차 시간 확인 없이 취소 보호 락을 잡는다") {
                     res.id shouldBe 55L
-                    verify(exactly = 1) { userClient.recordEntry(RecordEntryReqDto(expoId, "STANDARD", phoneNumber = "010-1111-2222")) }
+                    verify(
+                        exactly = 1,
+                    ) {
+                        userClient.recordEntry(
+                            RecordEntryReqDto(expoId, "STANDARD", phoneNumber = "010-1111-2222", attendanceDate = today),
+                        )
+                    }
                     verify(exactly = 0) { preregisterSessionValidator.check(any(), any(), any()) }
                     verify(exactly = 1) { guardRepository.lockShared(CancellationGuardGate.participantKey(expoId, 55L)) }
                 }
@@ -388,13 +526,19 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
         given("전화번호로 입장하는 참가자가 확정된 회차를 가졌을 때") {
             `when`("스캔하면") {
                 givenPeriodOk()
-                every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, null) } returns null
+                every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, null, today) } returns null
                 every { userClient.recordEntry(any()) } returns entry()
 
                 service.scan(expoId, phoneReq)
 
                 then("회차 시간을 확인하지 않았으므로 회차를 붙이지 않는다") {
-                    verify(exactly = 1) { userClient.recordEntry(RecordEntryReqDto(expoId, "STANDARD", phoneNumber = "010-1111-2222")) }
+                    verify(
+                        exactly = 1,
+                    ) {
+                        userClient.recordEntry(
+                            RecordEntryReqDto(expoId, "STANDARD", phoneNumber = "010-1111-2222", attendanceDate = today),
+                        )
+                    }
                 }
             }
         }
@@ -446,7 +590,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                     shouldFailWith(HttpStatus.NOT_FOUND, "연수자를 찾지 못 했습니다.") { service.scan(expoId, traineeReq) }
                 }
                 then("입장이 실패했으므로 입장 로그를 남기지 않는다") {
-                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any()) }
+                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any(), any()) }
                 }
             }
 
@@ -476,7 +620,9 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
 
                 then("참가자 ID와 코드로 입장을 기록하고 취소 보호 락 안에서 처리한다") {
                     verify(exactly = 1) {
-                        userClient.recordEntry(RecordEntryReqDto(expoId, "STANDARD", participantId = 55L, code = "code-abc"))
+                        userClient.recordEntry(
+                            RecordEntryReqDto(expoId, "STANDARD", participantId = 55L, code = "code-abc", attendanceDate = today),
+                        )
                     }
                     verify { guardRepository.lockShared(CancellationGuardGate.participantKey(expoId, 55L)) }
                 }
@@ -485,14 +631,16 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                     res.badge?.qrCode shouldBe """{"participantId":55,"code":"code-abc"}"""
                 }
                 then("입장 로그를 STANDARD와 참가자 ID로 남기고 코드는 남기지 않는다") {
-                    verify(exactly = 1) { entryLogService.recordEntry(expoId, EntrySubjectType.STANDARD, "55") }
+                    verify(
+                        exactly = 1,
+                    ) { entryLogService.recordEntry(expoId, EntrySubjectType.STANDARD, "55", enteredAt = LocalDateTime.now(clock)) }
                 }
             }
 
             `when`("신청한 회차의 입장 시간에 스캔하면") {
                 givenPeriodOk()
                 every { preregisterSessionValidator.check(expoId, 55L, any()) } returns 11L
-                every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, 11L) } returns 11L
+                every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, 11L, today) } returns 11L
                 every { userClient.recordEntry(any()) } returns entry()
 
                 service.scan(expoId, codeReq)
@@ -500,7 +648,14 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 then("확인한 회차 ID를 preregisterSessionId로 보낸다") {
                     verify(exactly = 1) {
                         userClient.recordEntry(
-                            RecordEntryReqDto(expoId, "STANDARD", participantId = 55L, code = "code-abc", preregisterSessionId = 11L),
+                            RecordEntryReqDto(
+                                expoId,
+                                "STANDARD",
+                                participantId = 55L,
+                                code = "code-abc",
+                                preregisterSessionId = 11L,
+                                attendanceDate = today,
+                            ),
                         )
                     }
                 }
@@ -509,7 +664,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
             `when`("회차를 고른 뒤 락을 잡기 전에 그 회차가 취소되면") {
                 givenPeriodOk()
                 every { preregisterSessionValidator.check(expoId, 55L, any()) } returns 11L
-                every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, 11L) } throws
+                every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, 11L, today) } throws
                     ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청입니다.")
 
                 then("입장을 기록하지 않고 거절한다") {
@@ -521,12 +676,12 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
             `when`("같은 날 같은 회차로 이미 입장해 유저 서비스가 409로 답하면") {
                 givenPeriodOk()
                 every { preregisterSessionValidator.check(expoId, 55L, any()) } returns 11L
-                every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, 11L) } returns 11L
+                every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, 11L, today) } returns 11L
                 every { userClient.recordEntry(any()) } throws UnitTestSupport.feignConflict()
 
                 then("기존과 같이 400 이미 입장 메시지로 바꾸고 입장 로그를 남기지 않는다") {
                     shouldFailWith(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.") { service.scan(expoId, codeReq) }
-                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any()) }
+                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any(), any()) }
                 }
             }
 

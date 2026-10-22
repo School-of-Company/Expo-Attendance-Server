@@ -6,6 +6,8 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import team.startup.expo.domain.attendance.entity.PreregisterSession
 import team.startup.expo.domain.attendance.entity.PreregisterSessionStatus
+import team.startup.expo.domain.attendance.presentation.dto.request.FieldVisitStatus
+import team.startup.expo.domain.attendance.repository.FieldVisitRepository
 import team.startup.expo.domain.attendance.repository.PreregisterSessionRepository
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.expo.ExpoClient
@@ -14,9 +16,10 @@ import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 
 /**
- * 사전등록 참가자가 신청한 회차의 입장 시간인지 확인한다. 회차 기록이 없는 참가자(현장등록, 연동 전 등록, 취소 뒤나 다른 날 회차 확정 뒤 현장 재등록)는 확인하지 않는다.
+ * 오늘 ACTIVE FIELD가 없으면 사전등록 회차의 입장 시간을 확인한다. 날짜를 알 수 없는 과거 FIELD는 권한이 아니다.
  * 신청 상태는 참가자 ID와 code가 맞는 사람에게만 알려야 하므로, 회차 기록이 있으면 먼저 `verifyCode`로 확인한 뒤에 검사한다.
  * 한 사람이 여러 회차에 배정될 수 있고(#160), 확정 상태인 회차 중 지금이 입장 시간인 회차로 입장한다.
  * 허용 시간은 회차 시작 `leadMinutes`분 전부터 종료 시각까지이고, 시각은 모두 `Instant`(UTC)로 비교한다.
@@ -29,36 +32,42 @@ class PreregisterSessionValidator(
     @Qualifier("expoCircuitBreaker") private val expoCircuitBreaker: CircuitBreaker,
     private val properties: PreregisterEntryProperties,
     private val clock: Clock,
+    private val fieldVisits: FieldVisitRepository,
 ) {
     /**
      * 취소된 신청을 거절한다. 회차 기록이 있는데 확정 상태인 회차가 하나도 없으면 취소된 신청이다.
      * [checkedSessionId]가 있으면(락 밖에서 [check]로 고른 회차) 그 회차가 아직 확정 상태여야 하고, 그 회차 ID를 돌려준다.
-     * 전화번호 입장은 회차 시간과 무관하게 이것만 확인하고 회차를 붙이지 않는다(null). guard 공유 락 안에서 호출한다.
+     * 전화번호 입장은 시간검사 없이 오늘 시작이 가장 이른 회차를 고른다. guard 공유 락 안에서 호출한다.
      */
     fun checkNotCancelled(
         expoId: String,
         participantId: Long,
         checkedSessionId: Long? = null,
+        attendanceDate: LocalDate? = null,
     ): Long? {
+        val date = attendanceDate ?: LocalDate.now(clock)
         val records = records(expoId, participantId)
-        if (records.isEmpty()) return null
+        if (checkedSessionId == null && activeField(expoId, participantId, date) != null) return null
         val active = activeSessionIds(records)
         if (active.isEmpty() || (checkedSessionId != null && checkedSessionId !in active)) throw cancelled()
-        return checkedSessionId
+        val today = todaySessions(expoId, records, date)
+        if (today.isEmpty() || (checkedSessionId != null && today.none { it.id == checkedSessionId })) throw cancelled()
+        return checkedSessionId ?: today.minWith(compareBy({ it.startedAt }, { it.id })).id
     }
 
-    /** 회차 기록이 있는데 확정 상태인 회차가 하나도 없으면 취소된 신청이다. QR 조회도 입장 판정과 같은 기준으로 이것을 쓴다(#186). */
+    /** QR 조회도 오늘 유효한 PRE 또는 날짜별 FIELD가 있어야 한다. */
     fun isCancelled(
         expoId: String,
         participantId: Long,
     ): Boolean {
         val records = records(expoId, participantId)
-        return records.isNotEmpty() && records.none { it.status == PreregisterSessionStatus.ACTIVE }
+        if (activeField(expoId, participantId) != null) return false
+        return records.none { it.status == PreregisterSessionStatus.ACTIVE } || !hasTodaySession(expoId, records)
     }
 
     /**
      * 확정 상태인 회차 중 지금이 입장 시간인 회차 ID를 돌려준다. 입장 시간이 겹치면 시작이 이른 회차를 고른다.
-     * 회차 기록이 없는 참가자는 확인하지 않고 null이다.
+     * 오늘 ACTIVE FIELD는 회차 없이 통과한다.
      */
     fun check(
         expoId: String,
@@ -66,8 +75,8 @@ class PreregisterSessionValidator(
         verifyCode: () -> Unit,
     ): Long? {
         val records = records(expoId, participantId)
-        if (records.isEmpty()) return null
         verifyCode()
+        if (activeField(expoId, participantId) != null) return null
         val sessionIds = activeSessionIds(records)
         if (sessionIds.isEmpty()) throw cancelled()
 
@@ -105,6 +114,39 @@ class PreregisterSessionValidator(
             .sorted()
 
     private fun cancelled() = ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청입니다.")
+
+    fun activeField(
+        expoId: String,
+        participantId: Long,
+        attendanceDate: LocalDate? = null,
+    ) = fieldVisits.visits(expoId, participantId).firstOrNull {
+        it.visitDate == (attendanceDate ?: LocalDate.now(clock)) && it.status == FieldVisitStatus.ACTIVE
+    }
+
+    fun checkToday(
+        expoId: String,
+        participantId: Long,
+        attendanceDate: LocalDate? = null,
+    ) {
+        val date = attendanceDate ?: LocalDate.now(clock)
+        if (activeField(expoId, participantId, date) != null) return
+        if (todaySessions(expoId, records(expoId, participantId), date).isEmpty()) throw cancelled()
+    }
+
+    private fun hasTodaySession(
+        expoId: String,
+        records: List<PreregisterSession>,
+    ): Boolean = todaySessions(expoId, records).isNotEmpty()
+
+    private fun todaySessions(
+        expoId: String,
+        records: List<PreregisterSession>,
+        attendanceDate: LocalDate = LocalDate.now(clock),
+    ) = activeSessionIds(records)
+        .map { sessionId ->
+            val session = expoCircuitBreaker.callService("박람회") { expoClient.getPreregisterSession(expoId, sessionId) }
+            session
+        }.filter { it.startedAt.atZone(clock.zone).toLocalDate() == attendanceDate }
 
     private data class Window(
         val sessionId: Long,

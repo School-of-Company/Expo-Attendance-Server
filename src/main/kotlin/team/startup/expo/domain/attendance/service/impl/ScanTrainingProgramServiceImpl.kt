@@ -55,9 +55,15 @@ class ScanTrainingProgramServiceImpl(
 
         // 분 단위로 기록한다(v1과 같음)
         val now = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES)
+        val attendanceDate = LocalDate.now(clock)
         // 신청 확인과 기록을 같은 취소 보호 락 안에서 한다(#88)
         val result =
-            cancellationGuardGate.scanning(reqDto.expoId, participantId = reqDto.participantId, traineeId = traineeId) {
+            cancellationGuardGate.scanning(
+                reqDto.expoId,
+                participantId = reqDto.participantId,
+                traineeId = traineeId,
+                attendanceDate = attendanceDate,
+            ) {
                 val applied =
                     applicationCircuitBreaker.callService(
                         "신청",
@@ -65,7 +71,7 @@ class ScanTrainingProgramServiceImpl(
                 if (!applied.applied) {
                     throw ExpectedException(HttpStatus.NOT_FOUND, "연수 프로그램을 참가 중인 유저를 찾지 못 했습니다.")
                 }
-                recordProgramAttendanceService.record(ProgramType.TRAINING, programId, traineeId, LocalDate.now(clock), now)
+                recordProgramAttendanceService.record(ProgramType.TRAINING, programId, traineeId, attendanceDate, now)
             }
         // 연수 프로그램은 시간대 검사를 하지 않아 ENTRY_NOT_ALLOWED가 오는 일은 없다
         val scanResult =

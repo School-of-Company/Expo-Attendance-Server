@@ -40,6 +40,7 @@ import team.startup.expo.global.client.user.TraineeNameResDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
+import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
 import tools.jackson.databind.json.JsonMapper
 import java.time.Clock
@@ -50,6 +51,9 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 
 class ProgramAttendanceApiTests : IntegrationTestSupport() {
+    @Autowired
+    lateinit var jdbcTemplate: org.springframework.jdbc.core.JdbcTemplate
+
     @Autowired
     lateinit var mockMvc: MockMvc
 
@@ -81,6 +85,7 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
+        FieldVisitFixtures.clear(jdbcTemplate)
         periodReturns(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString()))
     }
 
@@ -154,6 +159,7 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
 
     @Test
     fun `연수 프로그램은 참가자 ID와 code로도 연결된 연수자를 찾아 입실을 기록한다`() {
+        FieldVisitFixtures.activate(jdbcTemplate, clock, "expo-pc", 801)
         trainingAllowed("expo-pc", 2301, 701)
         doReturn(ResolveTraineeByParticipantResDto(701))
             .`when`(userClient)
@@ -507,6 +513,7 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
         programId: Long,
         participantId: Long,
     ) {
+        FieldVisitFixtures.activate(jdbcTemplate, clock, expoId, participantId)
         doReturn(listOf(StandardParticipantNameResDto(participantId, "홍길동")))
             .`when`(userClient)
             .getStandardParticipantNames(StandardParticipantNamesReqDto(expoId, listOf(participantId)))

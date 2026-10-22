@@ -21,12 +21,22 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import team.startup.expo.global.client.expo.ExpoClient
+import team.startup.expo.global.client.expo.PreregisterSessionResDto
 import team.startup.expo.global.client.user.ParticipantQrReqDto
 import team.startup.expo.global.client.user.ParticipantQrResDto
 import team.startup.expo.global.client.user.UserClient
+import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import java.time.Clock
 
 class ParticipantQrApiTests : IntegrationTestSupport() {
+    @Autowired
+    private lateinit var clock: Clock
+
+    @MockitoBean
+    private lateinit var expoClient: ExpoClient
+
     @Autowired
     private lateinit var mockMvc: MockMvc
 
@@ -38,8 +48,12 @@ class ParticipantQrApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
+        FieldVisitFixtures.clear(jdbcTemplate)
         jdbcTemplate.execute("TRUNCATE TABLE tb_preregister_session RESTART IDENTITY CASCADE")
-        reset(userClient)
+        reset(userClient, expoClient)
+        doReturn(PreregisterSessionResDto(11, clock.instant(), clock.instant().plusSeconds(3600)))
+            .`when`(expoClient)
+            .getPreregisterSession(EXPO, 11)
         doReturn(
             ParticipantQrResDto(PARTICIPANT, CODE),
         ).`when`(userClient).getParticipantQr(ParticipantQrReqDto(EXPO, REPRESENTATIVE, PARTICIPANT))
@@ -59,7 +73,8 @@ class ParticipantQrApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `회차 기록이 없는 현장등록 참가자는 입장 판정처럼 회차 확인 없이 QR 값을 돌려준다`() {
+    fun `날짜별 현장등록 참가자는 입장 판정처럼 회차 확인 없이 QR 값을 돌려준다`() {
+        FieldVisitFixtures.activate(jdbcTemplate, clock, EXPO, PARTICIPANT)
         lookup()
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.participantId").value(PARTICIPANT))
@@ -90,11 +105,9 @@ class ParticipantQrApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `취소 뒤 현장 재등록한 참가자는 입장 판정처럼 QR 값을 돌려주고 다시 취소된 회차가 있으면 404이다`() {
+    fun `날짜 미상 과거 현장 재등록은 QR 권한이 아니다`() {
         insert("FIELD_REGISTERED")
-        lookup()
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.code").value(CODE))
+        lookup().andExpect(status().isNotFound)
 
         insert("CANCELLED", sessionId = 12)
         lookup().andExpect(status().isNotFound)

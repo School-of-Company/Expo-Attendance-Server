@@ -116,7 +116,14 @@ class AttendanceMetricsSpec :
         given("취소 보호 게이트로 스캔 락을 얻을 때") {
             val repository = mockk<CancellationGuardRepository>(relaxed = true)
             every { repository.findByExpoIdAndParticipantId(any(), any()) } returns null
-            val gate = CancellationGuardGate(UnitTestSupport.transactionManager(), repository)
+            val gate =
+                CancellationGuardGate(
+                    UnitTestSupport.transactionManager(),
+                    repository,
+                    mockk(relaxed = true),
+                    UnitTestSupport.preregisterValidator(),
+                    UnitTestSupport.fixedClock(),
+                )
 
             `when`("스캔이 끝나면") {
                 gate.scanning("expo-1", participantId = 7L) { "done" }
