@@ -88,13 +88,23 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
     fun `일반 프로그램은 첫 스캔에 입실을 기록하고 같은 분 안에 다시 찍어도 변하지 않는다`() {
         standardAllowed(expoId = "expo-a", programId = 1001, participantId = 501)
 
-        mockMvc.perform(scanStandard(1001, "expo-a", 501)).andExpect(status().isOk)
+        mockMvc
+            .perform(scanStandard(1001, "expo-a", 501))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.result").value("ENTERED"))
+            .andExpect(jsonPath("$.time").exists())
         val entered = standardRepository.findByParticipantIdAndStandardProgramId(501, 1001)!!
         entered.leaveTime shouldBe null
         entered.attendanceDate shouldBe today
 
         // 연속 스캔은 에러 없이 성공하고 기록은 그대로다(같은 분이라 퇴실로 치지 않는다)
-        repeat(2) { mockMvc.perform(scanStandard(1001, "expo-a", 501)).andExpect(status().isOk) }
+        repeat(2) {
+            mockMvc
+                .perform(scanStandard(1001, "expo-a", 501))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.result").value("UNCHANGED"))
+                .andExpect(jsonPath("$.time").doesNotExist())
+        }
         val again = standardRepository.findByParticipantIdAndStandardProgramId(501, 1001)!!
         again.leaveTime shouldBe null
         again.entryTime shouldBe entered.entryTime
@@ -135,8 +145,6 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
             .andExpect(status().isOk)
 
         trainingRepository.findAllByTrainingProgramId(2301).map { it.traineeId } shouldBe listOf(701L)
-        // 참가자 경로는 연수자 이름 확인을 따로 부르지 않는다
-        verify(userClient, never()).getTraineeNames(TraineeNamesReqDto("expo-pc", listOf(701)))
     }
 
     @Test
@@ -193,7 +201,6 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
 
         standardRepository.findAllByStandardProgramId(1201).map { it.participantId } shouldBe listOf(601L)
         verify(userClient).verifyStandardParticipant(VerifyStandardParticipantReqDto("expo-code", 601, CODE))
-        verify(userClient, never()).getStandardParticipantNames(StandardParticipantNamesReqDto("expo-code", listOf(601)))
     }
 
     @Test

@@ -17,6 +17,7 @@ import team.startup.expo.domain.attendance.repository.CancellationGuardRepositor
 import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
+import team.startup.expo.domain.attendance.service.ProgramScanNameResolver
 import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
 import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.application.ProgramApplicationResDto
@@ -42,6 +43,7 @@ class ScanTrainingProgramServiceImplSpec : BehaviorSpec() {
     private val expoClient = mockk<ExpoClient>()
     private val applicationClient = mockk<ApplicationClient>()
     private val recordService = mockk<RecordProgramAttendanceService>()
+    private val nameResolver = mockk<ProgramScanNameResolver>(relaxed = true)
     private val guardRepository = mockk<CancellationGuardRepository>(relaxed = true)
     private val clock = UnitTestSupport.fixedClock(Instant.parse("2026-05-10T03:07:42Z"))
 
@@ -56,6 +58,7 @@ class ScanTrainingProgramServiceImplSpec : BehaviorSpec() {
             ExpoPeriodValidator(expoClient, UnitTestSupport.circuitBreaker("period"), ExpoPeriodCacheProperties(0), clock),
             recordService,
             CancellationGuardGate(UnitTestSupport.transactionManager(), guardRepository),
+            nameResolver,
             clock,
         )
 

@@ -6,9 +6,12 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanTrainingProgramReqDto
+import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResDto
+import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResult
 import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
+import team.startup.expo.domain.attendance.service.ProgramScanNameResolver
 import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
 import team.startup.expo.domain.attendance.service.ScanTrainingProgramService
 import team.startup.expo.global.client.application.ApplicationClient
@@ -22,6 +25,7 @@ import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 /** v1 `ScanTrainingProByQrCodeServiceImpl`의 연수 프로그램 출석. 동작은 일반 프로그램과 같다. */
@@ -36,12 +40,13 @@ class ScanTrainingProgramServiceImpl(
     private val expoPeriodValidator: ExpoPeriodValidator,
     private val recordProgramAttendanceService: RecordProgramAttendanceService,
     private val cancellationGuardGate: CancellationGuardGate,
+    private val programScanNameResolver: ProgramScanNameResolver,
     private val clock: Clock,
 ) : ScanTrainingProgramService {
     override fun scan(
         programId: Long,
         reqDto: ScanTrainingProgramReqDto,
-    ) {
+    ): ProgramScanResDto {
         val traineeId = resolveTraineeId(reqDto)
         expoCircuitBreaker.callService("박람회", ExpectedException(HttpStatus.NOT_FOUND, "연수 프로그램을 찾지 못했습니다.")) {
             expoClient.getTrainingPrograms(reqDto.expoId, TrainingProgramBatchReqDto(listOf(programId)))
@@ -62,10 +67,18 @@ class ScanTrainingProgramServiceImpl(
                 }
                 recordProgramAttendanceService.record(ProgramType.TRAINING, programId, traineeId, LocalDate.now(clock), now)
             }
-        when (result) {
-            ProgramAttendanceResult.ENTERED, ProgramAttendanceResult.LEFT, ProgramAttendanceResult.ALREADY_ENTERED -> Unit
-            ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, "연수 프로그램을 찾지 못했습니다.")
-        }
+        val scanResult =
+            when (result) {
+                ProgramAttendanceResult.ENTERED -> ProgramScanResult.ENTERED
+                ProgramAttendanceResult.LEFT -> ProgramScanResult.LEFT
+                ProgramAttendanceResult.ALREADY_ENTERED -> ProgramScanResult.UNCHANGED
+                ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, "연수 프로그램을 찾지 못했습니다.")
+            }
+        return ProgramScanResDto(
+            result = scanResult,
+            name = programScanNameResolver.trainee(reqDto.expoId, traineeId),
+            time = if (scanResult == ProgramScanResult.UNCHANGED) null else now.format(TIME),
+        )
     }
 
     /**
@@ -92,5 +105,9 @@ class ScanTrainingProgramServiceImpl(
             userClient.getTraineeNames(TraineeNamesReqDto(reqDto.expoId, listOf(traineeId)))
         }
         return traineeId
+    }
+
+    private companion object {
+        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }

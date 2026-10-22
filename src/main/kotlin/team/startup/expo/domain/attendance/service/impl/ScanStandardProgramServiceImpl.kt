@@ -6,9 +6,12 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanStandardProgramReqDto
+import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResDto
+import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResult
 import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
+import team.startup.expo.domain.attendance.service.ProgramScanNameResolver
 import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
 import team.startup.expo.domain.attendance.service.ScanStandardProgramService
 import team.startup.expo.global.client.application.ApplicationClient
@@ -22,6 +25,7 @@ import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 /**
@@ -41,6 +45,7 @@ class ScanStandardProgramServiceImpl(
     private val recordProgramAttendanceService: RecordProgramAttendanceService,
     private val cancellationGuardGate: CancellationGuardGate,
     private val properties: ProgramAttendanceProperties,
+    private val programScanNameResolver: ProgramScanNameResolver,
     private val clock: Clock,
 ) : ScanStandardProgramService {
     /**
@@ -65,7 +70,7 @@ class ScanStandardProgramServiceImpl(
     override fun scan(
         programId: Long,
         reqDto: ScanStandardProgramReqDto,
-    ) {
+    ): ProgramScanResDto {
         checkParticipant(reqDto)
         expoCircuitBreaker.callService("박람회", ExpectedException(HttpStatus.NOT_FOUND, "일반 프로그램을 찾지 못 했습니다.")) {
             expoClient.getStandardProgram(reqDto.expoId, programId)
@@ -87,9 +92,21 @@ class ScanStandardProgramServiceImpl(
                 }
                 recordProgramAttendanceService.record(ProgramType.STANDARD, programId, reqDto.participantId, LocalDate.now(clock), now)
             }
-        when (result) {
-            ProgramAttendanceResult.ENTERED, ProgramAttendanceResult.LEFT, ProgramAttendanceResult.ALREADY_ENTERED -> Unit
-            ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, "일반 프로그램을 찾지 못 했습니다.")
-        }
+        val scanResult =
+            when (result) {
+                ProgramAttendanceResult.ENTERED -> ProgramScanResult.ENTERED
+                ProgramAttendanceResult.LEFT -> ProgramScanResult.LEFT
+                ProgramAttendanceResult.ALREADY_ENTERED -> ProgramScanResult.UNCHANGED
+                ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, "일반 프로그램을 찾지 못 했습니다.")
+            }
+        return ProgramScanResDto(
+            result = scanResult,
+            name = programScanNameResolver.standard(reqDto.expoId, reqDto.participantId),
+            time = if (scanResult == ProgramScanResult.UNCHANGED) null else now.format(TIME),
+        )
+    }
+
+    private companion object {
+        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }

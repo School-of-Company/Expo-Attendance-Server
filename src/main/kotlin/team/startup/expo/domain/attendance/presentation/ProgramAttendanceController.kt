@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanStandardProgramReqDto
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanTrainingProgramReqDto
+import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResDto
 import team.startup.expo.domain.attendance.service.ScanStandardProgramService
 import team.startup.expo.domain.attendance.service.ScanTrainingProgramService
 import team.startup.expo.global.logging.RequestContext
@@ -32,9 +33,9 @@ class ProgramAttendanceController(
     fun scanStandard(
         @PathVariable programId: Long,
         @Valid @RequestBody reqDto: ScanStandardProgramReqDto,
-    ) {
+    ): ProgramScanResDto {
         RequestContext.bindScan(reqDto.expoId, reqDto.participantId)
-        scanStandardProgramService.scan(programId, reqDto)
+        return scanStandardProgramService.scan(programId, reqDto)
     }
 
     @Operation(
@@ -52,8 +53,8 @@ class ProgramAttendanceController(
     fun scanTraining(
         @PathVariable programId: Long,
         @Valid @RequestBody reqDto: ScanTrainingProgramReqDto,
-    ) {
+    ): ProgramScanResDto {
         RequestContext.bindScan(reqDto.expoId, reqDto.participantId)
-        scanTrainingProgramService.scan(programId, reqDto)
+        return scanTrainingProgramService.scan(programId, reqDto)
     }
 }
