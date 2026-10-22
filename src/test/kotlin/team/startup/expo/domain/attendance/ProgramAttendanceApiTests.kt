@@ -88,13 +88,23 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
     fun `일반 프로그램은 첫 스캔에 입실을 기록하고 같은 분 안에 다시 찍어도 변하지 않는다`() {
         standardAllowed(expoId = "expo-a", programId = 1001, participantId = 501)
 
-        mockMvc.perform(scanStandard(1001, "expo-a", 501)).andExpect(status().isOk)
+        mockMvc
+            .perform(scanStandard(1001, "expo-a", 501))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.result").value("ENTERED"))
+            .andExpect(jsonPath("$.time").exists())
         val entered = standardRepository.findByParticipantIdAndStandardProgramId(501, 1001)!!
         entered.leaveTime shouldBe null
         entered.attendanceDate shouldBe today
 
         // 연속 스캔은 에러 없이 성공하고 기록은 그대로다(같은 분이라 퇴실로 치지 않는다)
-        repeat(2) { mockMvc.perform(scanStandard(1001, "expo-a", 501)).andExpect(status().isOk) }
+        repeat(2) {
+            mockMvc
+                .perform(scanStandard(1001, "expo-a", 501))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.result").value("UNCHANGED"))
+                .andExpect(jsonPath("$.time").doesNotExist())
+        }
         val again = standardRepository.findByParticipantIdAndStandardProgramId(501, 1001)!!
         again.leaveTime shouldBe null
         again.entryTime shouldBe entered.entryTime
@@ -124,6 +134,25 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `입실이 허용되지 않는 시간이면 입실은 만들지 않고 이미 입실한 사람의 퇴실은 받는다`() {
+        val enter = LocalTime.of(9, 0)
+        val leave = LocalTime.of(10, 30)
+
+        fun record(
+            time: LocalTime,
+            entryAllowed: Boolean,
+        ) = recordProgramAttendanceService.record(ProgramType.STANDARD, 1951, 951, today, time, entryAllowed)
+
+        record(enter, false) shouldBe ProgramAttendanceResult.ENTRY_NOT_ALLOWED
+        standardRepository.findByParticipantIdAndStandardProgramId(951, 1951) shouldBe null
+
+        record(enter, true) shouldBe ProgramAttendanceResult.ENTERED
+        record(enter, false) shouldBe ProgramAttendanceResult.ALREADY_ENTERED
+        record(leave, false) shouldBe ProgramAttendanceResult.LEFT
+        standardRepository.findByParticipantIdAndStandardProgramId(951, 1951)!!.leaveTime shouldBe leave
+    }
+
+    @Test
     fun `연수 프로그램은 참가자 ID와 code로도 연결된 연수자를 찾아 입실을 기록한다`() {
         trainingAllowed("expo-pc", 2301, 701)
         doReturn(ResolveTraineeByParticipantResDto(701))
@@ -135,8 +164,6 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
             .andExpect(status().isOk)
 
         trainingRepository.findAllByTrainingProgramId(2301).map { it.traineeId } shouldBe listOf(701L)
-        // 참가자 경로는 연수자 이름 확인을 따로 부르지 않는다
-        verify(userClient, never()).getTraineeNames(TraineeNamesReqDto("expo-pc", listOf(701)))
     }
 
     @Test
@@ -193,7 +220,6 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
 
         standardRepository.findAllByStandardProgramId(1201).map { it.participantId } shouldBe listOf(601L)
         verify(userClient).verifyStandardParticipant(VerifyStandardParticipantReqDto("expo-code", 601, CODE))
-        verify(userClient, never()).getStandardParticipantNames(StandardParticipantNamesReqDto("expo-code", listOf(601)))
     }
 
     @Test

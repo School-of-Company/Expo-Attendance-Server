@@ -17,6 +17,7 @@ import team.startup.expo.domain.attendance.repository.CancellationGuardRepositor
 import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
+import team.startup.expo.domain.attendance.service.ProgramScanNameResolver
 import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
 import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.application.ProgramApplicationResDto
@@ -42,6 +43,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
     private val expoClient = mockk<ExpoClient>()
     private val applicationClient = mockk<ApplicationClient>()
     private val recordService = mockk<RecordProgramAttendanceService>()
+    private val nameResolver = mockk<ProgramScanNameResolver>(relaxed = true)
     private val guardRepository = mockk<CancellationGuardRepository>(relaxed = true)
 
     // 03:07:42 UTC. 기록 시각은 분 단위로 잘린다
@@ -59,6 +61,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
             recordService,
             CancellationGuardGate(UnitTestSupport.transactionManager(), guardRepository),
             ProgramAttendanceProperties(requireCode),
+            nameResolver,
             clock,
         )
 
@@ -233,6 +236,30 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
 
                 then("에러 없이 성공한다") {
                     shouldNotThrowAny { service().scan(programId, withCode) }
+                }
+            }
+
+            `when`("프로그램 일정 시작 10분 전보다 이르면") {
+                givenHappyPath()
+                // 시계는 한국 시간 12:07이다
+                every { expoClient.getStandardProgram(expoId, programId) } returns
+                    StandardProgramResDto(programId, "프로그램", "2026-05-10T14:00", "2026-05-10T15:00")
+                every { recordService.record(any(), any(), any(), any(), any(), false) } returns ProgramAttendanceResult.ENTRY_NOT_ALLOWED
+
+                then("입실을 막도록 넘기고 400을 던진다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "출석 가능한 시간이 아닙니다.") { service().scan(programId, withCode) }
+                    verify(exactly = 1) { recordService.record(any(), any(), any(), any(), any(), false) }
+                }
+            }
+
+            `when`("프로그램 일정 시간대 안이면") {
+                givenHappyPath()
+                every { expoClient.getStandardProgram(expoId, programId) } returns
+                    StandardProgramResDto(programId, "프로그램", "2026-05-10T12:00", "2026-05-10T13:00")
+
+                then("입실을 허용하도록 넘긴다") {
+                    shouldNotThrowAny { service().scan(programId, withCode) }
+                    verify(exactly = 1) { recordService.record(any(), any(), any(), any(), any(), true) }
                 }
             }
 

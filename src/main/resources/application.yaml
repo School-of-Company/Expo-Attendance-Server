@@ -52,6 +52,7 @@ preregister-entry:
   lead-minutes: ${PREREGISTER_ENTRY_LEAD_MINUTES:30}
 program-attendance:
   require-code: ${PROGRAM_ATTENDANCE_REQUIRE_CODE:false}
+  lead-minutes: ${PROGRAM_ATTENDANCE_LEAD_MINUTES:10}
 qr-entry-review:
   enabled: ${QR_ENTRY_REVIEW_ENABLED:true}
   interval-ms: ${QR_ENTRY_REVIEW_INTERVAL_MS:300000}
