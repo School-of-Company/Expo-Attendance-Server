@@ -10,8 +10,8 @@ import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScan
 import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResult
 import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
-import team.startup.expo.domain.attendance.service.ProgramScanNameResolver
 import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
+import team.startup.expo.domain.attendance.service.ProgramScanNameResolver
 import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
 import team.startup.expo.domain.attendance.service.ScanTrainingProgramService
 import team.startup.expo.global.client.application.ApplicationClient
