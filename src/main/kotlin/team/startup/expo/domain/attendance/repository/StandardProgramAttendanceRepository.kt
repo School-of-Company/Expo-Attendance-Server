@@ -4,7 +4,6 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
-import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.entity.StandardProgramAttendance
 import java.time.LocalDate
 import java.time.LocalTime
@@ -34,7 +33,6 @@ interface StandardProgramAttendanceRepository : JpaRepository<StandardProgramAtt
     ): List<Array<Any>>
 
     /** 처음 스캔이면 입실을 기록한다. 반환값 0이면 이미 입실한 사람이다. */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -55,7 +53,6 @@ interface StandardProgramAttendanceRepository : JpaRepository<StandardProgramAtt
      * 입실했고 아직 퇴실하지 않았으면 퇴실을 기록한다. 입실과 같은 분 안의 스캔(연속 스캔)은 퇴실로 치지 않는다.
      * 반환값 0이면 기록하지 않았다.
      */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -71,7 +68,6 @@ interface StandardProgramAttendanceRepository : JpaRepository<StandardProgramAtt
     ): Int
 
     /** 프로그램의 출석 기록을 모두 지운다. */
-    @Transactional
     @Modifying
     @Query(nativeQuery = true, value = "DELETE FROM tb_standard_program_attendance WHERE standard_program_id = :programId")
     fun deleteByProgramId(

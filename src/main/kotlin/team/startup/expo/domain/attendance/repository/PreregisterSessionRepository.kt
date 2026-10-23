@@ -4,7 +4,6 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
-import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.entity.PreregisterSession
 import java.time.LocalDateTime
 
@@ -20,7 +19,6 @@ interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long>
     ): List<PreregisterSession>
 
     /** 이 회차를 기록하거나(없으면 만들고) 확정 상태로 되돌린다. 다른 회차는 건드리지 않는다. 같은 요청을 다시 보내도 결과는 같다. */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -42,7 +40,6 @@ interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long>
      * revision이 이 회차에 이미 받은 값과 회차 없는 취소의 revision보다 클 때만 회차를 기록하고 확정 상태로 되돌린다.
      * 영향받은 행이 0이면 같거나 더 오래된 요청이다. 비교와 갱신이 한 문장이라 두 요청이 겹쳐도 더 큰 revision이 이긴다.
      */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -67,7 +64,6 @@ interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long>
     ): Int
 
     /** revision이 이 회차에 이미 받은 값보다 클 때만 이 회차를 취소로 바꾼다. 기록이 없으면 취소 기록을 만든다. 0이면 같거나 더 오래된 요청이다. */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -88,7 +84,6 @@ interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long>
     ): Int
 
     /** 회차를 지정하지 않은 취소: revision이 더 큰 회차만 모두 취소로 바꾼다(회차 없는 취소 행은 [recordCancelWithoutSessionIfNewer]가 맡는다). */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -105,7 +100,6 @@ interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long>
     ): Int
 
     /** 회차를 지정하지 않은 취소의 revision을 회차 없는 취소 행에 남긴다(없으면 만들고, 더 클 때만 바꾼다). 0이면 같거나 더 오래된 요청이다. */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -129,7 +123,6 @@ interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long>
      * 확정 회차도 바꾸는 것은 다른 날 회차로 확정된 사람이 현장등록하면 그 회차 시간 없이 입장해야 하기 때문이다(그날 회차 확정자는 신청 서비스가 현장등록을 거절한다).
      * 행과 revision을 남겨 그보다 오래된 회차 PUT·DELETE와 늦게 온 취소 보호 확정이 다시 막지 못하게 한다.
      */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -149,7 +142,6 @@ interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long>
      * 이 회차의 기록이 있으면 취소로 바꾼다. 없으면 아무것도 하지 않는다. `revision`이 있으면 그보다 오래된 기록만 바꾸고 그 revision을 남긴다
      * (취소 보호 확정이 회차 취소 통지보다 먼저 와도 같은 결과가 되게 한다).
      */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -169,7 +161,6 @@ interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long>
     ): Int
 
     /** 기록이 있으면 모든 회차를 취소로 바꾼다. 없으면 아무것도 하지 않는다(기록이 없는 참가자는 회차 확인 대상이 아니다). */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -184,7 +175,6 @@ interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long>
         @Param("now") now: LocalDateTime,
     ): Int
 
-    @Transactional
     @Modifying
     @Query(nativeQuery = true, value = "DELETE FROM tb_preregister_session WHERE expo_id = :expoId")
     fun deleteByExpoId(

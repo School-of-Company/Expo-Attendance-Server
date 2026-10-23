@@ -25,6 +25,8 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
 import team.startup.expo.global.client.application.ApplicationClient
@@ -59,6 +61,11 @@ import java.util.concurrent.TimeUnit
 class CancellationGuardApiTests : IntegrationTestSupport() {
     @Autowired
     private lateinit var mockMvc: MockMvc
+
+    @Autowired
+    private lateinit var transactionManager: PlatformTransactionManager
+
+    private val tx by lazy { TransactionTemplate(transactionManager) }
 
     @Autowired
     private lateinit var jdbcTemplate: JdbcTemplate
@@ -182,7 +189,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
 
     @Test
     fun `프로그램에 출석했으면 409이고 보호를 남기지 않는다`() {
-        standardRepository.insertEntryIfAbsent(3101, PARTICIPANT, today, LocalTime.of(10, 0))
+        tx.execute { standardRepository.insertEntryIfAbsent(3101, PARTICIPANT, today, LocalTime.of(10, 0)) }
 
         acquire()
             .andExpect(
@@ -196,7 +203,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
     @Test
     fun `연결된 연수자의 연수 출석이 있으면 막고 보호 중에는 그 연수자의 연수 스캔도 막는다`() {
         status(entered = false, traineeId = TRAINEE)
-        trainingRepository.insertEntryIfAbsent(3201, TRAINEE, today, LocalTime.of(10, 0))
+        tx.execute { trainingRepository.insertEntryIfAbsent(3201, TRAINEE, today, LocalTime.of(10, 0)) }
         acquire().andExpect(status().isConflict).andExpect(jsonPath("$.programAttended").value(true))
 
         trainingRepository.deleteAll()
@@ -522,7 +529,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
             .andExpect(jsonPath("$.guardState").doesNotExist())
 
         // 연결된 연수자의 연수 출석도 참가자의 프로그램 출석으로 센다
-        trainingRepository.insertEntryIfAbsent(3201, TRAINEE, today, LocalTime.of(10, 0))
+        tx.execute { trainingRepository.insertEntryIfAbsent(3201, TRAINEE, today, LocalTime.of(10, 0)) }
         cancellationStatus().andExpect(jsonPath("$.programAttended").value(true))
         trainingRepository.deleteAll()
 
@@ -530,7 +537,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         cancellationStatus().andExpect(jsonPath("$.entered").value(true)).andExpect(jsonPath("$.traineeLinked").value(false))
 
         status(entered = false, traineeId = null)
-        standardRepository.insertEntryIfAbsent(3101, PARTICIPANT, today, LocalTime.of(10, 0))
+        tx.execute { standardRepository.insertEntryIfAbsent(3101, PARTICIPANT, today, LocalTime.of(10, 0)) }
         cancellationStatus().andExpect(jsonPath("$.programAttended").value(true))
 
         acquire().andExpect(status().isConflict)
@@ -694,7 +701,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
 
         adminStatus(entered = false, traineeId = TRAINEE)
-        trainingRepository.insertEntryIfAbsent(3201, TRAINEE, today, LocalTime.of(10, 0))
+        tx.execute { trainingRepository.insertEntryIfAbsent(3201, TRAINEE, today, LocalTime.of(10, 0)) }
         adminAcquire().andExpect(status().isConflict).andExpect(jsonPath("$.programAttended").value(true))
         jdbcTemplate.queryForObject("SELECT count(*) FROM tb_cancellation_guard", Long::class.java) shouldBe 0L
     }

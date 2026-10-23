@@ -4,7 +4,6 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
-import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.entity.CancellationGuard
 import java.time.LocalDateTime
 
@@ -37,7 +36,6 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
         @Param("key") key: String,
     ): Int
 
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -54,7 +52,6 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
         @Param("now") now: LocalDateTime,
     ): Int
 
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -71,7 +68,6 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
         @Param("now") now: LocalDateTime,
     ): Int
 
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -89,7 +85,6 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
     ): Int
 
     /** 이 작업이 건 보호를 푼다(취소가 거절되었거나 중단된 경우). 확정된 보호는 지우지 않는다. */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -108,7 +103,6 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
      * 재신청으로 회차가 다시 기록되면 확정된 취소 보호를 지운다. 회차 revision이 있으면 취소를 확정할 때 받은 revision보다 **새로운**
      * 요청일 때만 지운다(오래된 PUT이 늦게 도착해 확정된 취소를 풀지 못하게). 어느 한쪽에 revision이 없으면 기존처럼 지운다.
      */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -124,7 +118,6 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
         @Param("revision") revision: Long?,
     ): Int
 
-    @Transactional
     @Modifying
     @Query(nativeQuery = true, value = "DELETE FROM tb_cancellation_guard WHERE expo_id = :expoId")
     fun deleteByExpoId(
@@ -132,7 +125,6 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
     ): Int
 
     /** 중단된 작업으로 기록한다. 이미 기록되어 있으면 아무것도 하지 않는다. */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -150,7 +142,6 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
     ): Int
 
     /** commit이 보호를 확정하지 않고 해제로 끝낸 작업으로 기록한다. 이미 기록되어 있으면 아무것도 하지 않는다. */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -200,14 +191,12 @@ interface CancellationGuardRepository : JpaRepository<CancellationGuard, Long> {
     ): Boolean
 
     /** [cutoff]보다 먼저 기록된 중단 기록을 지운다(보관 기간 정리). */
-    @Transactional
     @Modifying
     @Query(nativeQuery = true, value = "DELETE FROM tb_cancellation_aborted WHERE created_at < :cutoff")
     fun deleteAbortedCreatedBefore(
         @Param("cutoff") cutoff: LocalDateTime,
     ): Int
 
-    @Transactional
     @Modifying
     @Query(nativeQuery = true, value = "DELETE FROM tb_cancellation_aborted WHERE expo_id = :expoId")
     fun deleteAbortedByExpoId(

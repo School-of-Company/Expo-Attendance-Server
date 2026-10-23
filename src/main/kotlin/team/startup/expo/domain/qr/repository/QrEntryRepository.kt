@@ -5,7 +5,6 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
-import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.qr.entity.QrEntry
 import team.startup.expo.domain.qr.entity.QrEntryPeriodCheck
 import java.time.LocalDate
@@ -16,7 +15,6 @@ interface QrEntryRepository : JpaRepository<QrEntry, Long> {
      * 토큰이 해당 박람회 것이고 그 날짜에 아직 입장하지 않았을 때만 입장을 기록한다.
      * 무효화한 토큰은 기록하지 않는다. 반환값이 0이면 이미 입장했거나 없는 토큰이거나 무효화한 토큰이다.
      */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -40,7 +38,6 @@ interface QrEntryRepository : JpaRepository<QrEntry, Long> {
      * 한 문장이라 둘이 함께 커밋되거나 함께 빠지므로, 입장은 됐는데 로그만 없어 퇴장 스캔이 막히는 일이 없다.
      * 반환값은 새로 기록한 입장 수다(1이면 입장, 0이면 이미 입장했거나 없는 토큰이거나 무효화한 토큰).
      */
-    @Transactional
     @Query(
         nativeQuery = true,
         value = """
@@ -77,7 +74,6 @@ interface QrEntryRepository : JpaRepository<QrEntry, Long> {
      * 오늘 퇴장한 종이 QR이 다시 입장하면 재입장으로 기록한다(#148). 이 박람회의 무효화하지 않은 토큰만 해당하고, 퇴장 시각을 비워
      * 다시 "안에 있는" 상태로 되돌리면서 재입장 이력을 남긴다. 반환값이 0이면 퇴장한 상태가 아니다(퇴장 없이 다시 찍은 것은 재입장이 아니다).
      */
-    @Transactional
     @Query(
         nativeQuery = true,
         value = """
@@ -125,7 +121,6 @@ interface QrEntryRepository : JpaRepository<QrEntry, Long> {
         pageable: Pageable,
     ): List<PendingQrEntry>
 
-    @Transactional
     @Modifying
     @Query("UPDATE QrEntry e SET e.periodCheck = :status WHERE e.id IN :ids")
     fun updatePeriodCheck(

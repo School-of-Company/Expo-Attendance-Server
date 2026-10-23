@@ -10,6 +10,8 @@ import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
 import team.startup.expo.support.IntegrationTestSupport
@@ -19,6 +21,11 @@ import java.time.LocalTime
 class ProgramAttendanceSummaryApiTests : IntegrationTestSupport() {
     @Autowired
     private lateinit var mockMvc: MockMvc
+
+    @Autowired
+    private lateinit var transactionManager: PlatformTransactionManager
+
+    private val tx by lazy { TransactionTemplate(transactionManager) }
 
     @Autowired
     private lateinit var jdbcTemplate: JdbcTemplate
@@ -37,11 +44,11 @@ class ProgramAttendanceSummaryApiTests : IntegrationTestSupport() {
     @Test
     fun `프로그램별 출석 인원과 입실 시각 범위를 요청 순서대로 돌려주고 출석이 없으면 0이다`() {
         val day = LocalDate.of(2026, 10, 20)
-        standardRepository.insertEntryIfAbsent(4001, 1, day, LocalTime.of(9, 5))
-        standardRepository.insertEntryIfAbsent(4001, 2, day, LocalTime.of(10, 30))
-        standardRepository.insertEntryIfAbsent(4001, 2, day, LocalTime.of(11, 0))
+        tx.execute { standardRepository.insertEntryIfAbsent(4001, 1, day, LocalTime.of(9, 5)) }
+        tx.execute { standardRepository.insertEntryIfAbsent(4001, 2, day, LocalTime.of(10, 30)) }
+        tx.execute { standardRepository.insertEntryIfAbsent(4001, 2, day, LocalTime.of(11, 0)) }
         // 같은 ID의 연수 프로그램은 다른 프로그램이다
-        trainingRepository.insertEntryIfAbsent(4001, 9, day, LocalTime.of(14, 0))
+        tx.execute { trainingRepository.insertEntryIfAbsent(4001, 9, day, LocalTime.of(14, 0)) }
 
         summarize(
             """{"programs":[

@@ -4,6 +4,8 @@ import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.TestPropertySource
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
 import team.startup.expo.domain.attendance.service.impl.CancellationAbortedCleanupScheduler
 import team.startup.expo.domain.attendance.service.impl.CancellationAbortedCleanupService
@@ -14,6 +16,11 @@ import java.time.LocalDateTime
 class CancellationAbortedCleanupTests : team.startup.expo.support.IntegrationTestSupport() {
     @Autowired
     lateinit var cleanupService: CancellationAbortedCleanupService
+
+    @Autowired
+    lateinit var transactionManager: PlatformTransactionManager
+
+    private val tx by lazy { TransactionTemplate(transactionManager) }
 
     @Autowired
     lateinit var guardRepository: CancellationGuardRepository
@@ -30,8 +37,8 @@ class CancellationAbortedCleanupTests : team.startup.expo.support.IntegrationTes
     fun `보관일보다 오래된 중단 기록만 지우고 최근 기록은 남긴다`() {
         val expoId = "expo-cleanup"
         val now = LocalDateTime.now()
-        guardRepository.insertAborted(expoId, 1L, "old-op", now.minusDays(31))
-        guardRepository.insertAborted(expoId, 2L, "recent-op", now.minusDays(29))
+        tx.execute { guardRepository.insertAborted(expoId, 1L, "old-op", now.minusDays(31)) }
+        tx.execute { guardRepository.insertAborted(expoId, 2L, "recent-op", now.minusDays(29)) }
 
         val deleted = cleanupService.cleanup()
 

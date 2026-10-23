@@ -55,14 +55,16 @@ class PreregisterSessionValidator(
         return checkedSessionId ?: today.minWith(compareBy({ it.startedAt }, { it.id })).id
     }
 
-    /** QR 조회도 오늘 유효한 PRE 또는 날짜별 FIELD가 있어야 한다. */
+    /**
+     * QR 조회 자격이 없는지 판단한다. 확정 상태인 PRE 회차가 하나라도 있으면 방문일 전에도 조회할 수 있고, FIELD는 오늘 ACTIVE일 때만 된다.
+     * QR을 보여 주는 것과 입장을 허용하는 것은 별개라서 방문일·회차 입장 시간은 여기서 보지 않는다. 그건 스캔의 [check]·[checkNotCancelled]·[checkToday]가 한다.
+     */
     fun isCancelled(
         expoId: String,
         participantId: Long,
     ): Boolean {
-        val records = records(expoId, participantId)
         if (activeField(expoId, participantId) != null) return false
-        return records.none { it.status == PreregisterSessionStatus.ACTIVE } || !hasTodaySession(expoId, records)
+        return records(expoId, participantId).none { it.status == PreregisterSessionStatus.ACTIVE }
     }
 
     /**
@@ -132,11 +134,6 @@ class PreregisterSessionValidator(
         if (activeField(expoId, participantId, date) != null) return
         if (todaySessions(expoId, records(expoId, participantId), date).isEmpty()) throw cancelled()
     }
-
-    private fun hasTodaySession(
-        expoId: String,
-        records: List<PreregisterSession>,
-    ): Boolean = todaySessions(expoId, records).isNotEmpty()
 
     private fun todaySessions(
         expoId: String,
