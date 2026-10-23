@@ -27,6 +27,7 @@ import team.startup.expo.domain.attendance.service.EntryReplayPolicy
 import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.service.FieldEntryFence
 import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
+import team.startup.expo.domain.attendance.support.EntryLogWriter
 import team.startup.expo.global.client.user.ParticipantEntryStatusResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
@@ -75,6 +76,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
             ),
             entryLogService,
             entryLogRepository,
+            EntryLogWriter(entryLogRepository),
             EntryReplayPolicy(EntryReplayProperties(windowSeconds = 30)),
             JsonMapper.builder().build(),
             clock,

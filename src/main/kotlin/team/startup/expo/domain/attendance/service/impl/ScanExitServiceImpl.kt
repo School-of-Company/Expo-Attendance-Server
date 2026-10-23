@@ -11,6 +11,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.ScanExitRes
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.ScanExitService
 import team.startup.expo.domain.attendance.service.ScannerName
+import team.startup.expo.domain.attendance.support.EntryLogWriter
 import team.startup.expo.domain.qr.repository.QrTokenRepository
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.TraineeNamesReqDto
@@ -29,6 +30,7 @@ import java.time.format.DateTimeFormatter
 @Service
 class ScanExitServiceImpl(
     private val entryLogRepository: EntryLogRepository,
+    private val entryLogWriter: EntryLogWriter,
     private val qrTokenRepository: QrTokenRepository,
     private val userClient: UserClient,
     @Qualifier("userCircuitBreaker") private val userCircuitBreaker: CircuitBreaker,
@@ -43,7 +45,7 @@ class ScanExitServiceImpl(
         val now = LocalDateTime.now(clock)
         val today = now.toLocalDate()
 
-        if (entryLogRepository.markExited(expoId, type.name, subjectId, today, now, ScannerName.of(scannerName)) == 1) {
+        if (entryLogWriter.markExited(expoId, type.name, subjectId, today, now, ScannerName.of(scannerName)) == 1) {
             val log = findLog(expoId, type, subjectId, now)
             return toResponse(log, now)
         }

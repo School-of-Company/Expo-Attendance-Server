@@ -18,6 +18,7 @@ import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
 import team.startup.expo.domain.qr.presentation.dto.request.ScanQrTokenReqDto
 import team.startup.expo.domain.qr.repository.QrEntryRepository
 import team.startup.expo.domain.qr.repository.QrTokenRepository
+import team.startup.expo.domain.qr.support.QrEntryWriter
 import team.startup.expo.global.config.EntryReplayProperties
 import team.startup.expo.support.UnitTestSupport
 import team.startup.expo.support.shouldFailWith
@@ -38,7 +39,7 @@ class ScanQrTokenServiceImplSpec : BehaviorSpec() {
     private val service =
         ScanQrTokenServiceImpl(
             qrTokenRepository,
-            qrEntryRepository,
+            QrEntryWriter(qrEntryRepository),
             entryLogRepository,
             expoPeriodValidator,
             EntryReplayPolicy(EntryReplayProperties(windowSeconds = 30)),
