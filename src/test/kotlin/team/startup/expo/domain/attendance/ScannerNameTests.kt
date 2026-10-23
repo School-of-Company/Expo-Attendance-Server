@@ -2,7 +2,7 @@ package team.startup.expo.domain.attendance
 
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
-import team.startup.expo.domain.attendance.service.ScannerName
+import team.startup.expo.domain.attendance.support.ScannerName
 
 class ScannerNameTests {
     @Test

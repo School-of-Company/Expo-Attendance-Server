@@ -1,4 +1,4 @@
-package team.startup.expo.domain.attendance.service.impl
+package team.startup.expo.domain.attendance.support
 
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -6,8 +6,6 @@ import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.repository.DeletedProgramRepository
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
-import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
-import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
 import java.time.LocalDate
 import java.time.LocalTime
 

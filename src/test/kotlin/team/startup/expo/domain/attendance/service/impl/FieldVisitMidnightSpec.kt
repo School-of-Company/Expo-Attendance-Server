@@ -12,12 +12,12 @@ import team.startup.expo.domain.attendance.repository.CancellationGuardRepositor
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.repository.FieldVisit
 import team.startup.expo.domain.attendance.repository.FieldVisitRepository
-import team.startup.expo.domain.attendance.service.CancellationGuardGate
 import team.startup.expo.domain.attendance.service.EntryLogService
-import team.startup.expo.domain.attendance.service.EntryReplayPolicy
-import team.startup.expo.domain.attendance.service.FieldEntryFence
-import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
+import team.startup.expo.domain.attendance.support.CancellationGuardGate
 import team.startup.expo.domain.attendance.support.EntryLogWriter
+import team.startup.expo.domain.attendance.support.EntryReplayPolicy
+import team.startup.expo.domain.attendance.support.FieldEntryFence
+import team.startup.expo.domain.attendance.support.PreregisterSessionValidator
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.UserClient

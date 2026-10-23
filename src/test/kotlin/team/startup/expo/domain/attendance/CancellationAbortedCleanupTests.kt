@@ -7,8 +7,8 @@ import org.springframework.test.context.TestPropertySource
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
-import team.startup.expo.domain.attendance.service.impl.CancellationAbortedCleanupScheduler
-import team.startup.expo.domain.attendance.service.impl.CancellationAbortedCleanupService
+import team.startup.expo.domain.attendance.support.CancellationAbortedCleanupScheduler
+import team.startup.expo.domain.attendance.support.CancellationAbortedCleanupService
 import java.time.LocalDateTime
 
 /** 보관 기간이 지난 중단된 취소 기록만 지우고 나머지는 남긴다(#105). */

@@ -1,4 +1,4 @@
-package team.startup.expo.domain.attendance.service
+package team.startup.expo.domain.attendance.support
 
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service

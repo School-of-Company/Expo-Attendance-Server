@@ -12,7 +12,7 @@ import io.mockk.every
 import io.mockk.mockk
 import org.springframework.http.HttpStatus
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
-import team.startup.expo.domain.attendance.service.CancellationGuardGate
+import team.startup.expo.domain.attendance.support.CancellationGuardGate
 import team.startup.expo.domain.qr.repository.QrEntryRepository
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.exception.ExpectedException

@@ -9,9 +9,9 @@ import team.startup.expo.domain.attendance.presentation.dto.request.RecordWalkIn
 import team.startup.expo.domain.attendance.presentation.dto.response.WalkInCountResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.WalkInCountsResDto
 import team.startup.expo.domain.attendance.repository.WalkInLogRepository
-import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
-import team.startup.expo.domain.attendance.service.ScannerName
 import team.startup.expo.domain.attendance.service.WalkInService
+import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
+import team.startup.expo.domain.attendance.support.ScannerName
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock

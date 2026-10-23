@@ -1,4 +1,4 @@
-package team.startup.expo.domain.attendance.service
+package team.startup.expo.domain.attendance.support
 
 /**
  * 입구 스캐너(기기)가 `X-Scanner-Name` 헤더로 보내는 이름(#131). 클라이언트가 기기별로 저장한 짧은 이름이다.

@@ -1,4 +1,4 @@
-package team.startup.expo.domain.qr.service.impl
+package team.startup.expo.domain.qr.support
 
 import io.kotest.core.spec.IsolationMode
 import io.kotest.core.spec.style.BehaviorSpec
@@ -7,7 +7,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.springframework.http.HttpStatus
-import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
+import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
 import team.startup.expo.domain.qr.entity.QrEntryPeriodCheck
 import team.startup.expo.domain.qr.repository.PendingQrEntry
 import team.startup.expo.domain.qr.repository.QrEntryRepository

@@ -1,4 +1,4 @@
-package team.startup.expo.domain.attendance.service.impl
+package team.startup.expo.domain.attendance.support
 
 import io.kotest.core.spec.IsolationMode
 import io.kotest.core.spec.style.BehaviorSpec

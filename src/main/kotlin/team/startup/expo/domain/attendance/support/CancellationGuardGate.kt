@@ -1,4 +1,4 @@
-package team.startup.expo.domain.attendance.service
+package team.startup.expo.domain.attendance.support
 
 import org.springframework.dao.CannotAcquireLockException
 import org.springframework.http.HttpStatus

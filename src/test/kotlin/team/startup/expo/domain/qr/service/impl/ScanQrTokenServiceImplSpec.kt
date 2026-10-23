@@ -13,8 +13,8 @@ import team.startup.expo.domain.attendance.entity.EntryLog
 import team.startup.expo.domain.attendance.entity.EntryStatus
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
-import team.startup.expo.domain.attendance.service.EntryReplayPolicy
-import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
+import team.startup.expo.domain.attendance.support.EntryReplayPolicy
+import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
 import team.startup.expo.domain.qr.presentation.dto.request.ScanQrTokenReqDto
 import team.startup.expo.domain.qr.repository.QrEntryRepository
 import team.startup.expo.domain.qr.repository.QrTokenRepository

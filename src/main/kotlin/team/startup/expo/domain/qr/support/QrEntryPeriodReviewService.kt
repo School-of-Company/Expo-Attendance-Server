@@ -1,10 +1,10 @@
-package team.startup.expo.domain.qr.service.impl
+package team.startup.expo.domain.qr.support
 
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
-import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
+import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
 import team.startup.expo.domain.qr.entity.QrEntryPeriodCheck
 import team.startup.expo.domain.qr.repository.PendingQrEntry
 import team.startup.expo.domain.qr.repository.QrEntryRepository
