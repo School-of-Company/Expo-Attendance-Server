@@ -2,6 +2,7 @@ package team.startup.expo.domain.qr.service.impl
 
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.qr.entity.QrTokenCode
 import team.startup.expo.domain.qr.presentation.dto.request.RevokeQrTokenReqDto
 import team.startup.expo.domain.qr.repository.QrTokenRepository
@@ -16,6 +17,7 @@ class RevokeQrTokenServiceImpl(
     private val qrTokenRepository: QrTokenRepository,
     private val clock: Clock,
 ) : RevokeQrTokenService {
+    @Transactional
     override fun revoke(
         expoId: String,
         reqDto: RevokeQrTokenReqDto,

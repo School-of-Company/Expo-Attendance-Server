@@ -7,6 +7,7 @@ import io.mockk.verify
 import org.springframework.dao.DataAccessResourceFailureException
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
+import team.startup.expo.domain.attendance.support.EntryLogWriter
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -21,7 +22,7 @@ class EntryLogServiceImplSpec :
                 every { repository.insertIfAbsent(any(), any(), any(), any(), any(), any(), any()) } returns 0
                 every { repository.reenter(any(), any(), any(), any(), any(), any()) } returns 1
 
-                EntryLogServiceImpl(repository, clock).recordEntry("expo", EntrySubjectType.STANDARD, "3")
+                EntryLogServiceImpl(EntryLogWriter(repository), clock).recordEntry("expo", EntrySubjectType.STANDARD, "3")
 
                 Then("퇴장한 상태면 다시 열도록 재입장을 시도한다") {
                     verify(exactly = 1) { repository.reenter("expo", "STANDARD", "3", any(), any(), any()) }
@@ -37,7 +38,7 @@ class EntryLogServiceImplSpec :
                     if (++calls < 3) throw DataAccessResourceFailureException("db") else 1
                 }
 
-                EntryLogServiceImpl(repository, clock).recordEntry("expo", EntrySubjectType.STANDARD, "1")
+                EntryLogServiceImpl(EntryLogWriter(repository), clock).recordEntry("expo", EntrySubjectType.STANDARD, "1")
 
                 Then("세 번 시도하고 예외를 던지지 않는다") {
                     verify(exactly = 3) { repository.insertIfAbsent(any(), any(), any(), any(), any(), any(), any()) }
@@ -50,7 +51,7 @@ class EntryLogServiceImplSpec :
                     repository.insertIfAbsent(any(), any(), any(), any(), any(), any(), any())
                 } throws DataAccessResourceFailureException("db")
 
-                EntryLogServiceImpl(repository, clock).recordEntry("expo", EntrySubjectType.STANDARD, "2")
+                EntryLogServiceImpl(EntryLogWriter(repository), clock).recordEntry("expo", EntrySubjectType.STANDARD, "2")
 
                 Then("세 번까지만 시도하고 입장은 실패시키지 않는다") {
                     verify(exactly = 3) { repository.insertIfAbsent(any(), any(), any(), any(), any(), any(), any()) }

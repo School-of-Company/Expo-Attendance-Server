@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import team.startup.expo.domain.attendance.entity.StandardProgramAttendance
 import team.startup.expo.domain.attendance.entity.TrainingProgramAttendance
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
@@ -22,6 +24,11 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 
 class AttendanceSchemaTests : IntegrationTestSupport() {
+    @Autowired
+    lateinit var transactionManager: PlatformTransactionManager
+
+    private val tx by lazy { TransactionTemplate(transactionManager) }
+
     @Autowired
     lateinit var standardAttendanceRepository: StandardProgramAttendanceRepository
 
@@ -59,9 +66,9 @@ class AttendanceSchemaTests : IntegrationTestSupport() {
         qrTokenRepository.save(QrToken(token = "token-daily", expoId = "expo-a", category = QrCategory.GENERAL))
         val now = LocalDateTime.now()
 
-        qrEntryRepository.insertIfAbsent("token-daily", "expo-a", today, now, "VERIFIED") shouldBe 1
-        qrEntryRepository.insertIfAbsent("token-daily", "expo-a", today, now, "VERIFIED") shouldBe 0
-        qrEntryRepository.insertIfAbsent("token-daily", "expo-a", today.plusDays(1), now, "VERIFIED") shouldBe 1
+        tx.execute { qrEntryRepository.insertIfAbsent("token-daily", "expo-a", today, now, "VERIFIED") } shouldBe 1
+        tx.execute { qrEntryRepository.insertIfAbsent("token-daily", "expo-a", today, now, "VERIFIED") } shouldBe 0
+        tx.execute { qrEntryRepository.insertIfAbsent("token-daily", "expo-a", today.plusDays(1), now, "VERIFIED") } shouldBe 1
     }
 
     @Test
@@ -69,8 +76,8 @@ class AttendanceSchemaTests : IntegrationTestSupport() {
         qrTokenRepository.save(QrToken(token = "token-other", expoId = "expo-a", category = QrCategory.GENERAL))
         val now = LocalDateTime.now()
 
-        qrEntryRepository.insertIfAbsent("unknown", "expo-a", today, now, "VERIFIED") shouldBe 0
-        qrEntryRepository.insertIfAbsent("token-other", "expo-b", today, now, "VERIFIED") shouldBe 0
+        tx.execute { qrEntryRepository.insertIfAbsent("unknown", "expo-a", today, now, "VERIFIED") } shouldBe 0
+        tx.execute { qrEntryRepository.insertIfAbsent("token-other", "expo-b", today, now, "VERIFIED") } shouldBe 0
     }
 
     @Test
@@ -88,7 +95,17 @@ class AttendanceSchemaTests : IntegrationTestSupport() {
                         Callable {
                             ready.countDown()
                             start.await()
-                            qrEntryRepository.insertIfAbsent("token-race", "expo-a", today, LocalDateTime.now(), "VERIFIED")
+                            requireNotNull(
+                                tx.execute {
+                                    qrEntryRepository.insertIfAbsent(
+                                        "token-race",
+                                        "expo-a",
+                                        today,
+                                        LocalDateTime.now(),
+                                        "VERIFIED",
+                                    )
+                                },
+                            )
                         },
                     )
                 }.let {

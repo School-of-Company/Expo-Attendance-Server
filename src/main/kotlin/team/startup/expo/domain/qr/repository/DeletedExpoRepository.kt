@@ -4,7 +4,6 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
-import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.qr.entity.DeletedExpo
 import java.time.LocalDateTime
 
@@ -19,7 +18,6 @@ interface DeletedExpoRepository : JpaRepository<DeletedExpo, String> {
     ): Int
 
     /** 이미 삭제 기록이 있으면 아무것도 하지 않는다. */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,

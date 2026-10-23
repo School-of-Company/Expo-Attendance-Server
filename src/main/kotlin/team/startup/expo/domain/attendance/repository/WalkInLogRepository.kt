@@ -4,7 +4,6 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
-import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.entity.WalkInLog
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -75,7 +74,6 @@ interface WalkInLogRepository : JpaRepository<WalkInLog, Long> {
     ): Long
 
     /** 같은 박람회에 같은 `request_id`가 이미 있으면 아무것도 하지 않는다(0). */
-    @Transactional
     @Modifying
     @Query(
         nativeQuery = true,
@@ -95,7 +93,6 @@ interface WalkInLogRepository : JpaRepository<WalkInLog, Long> {
         @Param("scanner") scanner: String?,
     ): Int
 
-    @Transactional
     @Modifying
     @Query(nativeQuery = true, value = "DELETE FROM tb_walk_in_log WHERE expo_id = :expoId")
     fun deleteByExpoId(
