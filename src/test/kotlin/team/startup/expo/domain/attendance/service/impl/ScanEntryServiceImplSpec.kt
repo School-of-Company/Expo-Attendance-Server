@@ -23,6 +23,7 @@ import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.repository.FieldVisit
 import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.support.CancellationGuardGate
+import team.startup.expo.domain.attendance.support.EntryLogWriter
 import team.startup.expo.domain.attendance.support.EntryReplayPolicy
 import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.support.FieldEntryFence
@@ -75,6 +76,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
             ),
             entryLogService,
             entryLogRepository,
+            EntryLogWriter(entryLogRepository),
             EntryReplayPolicy(EntryReplayProperties(windowSeconds = 30)),
             JsonMapper.builder().build(),
             clock,

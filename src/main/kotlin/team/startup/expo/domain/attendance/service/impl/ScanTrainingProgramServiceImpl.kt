@@ -9,6 +9,7 @@ import team.startup.expo.domain.attendance.presentation.dto.request.ScanTraining
 import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResult
 import team.startup.expo.domain.attendance.service.ScanTrainingProgramService
+import team.startup.expo.domain.attendance.support.AbstractProgramScanService
 import team.startup.expo.domain.attendance.support.CancellationGuardGate
 import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.support.ProgramAttendanceResult
@@ -23,10 +24,6 @@ import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 
 /** v1 `ScanTrainingProByQrCodeServiceImpl`의 연수 프로그램 출석. 동작은 일반 프로그램과 같다. */
 @Service
@@ -35,59 +32,51 @@ class ScanTrainingProgramServiceImpl(
     private val expoClient: ExpoClient,
     private val applicationClient: ApplicationClient,
     @Qualifier("userCircuitBreaker") private val userCircuitBreaker: CircuitBreaker,
-    @Qualifier("expoCircuitBreaker") private val expoCircuitBreaker: CircuitBreaker,
-    @Qualifier("applicationCircuitBreaker") private val applicationCircuitBreaker: CircuitBreaker,
-    private val expoPeriodValidator: ExpoPeriodValidator,
-    private val recordProgramAttendanceService: RecordProgramAttendanceService,
-    private val cancellationGuardGate: CancellationGuardGate,
+    @Qualifier("expoCircuitBreaker") expoCircuitBreaker: CircuitBreaker,
+    @Qualifier("applicationCircuitBreaker") applicationCircuitBreaker: CircuitBreaker,
+    expoPeriodValidator: ExpoPeriodValidator,
+    recordProgramAttendanceService: RecordProgramAttendanceService,
+    cancellationGuardGate: CancellationGuardGate,
     private val programScanNameResolver: ProgramScanNameResolver,
-    private val clock: Clock,
-) : ScanTrainingProgramService {
+    clock: Clock,
+) : AbstractProgramScanService<Unit>(
+        expoCircuitBreaker,
+        applicationCircuitBreaker,
+        expoPeriodValidator,
+        recordProgramAttendanceService,
+        cancellationGuardGate,
+        clock,
+    ),
+    ScanTrainingProgramService {
+    override val programType = ProgramType.TRAINING
+    override val programNotFoundMessage = "연수 프로그램을 찾지 못했습니다."
+    override val notAppliedMessage = "연수 프로그램을 참가 중인 유저를 찾지 못 했습니다."
+
     override fun scan(
         programId: Long,
         reqDto: ScanTrainingProgramReqDto,
     ): ProgramScanResDto {
         val traineeId = resolveTraineeId(reqDto)
-        expoCircuitBreaker.callService("박람회", ExpectedException(HttpStatus.NOT_FOUND, "연수 프로그램을 찾지 못했습니다.")) {
-            expoClient.getTrainingPrograms(reqDto.expoId, TrainingProgramBatchReqDto(listOf(programId)))
-        }
-        expoPeriodValidator.checkInProgress(reqDto.expoId)
-
-        // 분 단위로 기록한다(v1과 같음)
-        val now = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES)
-        val attendanceDate = LocalDate.now(clock)
-        // 신청 확인과 기록을 같은 취소 보호 락 안에서 한다(#88)
-        val result =
-            cancellationGuardGate.scanning(
-                reqDto.expoId,
-                participantId = reqDto.participantId,
-                traineeId = traineeId,
-                attendanceDate = attendanceDate,
-            ) {
-                val applied =
-                    applicationCircuitBreaker.callService(
-                        "신청",
-                    ) { applicationClient.checkTrainingApplication(programId, traineeId) }
-                if (!applied.applied) {
-                    throw ExpectedException(HttpStatus.NOT_FOUND, "연수 프로그램을 참가 중인 유저를 찾지 못 했습니다.")
-                }
-                recordProgramAttendanceService.record(ProgramType.TRAINING, programId, traineeId, attendanceDate, now)
-            }
-        // 연수 프로그램은 시간대 검사를 하지 않아 ENTRY_NOT_ALLOWED가 오는 일은 없다
-        val scanResult =
-            when (result) {
-                ProgramAttendanceResult.ENTERED -> ProgramScanResult.ENTERED
-                ProgramAttendanceResult.LEFT -> ProgramScanResult.LEFT
-                ProgramAttendanceResult.ALREADY_ENTERED -> ProgramScanResult.UNCHANGED
-                ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, "연수 프로그램을 찾지 못했습니다.")
-                ProgramAttendanceResult.ENTRY_NOT_ALLOWED -> throw ExpectedException(HttpStatus.BAD_REQUEST, "출석 가능한 시간이 아닙니다.")
-            }
-        return ProgramScanResDto(
-            result = scanResult,
-            name = programScanNameResolver.trainee(reqDto.expoId, traineeId),
-            time = if (scanResult == ProgramScanResult.UNCHANGED) null else now.format(TIME),
-        )
+        // 연수 프로그램은 시간대 검사를 하지 않아 입실이 거부되는 일은 없다
+        return scanProgram(reqDto.expoId, programId, traineeId, participantId = reqDto.participantId, traineeId = traineeId)
     }
+
+    override fun findProgram(
+        expoId: String,
+        programId: Long,
+    ) {
+        expoClient.getTrainingPrograms(expoId, TrainingProgramBatchReqDto(listOf(programId)))
+    }
+
+    override fun isApplied(
+        programId: Long,
+        personId: Long,
+    ) = applicationClient.checkTrainingApplication(programId, personId).applied
+
+    override fun resolveName(
+        expoId: String,
+        personId: Long,
+    ) = programScanNameResolver.trainee(expoId, personId)
 
     /**
      * `participantId`와 `code`가 오면 유저 서비스에서 코드를 확인하고 연결된 연수자를 찾는다(틀린 code, 다른 박람회, 연결 없음은 같은
@@ -113,9 +102,5 @@ class ScanTrainingProgramServiceImpl(
             userClient.getTraineeNames(TraineeNamesReqDto(reqDto.expoId, listOf(traineeId)))
         }
         return traineeId
-    }
-
-    private companion object {
-        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }

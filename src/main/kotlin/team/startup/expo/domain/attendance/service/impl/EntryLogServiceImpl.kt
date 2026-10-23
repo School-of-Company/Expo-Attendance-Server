@@ -3,15 +3,15 @@ package team.startup.expo.domain.attendance.service.impl
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
-import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.EntryLogService
+import team.startup.expo.domain.attendance.support.EntryLogWriter
 import team.startup.expo.domain.attendance.support.ScannerName
 import java.time.Clock
 import java.time.LocalDateTime
 
 @Service
 class EntryLogServiceImpl(
-    private val entryLogRepository: EntryLogRepository,
+    private val entryLogWriter: EntryLogWriter,
     private val clock: Clock,
 ) : EntryLogService {
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -31,7 +31,7 @@ class EntryLogServiceImpl(
             try {
                 val scanner = ScannerName.of(scannerName)
                 val inserted =
-                    entryLogRepository.insertIfAbsent(
+                    entryLogWriter.insertIfAbsent(
                         expoId,
                         subjectType.name,
                         subjectId,
@@ -41,7 +41,7 @@ class EntryLogServiceImpl(
                         scanner,
                     )
                 // 퇴장한 뒤 다른 회차로 입장하면 유저 서비스는 새 입장으로 받으므로, 오늘 로그를 다시 열어 재입장으로 남긴다(#174)
-                if (inserted == 0) entryLogRepository.reenter(expoId, subjectType.name, subjectId, now.toLocalDate(), now, scanner)
+                if (inserted == 0) entryLogWriter.reenter(expoId, subjectType.name, subjectId, now.toLocalDate(), now, scanner)
                 return
             } catch (e: Exception) {
                 failure = e

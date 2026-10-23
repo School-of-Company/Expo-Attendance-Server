@@ -4,7 +4,6 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
-import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.entity.EntryLog
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import java.time.LocalDate
@@ -22,7 +21,6 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
      * 오늘 입장 로그를 남기고, 같은 문장 안에서 입장 이력(`tb_entry_event`)도 남긴다. 이미 있으면 아무것도 하지 않는다(같은 날 최초
      * 입장은 하루 한 행). 반환값은 새로 남긴 로그 수다. 재입장은 [reenter]가 맡는다.
      */
-    @Transactional
     @Query(
         nativeQuery = true,
         value = """
@@ -53,7 +51,6 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
      * 오늘 퇴장한 사람이 다시 입장하면 재입장으로 기록한다(#148). 퇴장 시각을 비워 다시 "안에 있는" 상태로 되돌리고, 재입장 이력을 남긴다.
      * 반환값이 0이면 오늘 입장한 적이 없거나 퇴장하지 않은 상태다(퇴장 없이 다시 찍은 것은 재입장이 아니다).
      */
-    @Transactional
     @Query(
         nativeQuery = true,
         value = """
@@ -83,7 +80,6 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
      * 오늘 입장했고 지금 퇴장하지 않은 경우에만 퇴장 시각을 기록하고, 같은 문장 안에서 퇴장 이력도 남긴다. 0이면 입장 기록이 없거나
      * 이미 퇴장한 상태다. 재입장한 사람은 다시 퇴장할 수 있다.
      */
-    @Transactional
     @Query(
         nativeQuery = true,
         value = """
@@ -285,14 +281,12 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
         @Param("offset") offset: Long,
     ): List<Array<Any?>>
 
-    @Transactional
     @Modifying
     @Query(nativeQuery = true, value = "DELETE FROM tb_entry_event WHERE expo_id = :expoId")
     fun deleteEventsByExpoId(
         @Param("expoId") expoId: String,
     ): Int
 
-    @Transactional
     @Modifying
     @Query(nativeQuery = true, value = "DELETE FROM tb_entry_log WHERE expo_id = :expoId")
     fun deleteByExpoId(

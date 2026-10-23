@@ -14,6 +14,7 @@ import team.startup.expo.domain.attendance.repository.FieldVisit
 import team.startup.expo.domain.attendance.repository.FieldVisitRepository
 import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.support.CancellationGuardGate
+import team.startup.expo.domain.attendance.support.EntryLogWriter
 import team.startup.expo.domain.attendance.support.EntryReplayPolicy
 import team.startup.expo.domain.attendance.support.FieldEntryFence
 import team.startup.expo.domain.attendance.support.PreregisterSessionValidator
@@ -67,6 +68,7 @@ class FieldVisitMidnightSpec :
                             CancellationGuardGate(UnitTestSupport.transactionManager(), locks, fields, validator, clock),
                             logs,
                             mockk<EntryLogRepository>(relaxed = true),
+                            EntryLogWriter(mockk<EntryLogRepository>(relaxed = true)),
                             EntryReplayPolicy(EntryReplayProperties()),
                             JsonMapper.builder().build(),
                             clock,

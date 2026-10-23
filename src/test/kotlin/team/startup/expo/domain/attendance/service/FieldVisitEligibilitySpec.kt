@@ -123,6 +123,53 @@ class FieldVisitEligibilitySpec : BehaviorSpec() {
                     shouldThrow<ExpectedException> { validator().checkNotCancelled("expo", 7) }.status shouldBe HttpStatus.BAD_REQUEST
                 }
             }
+            `when`("내일 확정 PRE만 있으면(#218)") {
+                every { field.visits("expo", 7) } returns emptyList()
+                every { sessions.findAllByExpoIdAndParticipantId("expo", 7) } returns listOf(pre())
+                every { expo.getPreregisterSession("expo", 11) } returns
+                    PreregisterSessionResDto(11, clock.instant().plusSeconds(86400), clock.instant().plusSeconds(90000))
+                then("QR은 오늘 조회할 수 있지만 입장 검증은 그대로 거절한다") {
+                    validator().isCancelled("expo", 7) shouldBe false
+                    verify(exactly = 0) { expo.getPreregisterSession(any(), any()) }
+                    shouldThrow<ExpectedException> { validator().check("expo", 7) { } }.status shouldBe HttpStatus.BAD_REQUEST
+                    shouldThrow<ExpectedException> { validator().checkNotCancelled("expo", 7) }.status shouldBe HttpStatus.BAD_REQUEST
+                    shouldThrow<ExpectedException> { validator().checkToday("expo", 7) }.status shouldBe HttpStatus.BAD_REQUEST
+                }
+            }
+            `when`("회차가 전부 취소된 PRE만 있으면") {
+                every { field.visits("expo", 7) } returns emptyList()
+                every { sessions.findAllByExpoIdAndParticipantId("expo", 7) } returns listOf(pre(PreregisterSessionStatus.CANCELLED))
+                then("QR 조회를 거절한다") {
+                    validator().isCancelled("expo", 7) shouldBe true
+                }
+            }
+            `when`("한 회차만 취소하고 다른 확정 회차가 남아 있으면") {
+                every { field.visits("expo", 7) } returns emptyList()
+                every { sessions.findAllByExpoIdAndParticipantId("expo", 7) } returns
+                    listOf(
+                        pre(PreregisterSessionStatus.CANCELLED),
+                        PreregisterSession(
+                            expoId = "expo",
+                            participantId = 7,
+                            sessionId = 12,
+                            status = PreregisterSessionStatus.ACTIVE,
+                            updatedAt = LocalDateTime.now(clock),
+                        ),
+                    )
+                then("QR 조회를 허용한다") {
+                    validator().isCancelled("expo", 7) shouldBe false
+                }
+            }
+            `when`("내일 확정 PRE와 오늘 취소된 FIELD가 함께 있으면") {
+                every { field.visits("expo", 7) } returns listOf(visit(status = FieldVisitStatus.CANCELLED))
+                every { sessions.findAllByExpoIdAndParticipantId("expo", 7) } returns listOf(pre())
+                every { expo.getPreregisterSession("expo", 11) } returns
+                    PreregisterSessionResDto(11, clock.instant().plusSeconds(86400), clock.instant().plusSeconds(90000))
+                then("PRE 기준으로 QR은 조회되지만 오늘 입장 권한은 없다") {
+                    validator().isCancelled("expo", 7) shouldBe false
+                    shouldThrow<ExpectedException> { validator().checkToday("expo", 7) }.status shouldBe HttpStatus.BAD_REQUEST
+                }
+            }
         }
         given("KST 자정") {
             val before = Clock.fixed(Instant.parse("2026-10-22T14:59:59Z"), zone)

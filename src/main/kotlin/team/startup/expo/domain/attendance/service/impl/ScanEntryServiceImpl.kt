@@ -15,6 +15,7 @@ import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.service.ScanEntryService
 import team.startup.expo.domain.attendance.support.CancellationGuardGate
+import team.startup.expo.domain.attendance.support.EntryLogWriter
 import team.startup.expo.domain.attendance.support.EntryReplayPolicy
 import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.support.FieldEntryFence
@@ -52,6 +53,7 @@ class ScanEntryServiceImpl(
     private val cancellationGuardGate: CancellationGuardGate,
     private val entryLogService: EntryLogService,
     private val entryLogRepository: EntryLogRepository,
+    private val entryLogWriter: EntryLogWriter,
     private val entryReplayPolicy: EntryReplayPolicy,
     private val objectMapper: ObjectMapper,
     private val clock: Clock,
@@ -182,7 +184,7 @@ class ScanEntryServiceImpl(
 
         val name = lookupName(expoId, reqDto, subjectId, isTrainee)
         // 동시에 같은 재입장 스캔이 오면 한쪽만 퇴장 시각을 비운다
-        if (entryLogRepository.reenter(expoId, subjectType.name, subjectId.toString(), today, now, scanner) != 1) throw alreadyEntered()
+        if (entryLogWriter.reenter(expoId, subjectType.name, subjectId.toString(), today, now, scanner) != 1) throw alreadyEntered()
 
         return ScanEntryResDto(
             id = subjectId,
