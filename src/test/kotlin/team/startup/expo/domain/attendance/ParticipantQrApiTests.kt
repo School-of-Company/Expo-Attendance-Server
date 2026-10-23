@@ -73,6 +73,21 @@ class ParticipantQrApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `방문일이 내일인 확정 참가자도 오늘 QR 값을 돌려준다(#218)`() {
+        doReturn(PreregisterSessionResDto(11, clock.instant().plusSeconds(86400), clock.instant().plusSeconds(90000)))
+            .`when`(expoClient)
+            .getPreregisterSession(EXPO, 11)
+        insert("ACTIVE")
+
+        lookup()
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.participantId").value(PARTICIPANT))
+            .andExpect(jsonPath("$.code").value(CODE))
+
+        verify(userClient).getParticipantQr(ParticipantQrReqDto(EXPO, REPRESENTATIVE, PARTICIPANT))
+    }
+
+    @Test
     fun `날짜별 현장등록 참가자는 입장 판정처럼 회차 확인 없이 QR 값을 돌려준다`() {
         FieldVisitFixtures.activate(jdbcTemplate, clock, EXPO, PARTICIPANT)
         lookup()
