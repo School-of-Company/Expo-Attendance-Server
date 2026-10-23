@@ -1,4 +1,4 @@
-package team.startup.expo.domain.attendance.service
+package team.startup.expo.domain.attendance.support
 
 import org.springframework.http.HttpStatus
 import team.startup.expo.global.exception.ExpectedException

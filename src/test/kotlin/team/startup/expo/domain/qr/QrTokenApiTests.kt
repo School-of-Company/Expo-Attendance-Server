@@ -27,7 +27,7 @@ import team.startup.expo.domain.qr.repository.QrEntryRepository
 import team.startup.expo.domain.qr.repository.QrTokenRepository
 import team.startup.expo.domain.qr.service.DeleteExpoDataService
 import team.startup.expo.domain.qr.service.IssueQrTokensService
-import team.startup.expo.domain.qr.service.impl.QrEntryPeriodReviewService
+import team.startup.expo.domain.qr.support.QrEntryPeriodReviewService
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.support.IntegrationTestSupport

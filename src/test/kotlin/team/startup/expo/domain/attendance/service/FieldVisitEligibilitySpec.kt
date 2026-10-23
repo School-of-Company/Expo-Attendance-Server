@@ -15,6 +15,8 @@ import team.startup.expo.domain.attendance.repository.CancellationGuardRepositor
 import team.startup.expo.domain.attendance.repository.FieldVisit
 import team.startup.expo.domain.attendance.repository.FieldVisitRepository
 import team.startup.expo.domain.attendance.repository.PreregisterSessionRepository
+import team.startup.expo.domain.attendance.support.CancellationGuardGate
+import team.startup.expo.domain.attendance.support.PreregisterSessionValidator
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.PreregisterSessionResDto
 import team.startup.expo.global.config.PreregisterEntryProperties

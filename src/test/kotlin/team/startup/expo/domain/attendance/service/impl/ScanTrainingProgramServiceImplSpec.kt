@@ -14,11 +14,11 @@ import team.startup.expo.domain.attendance.entity.CancellationGuardState
 import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanTrainingProgramReqDto
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
-import team.startup.expo.domain.attendance.service.CancellationGuardGate
-import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
-import team.startup.expo.domain.attendance.service.ProgramAttendanceResult
-import team.startup.expo.domain.attendance.service.ProgramScanNameResolver
-import team.startup.expo.domain.attendance.service.RecordProgramAttendanceService
+import team.startup.expo.domain.attendance.support.CancellationGuardGate
+import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
+import team.startup.expo.domain.attendance.support.ProgramAttendanceResult
+import team.startup.expo.domain.attendance.support.ProgramScanNameResolver
+import team.startup.expo.domain.attendance.support.RecordProgramAttendanceService
 import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.application.ProgramApplicationResDto
 import team.startup.expo.global.client.expo.ExpoClient

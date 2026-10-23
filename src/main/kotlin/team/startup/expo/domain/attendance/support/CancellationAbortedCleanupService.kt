@@ -1,4 +1,4 @@
-package team.startup.expo.domain.attendance.service.impl
+package team.startup.expo.domain.attendance.support
 
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service

@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service
 import team.startup.expo.domain.attendance.presentation.dto.request.GetParticipantQrReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ParticipantQrResDto
 import team.startup.expo.domain.attendance.service.GetParticipantQrService
-import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
+import team.startup.expo.domain.attendance.support.PreregisterSessionValidator
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.ParticipantQrReqDto
 import team.startup.expo.global.client.user.UserClient

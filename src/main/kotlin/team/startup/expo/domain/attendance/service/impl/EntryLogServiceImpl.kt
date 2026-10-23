@@ -5,7 +5,7 @@ import org.springframework.stereotype.Service
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.EntryLogService
-import team.startup.expo.domain.attendance.service.ScannerName
+import team.startup.expo.domain.attendance.support.ScannerName
 import java.time.Clock
 import java.time.LocalDateTime
 

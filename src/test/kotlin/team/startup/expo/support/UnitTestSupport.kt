@@ -11,7 +11,7 @@ import io.mockk.mockk
 import org.springframework.http.HttpStatus
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
-import team.startup.expo.domain.attendance.service.PreregisterSessionValidator
+import team.startup.expo.domain.attendance.support.PreregisterSessionValidator
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.Instant

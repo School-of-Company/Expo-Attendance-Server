@@ -14,7 +14,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.ScanEntryRe
 import team.startup.expo.domain.attendance.presentation.dto.response.ScanExitResDto
 import team.startup.expo.domain.attendance.service.ScanEntryService
 import team.startup.expo.domain.attendance.service.ScanExitService
-import team.startup.expo.domain.attendance.service.ScannerName
+import team.startup.expo.domain.attendance.support.ScannerName
 import team.startup.expo.global.logging.RequestContext
 import team.startup.expo.global.swagger.ApiError
 

@@ -11,7 +11,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import team.startup.expo.domain.attendance.service.impl.CancellationAbortedCleanupScheduler
+import team.startup.expo.domain.attendance.support.CancellationAbortedCleanupScheduler
 import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.user.TraineeNamesReqDto

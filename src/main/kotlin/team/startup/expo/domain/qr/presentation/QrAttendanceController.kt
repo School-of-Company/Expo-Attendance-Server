@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
-import team.startup.expo.domain.attendance.service.ScannerName
+import team.startup.expo.domain.attendance.support.ScannerName
 import team.startup.expo.domain.qr.presentation.dto.request.ScanQrTokenReqDto
 import team.startup.expo.domain.qr.presentation.dto.response.ScanQrTokenResDto
 import team.startup.expo.domain.qr.service.ScanQrTokenService

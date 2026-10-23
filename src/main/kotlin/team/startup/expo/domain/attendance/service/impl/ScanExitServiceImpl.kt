@@ -10,7 +10,7 @@ import team.startup.expo.domain.attendance.presentation.dto.request.ScanExitReqD
 import team.startup.expo.domain.attendance.presentation.dto.response.ScanExitResDto
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.ScanExitService
-import team.startup.expo.domain.attendance.service.ScannerName
+import team.startup.expo.domain.attendance.support.ScannerName
 import team.startup.expo.domain.qr.repository.QrTokenRepository
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.TraineeNamesReqDto

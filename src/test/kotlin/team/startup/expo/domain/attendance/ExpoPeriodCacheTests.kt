@@ -12,7 +12,7 @@ import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
-import team.startup.expo.domain.attendance.service.ExpoPeriodValidator
+import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.config.ExpoPeriodCacheProperties
