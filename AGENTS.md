@@ -70,7 +70,16 @@ Verified against the other services' `develop` code. Change a contract by openin
 - Follow the `kotlin-spring-arch` and `api-design` skills in `.claude/skills/`.
 - Entities follow Expo-Expo-Server style: `@field:` annotations, `Long? = null` ids.
 - Throw `ExpectedException(status, message)` directly; no subclasses.
-- Logs: never write request/response bodies, phone numbers, participant codes, tokens or URLs with ids. Every request carries `X-Request-Id` (MDC `requestId`; the gateway does not set one, we accept a safe client value or generate it) and Feign calls forward it. Turn on `LOG_LEVEL_CLIENT=debug` temporarily to see circuit-open calls.
+- Logs: one JSON object per line on stdout (`logback-spring.xml`, `LogstashEncoder`), see **Logging** below. Never write request/response bodies, phone numbers, participant codes, tokens or URLs with ids. Every request carries `X-Request-Id` (MDC `requestId`; the gateway does not set one, we accept a safe client value or generate it) and Feign calls forward it. Turn on `LOG_LEVEL_CLIENT=debug` temporarily to see circuit-open calls.
+
+## Logging (#222)
+
+The Expo log standard, shared by every service (Spring and Nest alike) so the shared Loki in Expo-Monitoring can label them the same way:
+
+- Every line written to stdout is one JSON object with at least `@timestamp` (ISO-8601/RFC3339), `level` (uppercase `TRACE`/`DEBUG`/`INFO`/`WARN`/`ERROR`), `service` (the Eureka app name, `spring.application.name`), `module` and `message`. Other keys (MDC `requestId`/`expoId`/`participantId`, `logger_name`, `stack_trace`) may follow. Nothing else goes to stdout: the Spring banner is off and Logback status warnings must not appear.
+- The log pipeline reads only these key names and has no per-service fallback. When a service's logs do not show up or the fields do not match, fix the service's log output, never add parsing fallbacks to the pipeline.
+- `module` is derived from the logger name by `ModuleNameConverter`, never set at the call site: for `team.startup.expo.{domain|global}.<x>...` it is `<x>`, otherwise the logger name's parent package. Nest services reuse the per-class logger context (`nestjs-pino` `renameContext: 'module'`).
+- With the `local` profile the same JSON is also written to `${EXPO_LOG_DIR:-~/.expo/logs}/<service>/app.log` for the local Loki file tail. Production writes stdout only (pm2 captures it); add no log file settings there.
 
 ## Workflow
 
