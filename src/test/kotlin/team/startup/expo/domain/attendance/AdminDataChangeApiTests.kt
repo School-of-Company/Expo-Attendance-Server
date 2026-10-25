@@ -17,8 +17,8 @@ import org.springframework.test.web.servlet.MvcResult
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.transaction.support.TransactionTemplate
-import team.startup.expo.domain.attendance.service.impl.AdminDataChangeListener
-import team.startup.expo.domain.attendance.service.impl.AdminDataChangeStream
+import team.startup.expo.domain.attendance.support.AdminDataChangeListener
+import team.startup.expo.domain.attendance.support.AdminDataChangeStream
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.user.UserClient

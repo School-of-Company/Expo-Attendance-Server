@@ -20,7 +20,7 @@ import team.startup.expo.domain.attendance.repository.PreregisterSessionReposito
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
 import team.startup.expo.domain.attendance.service.AcquireCancellationGuardResult
-import team.startup.expo.domain.attendance.service.CancellationGuardGate
+import team.startup.expo.domain.attendance.support.CancellationGuardGate
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.global.client.user.CancellationStatusReqDto
 import team.startup.expo.global.client.user.CancellationStatusResDto

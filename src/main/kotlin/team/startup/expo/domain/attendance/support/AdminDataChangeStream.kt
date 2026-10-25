@@ -1,4 +1,4 @@
-package team.startup.expo.domain.attendance.service.impl
+package team.startup.expo.domain.attendance.support
 
 import org.springframework.beans.factory.DisposableBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty

@@ -16,8 +16,8 @@ import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.repository.FieldVisitRepository
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
-import team.startup.expo.domain.attendance.service.FieldEntryFence
 import team.startup.expo.domain.attendance.service.impl.FieldVisitServiceImpl
+import team.startup.expo.domain.attendance.support.FieldEntryFence
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.global.client.user.CancellationStatusResDto
 import team.startup.expo.global.client.user.ParticipantEntryStatusResDto

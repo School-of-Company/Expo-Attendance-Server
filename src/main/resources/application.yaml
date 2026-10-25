@@ -7,6 +7,9 @@ spring:
     timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:20s}
   application:
     name: expo-attention-server
+  main:
+    # stdout은 JSON 로그 줄만 둔다(배너는 여러 줄 평문이라 로그 수집기가 줄마다 깨진 로그로 받는다)
+    banner-mode: "off"
   cloud:
     openfeign:
       client:
@@ -114,9 +117,7 @@ eureka:
       "[prometheus.port]": ${METRICS_PORT:${server.port:8080}}
       "[prometheus.path]": /actuator/prometheus
 logging:
-  # 요청 상관 ID(X-Request-Id)를 모든 로그 줄에 붙인다(#104). 나머지 형식은 Spring Boot 기본을 따른다
-  pattern:
-    level: "%5p [%X{requestId:-}]"
+  # 형식은 logback-spring.xml(JSON 한 줄). 요청 상관 ID(X-Request-Id, #104)는 MDC requestId 키로 붙는다
   level:
     root: ${LOG_LEVEL_ROOT:info}
     # 다른 서비스 호출 실패 원인(DEBUG로 올리면 회로가 열려 차단된 호출도 호출마다 남는다). 임시로 LOG_LEVEL_CLIENT=debug

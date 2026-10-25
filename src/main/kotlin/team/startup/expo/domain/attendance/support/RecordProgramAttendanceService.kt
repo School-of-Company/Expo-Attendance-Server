@@ -1,4 +1,4 @@
-package team.startup.expo.domain.attendance.service
+package team.startup.expo.domain.attendance.support
 
 import team.startup.expo.domain.attendance.entity.ProgramType
 import java.time.LocalDate

@@ -1,4 +1,4 @@
-package team.startup.expo.domain.attendance.service
+package team.startup.expo.domain.attendance.support
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.springframework.beans.factory.annotation.Qualifier

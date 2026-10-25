@@ -13,8 +13,8 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import team.startup.expo.domain.attendance.presentation.dto.request.RecordWalkInReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.WalkInCountsResDto
-import team.startup.expo.domain.attendance.service.ScannerName
 import team.startup.expo.domain.attendance.service.WalkInService
+import team.startup.expo.domain.attendance.support.ScannerName
 import team.startup.expo.global.swagger.ApiError
 import java.time.LocalDate
 

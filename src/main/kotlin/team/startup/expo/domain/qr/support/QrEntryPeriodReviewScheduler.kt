@@ -1,4 +1,4 @@
-package team.startup.expo.domain.qr.service.impl
+package team.startup.expo.domain.qr.support
 
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty

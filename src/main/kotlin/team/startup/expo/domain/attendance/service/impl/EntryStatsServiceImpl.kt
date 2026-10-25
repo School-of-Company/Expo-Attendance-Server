@@ -17,8 +17,8 @@ import team.startup.expo.domain.attendance.presentation.dto.response.RecentEntry
 import team.startup.expo.domain.attendance.presentation.dto.response.ScannerEntryCountResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ScannerEntryCountsResDto
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
-import team.startup.expo.domain.attendance.service.EntryScope
 import team.startup.expo.domain.attendance.service.EntryStatsService
+import team.startup.expo.domain.attendance.support.EntryScope
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
