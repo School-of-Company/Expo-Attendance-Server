@@ -19,6 +19,7 @@ Expo-Attention-Server
 | `PROGRAM_ATTENDANCE_REQUIRE_CODE` | 켜면 일반 프로그램 출석 스캔에 참가자 `code`가 필수 (기본 `false`) |
 | `PROGRAM_ATTENDANCE_LEAD_MINUTES` | 일반 프로그램 입실(첫 스캔)을 시작 몇 분 전부터 받을지 (기본 `10`). 종료 시각까지 받고, 이미 입실한 사람의 퇴실은 시각을 보지 않는다 |
 | `ATTENDANCE_ADMIN_EVENTS_ENABLED` | 켜면 실시간 입·퇴장 현황 변경 SSE(`GET /attendance/summary/{expoId}/events`)와 DB LISTEN 연결을 연다 (기본 `false`). 한도·수명·heartbeat·병합 간격(`..._MAX_CONNECTIONS` `500`, `..._MAX_CONNECTIONS_PER_EXPO` `50`, `..._CONNECTION_LIFETIME` `PT30M`, `..._HEARTBEAT_INTERVAL` `PT25S`, `..._COALESCE_INTERVAL` `PT1S`)은 `docs/admin-data-change-events.md` |
+| `LOGGING_HTTP_ACCESS_ENABLED` | 요청마다 접근 로그를 한 줄(`module`=`HttpAccess`, 메시지 `<METHOD> <경로 템플릿> status: <상태> (<ms>ms)`, 4xx는 WARN·5xx와 클라이언트 끊김 499는 ERROR) 남길지 (기본 `true`). `/actuator/**`와 API 문서 경로는 남기지 않고, 쿼리·헤더·본문은 싣지 않는다 |
 | `SWAGGER_ENABLED` | 켜면 API 문서를 `/attendance/swagger-ui.html`, `/attendance/v3/api-docs`로 제공 (기본 `false`). 밖에서 보려면 게이트웨이 `publicPaths`에도 이 경로를 열어야 한다 |
 | `SWAGGER_INCLUDE_INTERNAL` | 켜면 문서에 `/internal/**` 엔드포인트도 싣고 `X-Internal-Token` 헤더를 안내 (기본 `false`, `SWAGGER_ENABLED`가 켜져 있을 때만 의미가 있다) |
 
