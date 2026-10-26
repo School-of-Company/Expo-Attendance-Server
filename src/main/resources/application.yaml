@@ -118,6 +118,9 @@ eureka:
       "[prometheus.path]": /actuator/prometheus
 logging:
   # 형식은 logback-spring.xml(JSON 한 줄). 요청 상관 ID(X-Request-Id, #104)는 MDC requestId 키로 붙는다
+  # 요청마다 접근 로그 한 줄(HttpAccessLogFilter, module=HttpAccess). /actuator와 API 문서 경로는 남기지 않는다
+  http-access:
+    enabled: ${LOGGING_HTTP_ACCESS_ENABLED:true}
   level:
     root: ${LOG_LEVEL_ROOT:info}
     # 다른 서비스 호출 실패 원인(DEBUG로 올리면 회로가 열려 차단된 호출도 호출마다 남는다). 임시로 LOG_LEVEL_CLIENT=debug
