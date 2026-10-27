@@ -3,6 +3,7 @@ package team.startup.expo.domain.attendance.service.impl
 import io.kotest.core.spec.IsolationMode
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -42,7 +43,6 @@ import team.startup.expo.global.config.EntryReplayProperties
 import team.startup.expo.global.exception.ExpectedException
 import team.startup.expo.support.UnitTestSupport
 import team.startup.expo.support.shouldFailWith
-import tools.jackson.databind.json.JsonMapper
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
@@ -78,7 +78,6 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
             entryLogRepository,
             EntryLogWriter(entryLogRepository),
             EntryReplayPolicy(EntryReplayProperties(windowSeconds = 30)),
-            JsonMapper.builder().build(),
             clock,
             fieldFence,
         )
@@ -480,10 +479,9 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
 
                 val res = service.scan(expoId, phoneReq)
 
-                then("이름, 소속과 이전 형식의 명찰 QR을 돌려준다") {
+                then("명찰에 이름과 소속을 돌려준다") {
                     res.badge?.name shouldBe "홍길동"
                     res.badge?.school shouldBe "한빛중"
-                    res.badge?.qrCode shouldBe """{"participantId":55,"phoneNumber":"010-1111-2222"}"""
                 }
             }
 
@@ -603,9 +601,9 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
 
                 val res = service.scan(expoId, traineeReq)
 
-                then("TRAINEE로 기록하고 연수자 전원에게 traineeId 명찰 QR을 준다") {
+                then("TRAINEE로 기록하고 연수자 전원에게 명찰을 준다") {
                     verify { userClient.recordEntry(RecordEntryReqDto(expoId, "TRAINEE", phoneNumber = "010-3333-4444")) }
-                    res.badge?.qrCode shouldBe """{"traineeId":31,"phoneNumber":"010-3333-4444"}"""
+                    res.badge shouldNotBe null
                 }
                 then("입장 로그를 TRAINEE와 연수자 ID로 남긴다") {
                     verify(exactly = 1) { entryLogService.recordEntry(expoId, EntrySubjectType.TRAINEE, "31") }
@@ -628,9 +626,8 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                     }
                     verify { guardRepository.lockShared(CancellationGuardGate.participantKey(expoId, 55L)) }
                 }
-                then("사전등록 회차 확인을 요청하고 명찰 QR에는 코드를 담는다") {
+                then("사전등록 회차 확인을 요청한다") {
                     verify(exactly = 1) { preregisterSessionValidator.check(expoId, 55L, any()) }
-                    res.badge?.qrCode shouldBe """{"participantId":55,"code":"code-abc"}"""
                 }
                 then("입장 로그를 STANDARD와 참가자 ID로 남기고 코드는 남기지 않는다") {
                     verify(

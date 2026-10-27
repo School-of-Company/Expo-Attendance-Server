@@ -23,7 +23,6 @@ import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.config.EntryReplayProperties
 import team.startup.expo.support.UnitTestSupport
-import tools.jackson.databind.json.JsonMapper
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -70,8 +69,7 @@ class FieldVisitMidnightSpec :
                             mockk<EntryLogRepository>(relaxed = true),
                             EntryLogWriter(mockk<EntryLogRepository>(relaxed = true)),
                             EntryReplayPolicy(EntryReplayProperties()),
-                            JsonMapper.builder().build(),
-                            clock,
+                                            clock,
                             fence,
                         )
                     service.scan("expo", ScanEntryReqDto(EntryAuthority.ROLE_STANDARD, participantId = 7, code = "fake-code"))

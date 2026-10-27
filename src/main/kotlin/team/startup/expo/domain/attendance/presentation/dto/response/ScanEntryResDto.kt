@@ -40,10 +40,4 @@ data class BadgeResDto(
     val name: String,
     @field:Schema(description = "소속 학교(없으면 `null`)", example = "예시고등학교", nullable = true)
     val school: String?,
-    /** 입구 스캔 QR과 같은 값의 JSON 문자열이다(참가자 ID와 코드, 이전 방식은 전화번호). 이름·소속은 담지 않는다. */
-    @field:Schema(
-        description = "입구 스캔 QR과 같은 값의 JSON 문자열(참가자 ID와 코드, 이전 방식은 전화번호). 이름·소속은 담지 않는다",
-        example = "{\"participantId\":55,\"code\":\"sample-code-not-real\"}",
-    )
-    val qrCode: String,
 )
