@@ -70,6 +70,17 @@ class ExpoChangedConsumerSpec : BehaviorSpec() {
                 }
             }
 
+            `when`("진행 중인 프로그램 변경이 있는 메시지면") {
+                every { updater.apply(any()) } returns true
+                consumer.consume(record(state().replace("\"deleting\":false", "\"deleting\":false,\"programChangePending\":true")))
+
+                then("programChangePending을 읽는다(없는 예전 메시지는 false)") {
+                    verify(exactly = 1) {
+                        updater.apply(match { it.expo == ExpoChangedEvent.ExpoState("2030-01-01", "2030-01-02", false, true) })
+                    }
+                }
+            }
+
             `when`("tombstone이면") {
                 every { updater.apply(any()) } returns true
                 consumer.consume(record(tombstone))

@@ -20,11 +20,12 @@ class ExpoProjectionRepository(
     fun upsertHead(event: ExpoChangedEvent): Boolean =
         jdbc.update(
             """
-            INSERT INTO tb_expo_projection (expo_id, version, event_id, deleted, deleting, started_day, finished_day, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, now())
+            INSERT INTO tb_expo_projection
+                (expo_id, version, event_id, deleted, deleting, program_change_pending, started_day, finished_day, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, now())
             ON CONFLICT (expo_id) DO UPDATE SET version = EXCLUDED.version, event_id = EXCLUDED.event_id,
-                deleted = EXCLUDED.deleted, deleting = EXCLUDED.deleting, started_day = EXCLUDED.started_day,
-                finished_day = EXCLUDED.finished_day, updated_at = now()
+                deleted = EXCLUDED.deleted, deleting = EXCLUDED.deleting, program_change_pending = EXCLUDED.program_change_pending,
+                started_day = EXCLUDED.started_day, finished_day = EXCLUDED.finished_day, updated_at = now()
             WHERE tb_expo_projection.version < EXCLUDED.version
             """.trimIndent(),
             event.expoId,
@@ -32,6 +33,7 @@ class ExpoProjectionRepository(
             event.eventId,
             event.deleted,
             event.expo?.deleting ?: false,
+            event.expo?.programChangePending ?: false,
             event.expo?.startedDay,
             event.expo?.finishedDay,
         ) == 1
@@ -73,7 +75,7 @@ class ExpoProjectionRepository(
                 expoId,
             ).singleOrNull()
 
-    /** 일반 프로그램. 삭제 중인 박람회(동기 조회는 409)는 `null`이다. */
+    /** 일반 프로그램. 삭제 중이거나 프로그램 변경이 진행 중인 박람회(동기 조회는 409)는 `null`이다. */
     fun standardProgram(
         expoId: String,
         programId: Long,
@@ -83,7 +85,7 @@ class ExpoProjectionRepository(
                 """
                 SELECT p.program_id, p.started_at, p.ended_at FROM tb_expo_projection_standard_program p
                 JOIN tb_expo_projection e ON e.expo_id = p.expo_id
-                WHERE p.expo_id = ? AND p.program_id = ? AND NOT e.deleted AND NOT e.deleting
+                WHERE p.expo_id = ? AND p.program_id = ? AND NOT e.deleted AND NOT e.deleting AND NOT e.program_change_pending
                 """.trimIndent(),
                 {
                     rs,
@@ -99,7 +101,7 @@ class ExpoProjectionRepository(
                 programId,
             ).singleOrNull()
 
-    /** 연수 프로그램이 있는지. 삭제 중인 박람회(동기 조회는 409)는 `false`다. */
+    /** 연수 프로그램이 있는지. 삭제 중이거나 프로그램 변경이 진행 중인 박람회(동기 조회는 409)는 `false`다. */
     fun hasTrainingProgram(
         expoId: String,
         programId: Long,
@@ -109,7 +111,7 @@ class ExpoProjectionRepository(
                 """
                 SELECT 1 FROM tb_expo_projection_training_program p
                 JOIN tb_expo_projection e ON e.expo_id = p.expo_id
-                WHERE p.expo_id = ? AND p.program_id = ? AND NOT e.deleted AND NOT e.deleting
+                WHERE p.expo_id = ? AND p.program_id = ? AND NOT e.deleted AND NOT e.deleting AND NOT e.program_change_pending
                 """.trimIndent(),
                 { rs, _ -> rs.getInt(1) },
                 expoId,

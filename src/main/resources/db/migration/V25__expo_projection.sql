@@ -6,6 +6,8 @@ CREATE TABLE tb_expo_projection (
     event_id VARCHAR(64) NOT NULL,
     deleted BOOLEAN NOT NULL,
     deleting BOOLEAN NOT NULL,
+    -- 박람회 서비스에 진행 중인 프로그램 변경이 있다(programChangePending). 그동안 박람회 서비스는 프로그램 조회를 409로 답한다
+    program_change_pending BOOLEAN NOT NULL DEFAULT FALSE,
     -- 박람회 서비스가 주는 yyyy-MM-dd 문자열 그대로. 읽을 수 없는 값은 동기 조회와 같이 503으로 다룬다
     started_day VARCHAR(32),
     finished_day VARCHAR(32),

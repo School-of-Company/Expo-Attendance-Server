@@ -20,6 +20,8 @@ data class ExpoChangedEvent(
         val startedDay: String,
         val finishedDay: String,
         val deleting: Boolean,
+        /** 진행 중인 프로그램 변경이 있다. 박람회 서비스는 그동안 프로그램 조회를 409로 답한다. 필드가 없는 예전 메시지는 `false`. */
+        val programChangePending: Boolean = false,
     )
 
     /** 일정은 KST 지역 일시 `yyyy-MM-ddTHH:mm` 문자열이다. */

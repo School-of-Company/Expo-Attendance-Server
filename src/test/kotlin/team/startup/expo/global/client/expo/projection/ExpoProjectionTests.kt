@@ -27,6 +27,7 @@ class ExpoProjectionTests : IntegrationTestSupport() {
         version: Long,
         startedDay: String = "2030-01-01",
         deleting: Boolean = false,
+        programChangePending: Boolean = false,
         standardIds: List<Long> = listOf(1),
         trainingIds: List<Long> = listOf(5),
         sessionIds: List<Long> = listOf(7),
@@ -36,7 +37,7 @@ class ExpoProjectionTests : IntegrationTestSupport() {
         version = version,
         expoId = expoId,
         deleted = false,
-        expo = ExpoChangedEvent.ExpoState(startedDay, "2030-01-02", deleting),
+        expo = ExpoChangedEvent.ExpoState(startedDay, "2030-01-02", deleting, programChangePending),
         standardPrograms = standardIds.map { ExpoChangedEvent.StandardProgramState(it, "2030-01-01T09:00", "2030-01-01T10:00") },
         trainingPrograms = trainingIds.map { ExpoChangedEvent.TrainingProgramState(it) },
         preregisterSessions = sessionIds.map { ExpoChangedEvent.PreregisterSessionState(it, start, end) },
@@ -135,6 +136,24 @@ class ExpoProjectionTests : IntegrationTestSupport() {
         repository.standardProgram(expoId, 1) shouldBe null
         repository.hasTrainingProgram(expoId, 5) shouldBe false
         repository.preregisterSession(expoId, 7) shouldBe null
+    }
+
+    @Test
+    fun `프로그램 변경이 진행 중이면 프로그램은 없음으로 보고 해제되면 다시 읽는다`() {
+        val expoId = newExpo()
+
+        updater.apply(state(expoId, 10, programChangePending = true))
+
+        // 박람회 서비스는 진행 중인 프로그램 변경이 있으면 프로그램 조회만 409로 답한다. 없음이면 동기 호출로 넘어가 같은 결과가 된다
+        repository.standardProgram(expoId, 1) shouldBe null
+        repository.hasTrainingProgram(expoId, 5) shouldBe false
+        repository.period(expoId) shouldBe ExpoPeriodResDto("2030-01-01", "2030-01-02")
+        repository.preregisterSession(expoId, 7) shouldBe PreregisterSessionResDto(7, start, end)
+
+        updater.apply(state(expoId, 11))
+
+        repository.standardProgram(expoId, 1)?.id shouldBe 1
+        repository.hasTrainingProgram(expoId, 5) shouldBe true
     }
 
     @Test

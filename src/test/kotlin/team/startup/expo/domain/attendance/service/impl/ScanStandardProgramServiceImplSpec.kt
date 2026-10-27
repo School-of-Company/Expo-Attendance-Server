@@ -135,6 +135,18 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
                     verify(exactly = 1) { expoClient.getStandardProgram(expoId, programId) }
                 }
             }
+
+            `when`("프로그램 변경 진행 중이라 프로젝션이 없음으로 보고 박람회 서비스가 409면") {
+                givenHappyPath()
+                every { expoClient.getStandardProgram(expoId, programId) } throws UnitTestSupport.feignConflict()
+
+                then("동기 조회와 같이 503이고 기록하지 않는다") {
+                    shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "박람회 서비스를 잠시 사용할 수 없습니다.") {
+                        service().scan(programId, withCode)
+                    }
+                    verify(exactly = 0) { recordService.record(any(), any(), any(), any(), any()) }
+                }
+            }
         }
 
         given("일반 프로그램 스캔의 참가자 확인에서") {

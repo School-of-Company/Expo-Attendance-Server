@@ -73,6 +73,7 @@ class ExpoChangedConsumer(
                     startedDay = text(expo, "startedDay"),
                     finishedDay = text(expo, "finishedDay"),
                     deleting = expo.path("deleting").let { it.isBoolean && it.asBoolean() },
+                    programChangePending = expo.path("programChangePending").let { it.isBoolean && it.asBoolean() },
                 ),
             standardPrograms =
                 array(body, "standardPrograms").map {
