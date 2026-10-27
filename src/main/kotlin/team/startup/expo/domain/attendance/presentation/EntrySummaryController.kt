@@ -8,13 +8,16 @@ import org.springframework.web.bind.annotation.ModelAttribute
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
+import team.startup.expo.domain.attendance.presentation.dto.request.EntryListReqDto
 import team.startup.expo.domain.attendance.presentation.dto.request.EntrySummaryReqDto
 import team.startup.expo.domain.attendance.presentation.dto.request.RecentEntryRecordsReqDto
 import team.startup.expo.domain.attendance.presentation.dto.request.ScannerEntryCountsReqDto
+import team.startup.expo.domain.attendance.presentation.dto.response.EntryListResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.EntrySummaryResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.HourlyEntryResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.RecentEntryRecordsResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ScannerEntryCountsResDto
+import team.startup.expo.domain.attendance.service.EntryListService
 import team.startup.expo.domain.attendance.service.EntryStatsService
 import team.startup.expo.domain.attendance.service.EntrySummaryService
 import team.startup.expo.global.swagger.ApiError
@@ -25,6 +28,7 @@ import team.startup.expo.global.swagger.ApiError
 class EntrySummaryController(
     private val entrySummaryService: EntrySummaryService,
     private val entryStatsService: EntryStatsService,
+    private val entryListService: EntryListService,
 ) {
     @Operation(
         summary = "오늘 입장 처리 건수 조회",
@@ -74,6 +78,24 @@ class EntrySummaryController(
         @PathVariable expoId: String,
         @Valid @ParameterObject @ModelAttribute reqDto: RecentEntryRecordsReqDto,
     ): RecentEntryRecordsResDto = entryStatsService.recent(expoId, reqDto)
+
+    @Operation(
+        summary = "하루 입장자 목록",
+        description =
+            "그날(`date`, 없으면 오늘) 등록 QR(일반 참가자·연수자)로 입장한 사람을 한 사람당 한 행으로, 최초 입장 시각 최신순으로 돌려준다. " +
+                "퇴장 뒤 재입장해도 한 행이고 `inside`로 지금 안에 있는지 알 수 있다. 각 행은 입장 스캔 응답과 같은 모양(`id`, `participationType`, `name`, " +
+                "`phoneNumber`, `personalInformationStatus`, `badge`)이고, 전화번호는 가운데를 가린다. 이름·연락처·명찰은 유저 서비스에서 가져온다. " +
+                "`page`(0부터)·`size`(최대 500)로 나눠 읽고 `totalElements`로 전체 수를 안다. 종이 QR과 간편입장은 담지 않는다. 읽기 전용이다.",
+    )
+    @ApiError(400, "박람회 ID나 날짜 형식이 올바르지 않거나, `page`·`size`가 범위를 벗어났다.")
+    @ApiError(401, "관리자 역할 헤더가 없다.")
+    @ApiError(403, "`X-User-Role`이 `ROLE_ADMIN`이 아니다.")
+    @ApiError(503, "유저 서비스가 응답하지 않거나 DB 일시 장애로 요청이 몰려 잠시 처리하지 못했다. 잠시 후 다시 시도한다.")
+    @GetMapping("/{expoId}/entries")
+    fun entries(
+        @PathVariable expoId: String,
+        @Valid @ParameterObject @ModelAttribute reqDto: EntryListReqDto,
+    ): EntryListResDto = entryListService.list(expoId, reqDto)
 
     @Operation(
         summary = "스캐너별 입장 처리 건수",
