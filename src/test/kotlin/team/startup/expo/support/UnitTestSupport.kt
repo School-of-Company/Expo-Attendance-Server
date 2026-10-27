@@ -12,6 +12,8 @@ import org.springframework.http.HttpStatus
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import team.startup.expo.domain.attendance.support.PreregisterSessionValidator
+import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
+import team.startup.expo.global.config.ExpoProjectionProperties
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.Instant
@@ -34,6 +36,9 @@ object UnitTestSupport {
         mockk<PlatformTransactionManager>(relaxed = true).also {
             every { it.getTransaction(any()) } returns mockk<TransactionStatus>(relaxed = true)
         }
+
+    /** 꺼진 박람회 프로젝션(#240). 항상 `null`이라 박람회 서비스를 부르는 지금 동작 그대로다. */
+    fun disabledExpoProjection(): ExpoProjectionReader = ExpoProjectionReader(mockk(), ExpoProjectionProperties(enabled = false))
 
     fun circuitBreaker(name: String = "test"): CircuitBreaker = CircuitBreaker.ofDefaults(name)
 

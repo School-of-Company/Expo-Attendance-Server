@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.expo.ExpoClient
+import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.config.ExpoPeriodCacheProperties
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
@@ -21,6 +22,7 @@ class ExpoPeriodValidator(
     @Qualifier("expoCircuitBreaker") private val expoCircuitBreaker: CircuitBreaker,
     private val properties: ExpoPeriodCacheProperties,
     private val clock: Clock,
+    private val expoProjection: ExpoProjectionReader,
 ) {
     private class CachedPeriod(
         val period: Pair<LocalDate, LocalDate>,
@@ -57,10 +59,12 @@ class ExpoPeriodValidator(
     }
 
     private fun fetchPeriod(expoId: String): Pair<LocalDate, LocalDate> {
+        // 프로젝션이 꺼져 있거나 없으면 박람회 서비스를 부른다(#240)
         val period =
-            expoCircuitBreaker.callService("박람회", ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")) {
-                expoClient.getPeriod(expoId)
-            }
+            expoProjection.period(expoId)
+                ?: expoCircuitBreaker.callService("박람회", ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")) {
+                    expoClient.getPeriod(expoId)
+                }
         // 박람회 서비스가 날짜를 잘못 주면 호출 실패와 같이 503으로 알린다(500이 아니라)
         return try {
             LocalDate.parse(period.startedDay) to LocalDate.parse(period.finishedDay)

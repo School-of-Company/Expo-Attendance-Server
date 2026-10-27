@@ -19,6 +19,7 @@ import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.TrainingProgramBatchReqDto
+import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.client.user.ResolveTraineeByParticipantReqDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
@@ -38,6 +39,7 @@ class ScanTrainingProgramServiceImpl(
     recordProgramAttendanceService: RecordProgramAttendanceService,
     cancellationGuardGate: CancellationGuardGate,
     private val programScanNameResolver: ProgramScanNameResolver,
+    private val expoProjection: ExpoProjectionReader,
     clock: Clock,
 ) : AbstractProgramScanService<Unit>(
         expoCircuitBreaker,
@@ -60,6 +62,11 @@ class ScanTrainingProgramServiceImpl(
         // 연수 프로그램은 시간대 검사를 하지 않아 입실이 거부되는 일은 없다
         return scanProgram(reqDto.expoId, programId, traineeId, participantId = reqDto.participantId, traineeId = traineeId)
     }
+
+    override fun findProjectedProgram(
+        expoId: String,
+        programId: Long,
+    ) = expoProjection.trainingProgram(expoId, programId)
 
     override fun findProgram(
         expoId: String,

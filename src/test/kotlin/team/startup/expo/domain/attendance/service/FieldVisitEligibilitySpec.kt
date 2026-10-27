@@ -40,7 +40,15 @@ class FieldVisitEligibilitySpec : BehaviorSpec() {
     private val clock = Clock.fixed(Instant.parse("2026-10-22T03:00:00Z"), zone)
 
     private fun validator(clock: Clock = this.clock) =
-        PreregisterSessionValidator(sessions, expo, UnitTestSupport.circuitBreaker(), PreregisterEntryProperties(), clock, field)
+        PreregisterSessionValidator(
+            sessions,
+            expo,
+            UnitTestSupport.circuitBreaker(),
+            PreregisterEntryProperties(),
+            clock,
+            field,
+            UnitTestSupport.disabledExpoProjection(),
+        )
 
     private fun visit(
         date: LocalDate = day,

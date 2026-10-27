@@ -11,6 +11,8 @@ import team.startup.expo.domain.attendance.repository.FieldVisitRepository
 import team.startup.expo.domain.attendance.repository.PreregisterSessionRepository
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.expo.ExpoClient
+import team.startup.expo.global.client.expo.PreregisterSessionResDto
+import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.config.PreregisterEntryProperties
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
@@ -33,6 +35,7 @@ class PreregisterSessionValidator(
     private val properties: PreregisterEntryProperties,
     private val clock: Clock,
     private val fieldVisits: FieldVisitRepository,
+    private val expoProjection: ExpoProjectionReader,
 ) {
     /**
      * 취소된 신청을 거절한다. 회차 기록이 있는데 확정 상태인 회차가 하나도 없으면 취소된 신청이다.
@@ -85,7 +88,7 @@ class PreregisterSessionValidator(
         // 확정한 회차가 없어졌다는 404는 있을 수 없는 상태라 "없음"이 아니라 호출 실패(503)로 본다
         val sessions =
             sessionIds.map { sessionId ->
-                val session = expoCircuitBreaker.callService("박람회") { expoClient.getPreregisterSession(expoId, sessionId) }
+                val session = session(expoId, sessionId)
                 Window(sessionId, session.startedAt.minus(Duration.ofMinutes(properties.leadMinutes)), session.startedAt, session.endedAt)
             }
 
@@ -140,10 +143,16 @@ class PreregisterSessionValidator(
         records: List<PreregisterSession>,
         attendanceDate: LocalDate = LocalDate.now(clock),
     ) = activeSessionIds(records)
-        .map { sessionId ->
-            val session = expoCircuitBreaker.callService("박람회") { expoClient.getPreregisterSession(expoId, sessionId) }
-            session
-        }.filter { it.startedAt.atZone(clock.zone).toLocalDate() == attendanceDate }
+        .map { sessionId -> session(expoId, sessionId) }
+        .filter { it.startedAt.atZone(clock.zone).toLocalDate() == attendanceDate }
+
+    /** 회차 시간. 프로젝션이 꺼져 있거나 없으면 박람회 서비스를 부른다(#240). */
+    private fun session(
+        expoId: String,
+        sessionId: Long,
+    ): PreregisterSessionResDto =
+        expoProjection.preregisterSession(expoId, sessionId)
+            ?: expoCircuitBreaker.callService("박람회") { expoClient.getPreregisterSession(expoId, sessionId) }
 
     private data class Window(
         val sessionId: Long,
