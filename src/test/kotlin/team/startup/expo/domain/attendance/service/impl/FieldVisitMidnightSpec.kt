@@ -69,7 +69,7 @@ class FieldVisitMidnightSpec :
                             mockk<EntryLogRepository>(relaxed = true),
                             EntryLogWriter(mockk<EntryLogRepository>(relaxed = true)),
                             EntryReplayPolicy(EntryReplayProperties()),
-                                            clock,
+                            clock,
                             fence,
                         )
                     service.scan("expo", ScanEntryReqDto(EntryAuthority.ROLE_STANDARD, participantId = 7, code = "fake-code"))
