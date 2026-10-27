@@ -5,7 +5,7 @@ data class StandardProgramResDto(
     val id: Long,
     /** 이 서비스는 쓰지 않는다. 프로젝션(#240)에는 없어 `null`이다. */
     val title: String? = null,
-    /** 시작 일시(시간대 없는 한국 시간 `2026-10-31T10:30`, 예전 행은 `2026-10-31 10:30`). 없거나 읽을 수 없으면 시간대 검사를 건너뛴다. */
+    /** 시작 일시. Expo 동기 조회는 UTC instant(`2026-10-31T01:30:00Z`), 프로젝션은 시간대 없는 한국 시간(`2026-10-31T10:30`)이다. 없거나 읽을 수 없으면 시간대 검사를 건너뛴다. */
     val startedAt: String? = null,
     val endedAt: String? = null,
 )

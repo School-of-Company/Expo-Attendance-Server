@@ -36,6 +36,13 @@ class ProgramEntryWindowSpec : BehaviorSpec() {
                     allowed("2026-10-31T01:19:00Z", "2026-10-31 10:30", "2026-10-31 11:30") shouldBe false
                 }
             }
+            `when`("Expo 동기 조회처럼 UTC instant이면") {
+                then("한국 시간 일정과 같은 시각으로 읽는다") {
+                    allowed("2026-10-31T01:20:00Z", "2026-10-31T01:30:00Z", "2026-10-31T02:30:00Z") shouldBe true
+                    allowed("2026-10-31T01:19:59Z", "2026-10-31T01:30:00Z", "2026-10-31T02:30:00Z") shouldBe false
+                    allowed("2026-10-31T02:30:01Z", "2026-10-31T01:30:00Z", "2026-10-31T02:30:00Z") shouldBe false
+                }
+            }
             `when`("일정이 없거나 읽을 수 없으면") {
                 then("막지 않는다") {
                     allowed("2026-10-31T00:00:00Z", null, null) shouldBe true
