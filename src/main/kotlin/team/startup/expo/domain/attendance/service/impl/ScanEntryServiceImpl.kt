@@ -9,12 +9,12 @@ import team.startup.expo.domain.attendance.entity.EntryStatus
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.presentation.dto.request.EntryAuthority
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanEntryReqDto
-import team.startup.expo.domain.attendance.presentation.dto.response.BadgeResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ScanEntryResDto
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.service.ScanEntryService
 import team.startup.expo.domain.attendance.support.CancellationGuardGate
+import team.startup.expo.domain.attendance.support.EntryBadge
 import team.startup.expo.domain.attendance.support.EntryLogWriter
 import team.startup.expo.domain.attendance.support.EntryReplayPolicy
 import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
@@ -322,17 +322,7 @@ class ScanEntryServiceImpl(
         entry: RecordEntryResDto,
         firstEnteredTime: String,
     ): ScanEntryResDto {
-        val isTrainee = entry.participationType == TRAINEE
-        // 명찰 대상은 연수자 전원과 교사·예비교사인 일반 참가자다
-        val badge =
-            if (isTrainee || entry.occupation in BADGE_OCCUPATIONS) {
-                BadgeResDto(
-                    name = entry.name,
-                    school = entry.school,
-                )
-            } else {
-                null
-            }
+        val badge = EntryBadge.of(entry.participationType == TRAINEE, entry.occupation, entry.name, entry.school)
 
         return ScanEntryResDto(
             id = entry.id,
@@ -358,8 +348,5 @@ class ScanEntryServiceImpl(
     private companion object {
         const val TRAINEE = "TRAINEE"
         val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-
-        // 소속을 받아 명찰에 "소속 이름"으로 찍는 구분: 교사와 예비교사
-        val BADGE_OCCUPATIONS = setOf("TEACHER", "PRE_SERVICE_TEACHER")
     }
 }
