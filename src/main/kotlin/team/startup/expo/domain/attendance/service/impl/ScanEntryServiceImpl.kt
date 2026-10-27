@@ -32,7 +32,6 @@ import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.global.exception.ExpectedException
-import tools.jackson.databind.ObjectMapper
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -55,7 +54,6 @@ class ScanEntryServiceImpl(
     private val entryLogRepository: EntryLogRepository,
     private val entryLogWriter: EntryLogWriter,
     private val entryReplayPolicy: EntryReplayPolicy,
-    private val objectMapper: ObjectMapper,
     private val clock: Clock,
     private val fieldEntryFence: FieldEntryFence,
 ) : ScanEntryService {
@@ -116,7 +114,7 @@ class ScanEntryServiceImpl(
                 enteredAt = now.takeIf { subjectType == EntrySubjectType.STANDARD },
             )
         }
-        return scanned.response ?: toResponse(requireNotNull(scanned.entry), reqDto, now.format(TIME))
+        return scanned.response ?: toResponse(requireNotNull(scanned.entry), now.format(TIME))
     }
 
     /**
@@ -135,7 +133,7 @@ class ScanEntryServiceImpl(
         return try {
             val entry = recordEntry(expoId, reqDto, preregisterSessionId, participantId, now.toLocalDate())
             attempt?.let { fieldEntryFence.finish(it, true) }
-            Scanned(entry = entry, response = toResponse(entry, reqDto, now.format(TIME)))
+            Scanned(entry = entry, response = toResponse(entry, now.format(TIME)))
         } catch (_: AlreadyEnteredToday) {
             if (participantId != null) {
                 val status =
@@ -322,7 +320,6 @@ class ScanEntryServiceImpl(
 
     private fun toResponse(
         entry: RecordEntryResDto,
-        reqDto: ScanEntryReqDto,
         firstEnteredTime: String,
     ): ScanEntryResDto {
         val isTrainee = entry.participationType == TRAINEE
@@ -332,7 +329,6 @@ class ScanEntryServiceImpl(
                 BadgeResDto(
                     name = entry.name,
                     school = entry.school,
-                    qrCode = badgeQrCode(isTrainee, entry, reqDto),
                 )
             } else {
                 null
@@ -347,26 +343,6 @@ class ScanEntryServiceImpl(
             badge = badge,
             entryStatus = EntryStatus.FIRST,
             firstEnteredTime = firstEnteredTime,
-        )
-    }
-
-    /**
-     * 명찰 QR은 입구 스캔이 읽는 값이다. 일반 참가자가 ID와 코드로 입장했으면 `{"participantId": 42, "code": "…"}`,
-     * 그 외는 이전 형식 `{"participantId": 42, "phoneNumber": "010…"}`(연수자는 `traineeId`)이다.
-     */
-    private fun badgeQrCode(
-        isTrainee: Boolean,
-        entry: RecordEntryResDto,
-        reqDto: ScanEntryReqDto,
-    ): String {
-        if (!isTrainee && reqDto.participantId != null && !reqDto.code.isNullOrBlank()) {
-            return objectMapper.writeValueAsString(linkedMapOf("participantId" to entry.id, "code" to reqDto.code))
-        }
-        return objectMapper.writeValueAsString(
-            linkedMapOf(
-                (if (isTrainee) "traineeId" else "participantId") to entry.id,
-                "phoneNumber" to entry.phoneNumber,
-            ),
         )
     }
 

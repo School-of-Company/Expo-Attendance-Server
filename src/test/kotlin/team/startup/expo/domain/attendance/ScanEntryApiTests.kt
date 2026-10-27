@@ -90,7 +90,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.badge.name").value("홍길동"))
             .andExpect(jsonPath("$.badge.school").value("광주초등학교"))
-            .andExpect(jsonPath("$.badge.qrCode").value("""{"participantId":4202,"phoneNumber":"01012345678"}"""))
+            .andExpect(jsonPath("$.badge.qrCode").doesNotExist())
     }
 
     @Test
@@ -100,7 +100,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
             .perform(scan("expo-s6", "ROLE_STANDARD", "01012345678"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.badge.school").value("광주교육대학교"))
-            .andExpect(jsonPath("$.badge.qrCode").value("""{"participantId":4210,"phoneNumber":"01012345678"}"""))
+            .andExpect(jsonPath("$.badge.qrCode").doesNotExist())
 
         listOf("SCHOOL_STAFF", "PARENT", "GENERAL", "ELEMENTARY_STUDENT").forEachIndexed { index, occupation ->
             entryReturns("expo-s7-$index", standardEntry(id = 4220L + index, occupation = occupation))
@@ -124,7 +124,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
             .perform(scan("expo-t1", "ROLE_TRAINEE", "01099998888"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.participationType").value("TRAINEE"))
-            .andExpect(jsonPath("$.badge.qrCode").value("""{"traineeId":7,"phoneNumber":"01099998888"}"""))
+            .andExpect(jsonPath("$.badge.qrCode").doesNotExist())
     }
 
     @Test
@@ -167,7 +167,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
             .perform(scanById("expo-i2", 5002, "codeBBBBBBBBBBBBBBBBBB"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.badge.school").value("광주초등학교"))
-            .andExpect(jsonPath("$.badge.qrCode").value("""{"participantId":5002,"code":"codeBBBBBBBBBBBBBBBBBB"}"""))
+            .andExpect(jsonPath("$.badge.qrCode").doesNotExist())
     }
 
     @Test
