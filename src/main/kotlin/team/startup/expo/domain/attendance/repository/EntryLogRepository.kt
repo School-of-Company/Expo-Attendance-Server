@@ -240,6 +240,38 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
         @Param("limit") limit: Int,
     ): List<Array<Any?>>
 
+    /** 그날 등록 QR(일반 참가자·연수자)로 입장한 사람 수(#237). 한 사람은 하루 한 행이다. */
+    @Query(
+        nativeQuery = true,
+        value = """
+            SELECT COUNT(*) FROM tb_entry_log
+            WHERE expo_id = :expoId AND attendance_date = :date AND subject_type IN ('STANDARD', 'TRAINEE')
+        """,
+    )
+    fun countRegisteredEntries(
+        @Param("expoId") expoId: String,
+        @Param("date") date: LocalDate,
+    ): Long
+
+    /**
+     * 그날 등록 QR로 입장한 사람 한 페이지 [대상 종류, 대상 ID, 최초 입장 시각, 퇴장 시각](#237). 최초 입장 시각 최신순, 같으면 id 역순이다.
+     * 재입장은 퇴장 시각만 비우므로 입장 시각은 그날 처음 입장한 시각이다.
+     */
+    @Query(
+        nativeQuery = true,
+        value = """
+            SELECT subject_type, subject_id, entered_at, exited_at FROM tb_entry_log
+            WHERE expo_id = :expoId AND attendance_date = :date AND subject_type IN ('STANDARD', 'TRAINEE')
+            ORDER BY entered_at DESC, id DESC LIMIT :size OFFSET :offset
+        """,
+    )
+    fun findRegisteredEntries(
+        @Param("expoId") expoId: String,
+        @Param("date") date: LocalDate,
+        @Param("size") size: Int,
+        @Param("offset") offset: Long,
+    ): List<Array<Any?>>
+
     /** 기간 안의 입장·재입장·퇴장 이벤트 수(#150). */
     @Query(
         nativeQuery = true,
