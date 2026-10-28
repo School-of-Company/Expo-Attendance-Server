@@ -193,6 +193,40 @@ class PaperQrReentryApiTests : IntegrationTestSupport() {
             "gate-2"
     }
 
+    @Test
+    fun `장학사 현장 코드는 첫 스캔에 등록되어 구분별로 집계되고 같은 날 두 번 찍으면 400이다`() {
+        entry("ADT-0001").andExpect(status().isOk).andExpect(jsonPath("$.entryStatus").value("FIRST"))
+        entry("KID-0500").andExpect(status().isOk)
+        entry("ADT-0001").andExpect(status().isBadRequest)
+
+        val sql = "SELECT category FROM tb_entry_log WHERE subject_type = 'PAPER_QR' ORDER BY category"
+        jdbcTemplate.queryForList(sql, String::class.java) shouldBe listOf("ADULT", "CHILD")
+        events() shouldBe listOf("ENTER", "ENTER")
+        summary().andExpect(jsonPath("$.totals.entered").value(2))
+    }
+
+    @Test
+    fun `현장 코드도 퇴장 뒤 다시 찍으면 재입장이다`() {
+        entry("KID-0007").andExpect(status().isOk)
+        exit("KID-0007").andExpect(status().isOk)
+        entry("KID-0007").andExpect(status().isOk).andExpect(jsonPath("$.entryStatus").value("RE_ENTRY"))
+        events() shouldBe listOf("ENTER", "EXIT", "RE_ENTER")
+    }
+
+    @Test
+    fun `범위 밖 현장 코드는 404이고 등록하지 않는다`() {
+        listOf("ADT-0501", "KID-0000", "ADT-1").forEach { entry(it).andExpect(status().isNotFound) }
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_qr_token WHERE token <> ?", Long::class.java, TOKEN) shouldBe 0L
+    }
+
+    @Test
+    fun `같은 현장 코드도 박람회마다 따로 입장한다`() {
+        entry("ADT-0002").andExpect(status().isOk)
+        mockMvc
+            .perform(patch("/attendance/qr/$OTHER_EXPO").contentType(MediaType.APPLICATION_JSON).content("""{"token":"ADT-0002"}"""))
+            .andExpect(status().isOk)
+    }
+
     private fun events(): List<String> =
         jdbcTemplate.queryForList("SELECT event_type FROM tb_entry_event ORDER BY id", String::class.java).filterNotNull()
 
@@ -221,6 +255,7 @@ class PaperQrReentryApiTests : IntegrationTestSupport() {
 
     private companion object {
         const val EXPO = "0b1f6c3e-52a4-4d6e-9d57-4b7a1e5c9a10"
+        const val OTHER_EXPO = "0b1f6c3e-52a4-4d6e-9d57-4b7a1e5c9a11"
         const val TOKEN = "paper-token-0001"
         const val TOKEN_B = "paper-token-0002"
     }

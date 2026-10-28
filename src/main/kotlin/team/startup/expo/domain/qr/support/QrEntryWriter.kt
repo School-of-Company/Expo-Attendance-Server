@@ -3,6 +3,7 @@ package team.startup.expo.domain.qr.support
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.qr.repository.QrEntryRepository
+import team.startup.expo.domain.qr.repository.QrTokenRepository
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -14,6 +15,7 @@ import java.time.LocalDateTime
 @Component
 class QrEntryWriter(
     private val qrEntryRepository: QrEntryRepository,
+    private val qrTokenRepository: QrTokenRepository,
 ) {
     @Transactional
     fun recordEntry(
@@ -33,4 +35,17 @@ class QrEntryWriter(
         occurredAt: LocalDateTime,
         scanner: String?,
     ): Int = qrEntryRepository.reenter(token, expoId, attendanceDate, occurredAt, scanner)
+
+    /** 현장 종이 QR 코드(#243)가 규칙 안이면 이 박람회의 토큰으로 등록하고 저장 토큰을 돌려준다. 규칙 밖이면 입력 그대로 돌려준다. */
+    @Transactional
+    fun registerFieldToken(
+        expoId: String,
+        input: String,
+        now: LocalDateTime,
+    ): String {
+        val field = FieldQrCode.parse(input) ?: return input
+        val token = field.token(expoId)
+        qrTokenRepository.registerField(token, expoId, field.category.name, field.code, now)
+        return token
+    }
 }
