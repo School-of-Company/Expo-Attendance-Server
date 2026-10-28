@@ -20,6 +20,7 @@ import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.StandardProgramResDto
+import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
@@ -45,6 +46,7 @@ class ScanStandardProgramServiceImpl(
     cancellationGuardGate: CancellationGuardGate,
     private val properties: ProgramAttendanceProperties,
     private val programScanNameResolver: ProgramScanNameResolver,
+    private val expoProjection: ExpoProjectionReader,
     clock: Clock,
 ) : AbstractProgramScanService<StandardProgramResDto>(
         expoCircuitBreaker,
@@ -85,6 +87,11 @@ class ScanStandardProgramServiceImpl(
         checkParticipant(reqDto)
         return scanProgram(reqDto.expoId, programId, reqDto.participantId, participantId = reqDto.participantId)
     }
+
+    override fun findProjectedProgram(
+        expoId: String,
+        programId: Long,
+    ) = expoProjection.standardProgram(expoId, programId)
 
     override fun findProgram(
         expoId: String,

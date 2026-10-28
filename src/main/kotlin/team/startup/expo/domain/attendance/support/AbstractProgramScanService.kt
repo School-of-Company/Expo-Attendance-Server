@@ -39,6 +39,12 @@ abstract class AbstractProgramScanService<P>(
     /** 신청하지 않은 사람의 404 문구. */
     protected abstract val notAppliedMessage: String
 
+    /** 박람회 프로젝션에서 프로그램을 찾는다(#240). 꺼져 있거나 없으면 `null`이고, 그러면 [findProgram]으로 박람회 서비스를 부른다. */
+    protected abstract fun findProjectedProgram(
+        expoId: String,
+        programId: Long,
+    ): P?
+
     /** 박람회 서비스에서 프로그램을 읽는다. 호출은 박람회 서킷 브레이커 안에서 이뤄진다. */
     protected abstract fun findProgram(
         expoId: String,
@@ -73,7 +79,9 @@ abstract class AbstractProgramScanService<P>(
         traineeId: Long? = null,
     ): ProgramScanResDto {
         val notFound = ExpectedException(HttpStatus.NOT_FOUND, programNotFoundMessage)
-        val program = expoCircuitBreaker.callService("박람회", notFound) { findProgram(expoId, programId) }
+        val program =
+            findProjectedProgram(expoId, programId)
+                ?: expoCircuitBreaker.callService("박람회", notFound) { findProgram(expoId, programId) }
         expoPeriodValidator.checkInProgress(expoId)
 
         val entryAllowed = allowsEntry(program)

@@ -17,6 +17,7 @@ import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.config.ExpoPeriodCacheProperties
 import team.startup.expo.global.exception.ExpectedException
+import team.startup.expo.support.UnitTestSupport
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -38,7 +39,13 @@ class ExpoPeriodCacheTests {
     private val client = mock(ExpoClient::class.java)
 
     private fun validator(ttlSeconds: Long) =
-        ExpoPeriodValidator(client, CircuitBreaker.ofDefaults("expo-test"), ExpoPeriodCacheProperties(ttlSeconds), clock)
+        ExpoPeriodValidator(
+            client,
+            CircuitBreaker.ofDefaults("expo-test"),
+            ExpoPeriodCacheProperties(ttlSeconds),
+            clock,
+            UnitTestSupport.disabledExpoProjection(),
+        )
 
     private fun notFound() =
         FeignException.NotFound(

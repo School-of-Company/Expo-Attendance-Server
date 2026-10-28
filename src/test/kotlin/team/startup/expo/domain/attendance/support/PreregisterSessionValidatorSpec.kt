@@ -13,6 +13,7 @@ import team.startup.expo.domain.attendance.entity.PreregisterSessionStatus
 import team.startup.expo.domain.attendance.repository.PreregisterSessionRepository
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.PreregisterSessionResDto
+import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.config.PreregisterEntryProperties
 import team.startup.expo.global.exception.ExpectedException
 import team.startup.expo.support.UnitTestSupport
@@ -25,6 +26,7 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
 
     private val sessionRepository = mockk<PreregisterSessionRepository>()
     private val expoClient = mockk<ExpoClient>()
+    private val expoProjection = mockk<ExpoProjectionReader>().also { every { it.preregisterSession(any(), any()) } returns null }
     private val clock = UnitTestSupport.fixedClock()
     private val now: Instant = clock.instant()
 
@@ -36,6 +38,7 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
             PreregisterEntryProperties(leadMinutes = 30),
             clock,
             mockk(relaxed = true),
+            expoProjection,
         )
 
     private val expoId = "expo-1"
@@ -74,6 +77,28 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
     private fun check() = validator.check(expoId, participantId, verifyCode)
 
     init {
+        given("박람회 프로젝션(#240)에서") {
+            `when`("회차 시간이 프로젝션에 있으면") {
+                every { sessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId) } returns listOf(record())
+                every { expoProjection.preregisterSession(expoId, 11L) } returns
+                    PreregisterSessionResDto(11L, now.minusSeconds(600), now.plusSeconds(3600))
+
+                then("박람회 서비스를 부르지 않고 그 시간으로 판단한다") {
+                    check() shouldBe 11L
+                    verify(exactly = 0) { expoClient.getPreregisterSession(any(), any()) }
+                }
+            }
+
+            `when`("프로젝션에 없으면") {
+                givenRecord(record())
+
+                then("박람회 서비스를 부른다") {
+                    check() shouldBe 11L
+                    verify(exactly = 1) { expoClient.getPreregisterSession(expoId, 11L) }
+                }
+            }
+        }
+
         given("전화번호 입장의 취소 상태 확인에서") {
             listOf(null, PreregisterSessionStatus.ACTIVE, PreregisterSessionStatus.CANCELLED).forEach { status ->
                 `when`("기록 상태가 $status 이면") {

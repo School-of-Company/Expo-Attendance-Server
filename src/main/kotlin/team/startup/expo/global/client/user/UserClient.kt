@@ -48,6 +48,15 @@ interface UserClient {
         @RequestBody request: TraineeNamesReqDto,
     ): List<TraineeNameResDto>
 
+    /**
+     * 입장 목록(#237)용으로 일반 참가자·연수자의 이름, 전화번호, 개인정보 동의, 직업, 학교를 한 번에 읽는다(Expo-User-Server#215). 없는 id와
+     * 다른 박람회의 id는 404 없이 결과에서 빠진다.
+     */
+    @PostMapping("/internal/participants/entry-cards")
+    fun getEntryCards(
+        @RequestBody request: EntryCardsReqDto,
+    ): EntryCardsResDto
+
     /** 참가자 ID와 code가 맞으면 204다. 없는 참가자, 다른 박람회, code 불일치는 구분 없이 404이고 아무것도 기록하지 않는다. */
     @PostMapping("/internal/standard-participants/verify")
     fun verifyStandardParticipant(
