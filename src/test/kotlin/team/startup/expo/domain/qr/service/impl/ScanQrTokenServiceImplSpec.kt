@@ -39,7 +39,7 @@ class ScanQrTokenServiceImplSpec : BehaviorSpec() {
     private val service =
         ScanQrTokenServiceImpl(
             qrTokenRepository,
-            QrEntryWriter(qrEntryRepository),
+            QrEntryWriter(qrEntryRepository, qrTokenRepository),
             entryLogRepository,
             expoPeriodValidator,
             EntryReplayPolicy(EntryReplayProperties(windowSeconds = 30)),

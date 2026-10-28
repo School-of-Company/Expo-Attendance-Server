@@ -46,6 +46,24 @@ interface QrTokenRepository : JpaRepository<QrToken, String> {
         @Param("expoId") expoId: String,
     ): List<QrTokenCategoryCount>
 
+    /** 현장 종이 QR 코드(#243)를 첫 스캔 때 등록한다. 이미 있으면 아무것도 하지 않는다. 연번은 발급 방식과 겹치지 않게 비워 둔다. */
+    @Modifying
+    @Query(
+        nativeQuery = true,
+        value = """
+            INSERT INTO tb_qr_token (token, expo_id, category, created_at, code)
+            VALUES (:token, :expoId, :category, :now, :code)
+            ON CONFLICT DO NOTHING
+        """,
+    )
+    fun registerField(
+        @Param("token") token: String,
+        @Param("expoId") expoId: String,
+        @Param("category") category: String,
+        @Param("code") code: String,
+        @Param("now") now: LocalDateTime,
+    ): Int
+
     /** 이미 무효화한 것은 시각을 그대로 두고, 코드가 없으면 0을 돌려준다. */
     @Modifying
     @Query(

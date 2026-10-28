@@ -13,6 +13,7 @@ import team.startup.expo.domain.attendance.service.ScanExitService
 import team.startup.expo.domain.attendance.support.EntryLogWriter
 import team.startup.expo.domain.attendance.support.ScannerName
 import team.startup.expo.domain.qr.repository.QrTokenRepository
+import team.startup.expo.domain.qr.support.FieldQrCode
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
@@ -90,7 +91,7 @@ class ScanExitServiceImpl(
             }
             return EntrySubjectType.TRAINEE to traineeId.toString()
         }
-        val token = requireNotNull(reqDto.token)
+        val token = FieldQrCode.tokenOf(expoId, requireNotNull(reqDto.token))
         if (!qrTokenRepository.existsByTokenAndExpoId(token, expoId)) {
             throw ExpectedException(HttpStatus.NOT_FOUND, "QR 토큰을 찾을 수 없습니다.")
         }
