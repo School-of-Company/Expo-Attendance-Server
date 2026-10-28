@@ -24,6 +24,7 @@ import team.startup.expo.global.client.application.ProgramApplicationResDto
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.expo.TrainingProgramBatchReqDto
+import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.client.user.ResolveTraineeByParticipantReqDto
 import team.startup.expo.global.client.user.ResolveTraineeByParticipantResDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
@@ -44,6 +45,14 @@ class ScanTrainingProgramServiceImplSpec : BehaviorSpec() {
     private val applicationClient = mockk<ApplicationClient>()
     private val recordService = mockk<RecordProgramAttendanceService>()
     private val nameResolver = mockk<ProgramScanNameResolver>(relaxed = true)
+
+    // 기본은 프로젝션에 없음(꺼져 있을 때와 같이 박람회 서비스를 부른다)
+    private val expoProjection =
+        mockk<ExpoProjectionReader>().also {
+            every { it.period(any()) } returns null
+            every { it.standardProgram(any(), any()) } returns null
+            every { it.trainingProgram(any(), any()) } returns null
+        }
     private val guardRepository = mockk<CancellationGuardRepository>(relaxed = true)
     private val clock = UnitTestSupport.fixedClock(Instant.parse("2026-05-10T03:07:42Z"))
 
@@ -55,7 +64,7 @@ class ScanTrainingProgramServiceImplSpec : BehaviorSpec() {
             UnitTestSupport.circuitBreaker("user"),
             UnitTestSupport.circuitBreaker("expo"),
             UnitTestSupport.circuitBreaker("application"),
-            ExpoPeriodValidator(expoClient, UnitTestSupport.circuitBreaker("period"), ExpoPeriodCacheProperties(0), clock),
+            ExpoPeriodValidator(expoClient, UnitTestSupport.circuitBreaker("period"), ExpoPeriodCacheProperties(0), clock, expoProjection),
             recordService,
             CancellationGuardGate(
                 UnitTestSupport.transactionManager(),
@@ -65,6 +74,7 @@ class ScanTrainingProgramServiceImplSpec : BehaviorSpec() {
                 clock,
             ),
             nameResolver,
+            expoProjection,
             clock,
         )
 
@@ -98,6 +108,39 @@ class ScanTrainingProgramServiceImplSpec : BehaviorSpec() {
         )
 
     init {
+        given("박람회 프로젝션(#240)에서") {
+            `when`("연수 프로그램이 프로젝션에 있으면") {
+                givenHappyPath()
+                every { expoProjection.trainingProgram(expoId, programId) } returns Unit
+                service.scan(programId, byTrainee)
+
+                then("박람회 서비스에 프로그램을 묻지 않는다") {
+                    verify(exactly = 0) { expoClient.getTrainingPrograms(any(), any()) }
+                }
+            }
+
+            `when`("프로젝션에 없으면") {
+                givenHappyPath()
+                service.scan(programId, byTrainee)
+
+                then("박람회 서비스를 부른다") {
+                    verify(exactly = 1) { expoClient.getTrainingPrograms(expoId, any()) }
+                }
+            }
+
+            `when`("프로그램 변경 진행 중이라 프로젝션이 없음으로 보고 박람회 서비스가 409면") {
+                givenHappyPath()
+                every { expoClient.getTrainingPrograms(expoId, any()) } throws UnitTestSupport.feignConflict()
+
+                then("동기 조회와 같이 503이고 기록하지 않는다") {
+                    shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "박람회 서비스를 잠시 사용할 수 없습니다.") {
+                        service.scan(programId, byTrainee)
+                    }
+                    verify(exactly = 0) { recordService.record(any(), any(), any(), any(), any()) }
+                }
+            }
+        }
+
         given("연수 프로그램 스캔의 연수자 확인에서") {
             `when`("participantId만 보내면") {
                 givenHappyPath()

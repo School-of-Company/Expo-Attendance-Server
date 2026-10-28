@@ -14,6 +14,7 @@ Expo-Attention-Server
 | `QR_ENTRY_REVIEW_ENABLED`, `QR_ENTRY_REVIEW_INTERVAL_MS` | 박람회 서비스 장애 때 기간 확인 없이 기록한 종이 QR 입장을 다시 확인하는 작업을 켜고 끄는 값(기본 `true`)과 주기(기본 5분) |
 | `ENTRY_REPLAY_WINDOW_SECONDS` | 입장이 기록된 뒤 이 시간(초, 기본 `30`, `0`이면 끔) 안에 같은 스캐너가 같은 QR을 퇴장 없이 다시 찍으면 400 대신 직전 입장 결과를 다시 돌려준다(타임아웃 뒤 재시도, #176) |
 | `EXPO_PERIOD_CACHE_TTL_SECONDS` | 박람회 서비스에서 읽은 박람회 기간을 다시 부르지 않고 쓰는 시간(초, 기본 `30`, `0`이면 끔). 박람회 기간을 고친 직후 최대 이 시간만큼 이전 기간으로 판단될 수 있다 |
+| `KAFKA_EXPO_PROJECTION_ENABLED` | 켜면 `expo.expo.changed`를 받아 박람회 기간·일반/연수 프로그램·사전등록 회차 시간을 로컬 프로젝션(`tb_expo_projection*`)에 담고, 이 값들을 박람회 서비스 대신 프로젝션에서 읽는다 (기본 `false` = 지금처럼 항상 동기 호출). 프로젝션에 없으면(아직 받지 못함, 삭제 중, 프로그램 조회에서 박람회 서비스의 프로그램 변경 진행 중) 동기 호출로 넘어가고 박람회·조회 종류마다 한 번 로그를 남긴다. `KAFKA_BOOTSTRAP_SERVERS`가 있어야 하며 없으면 기동이 실패한다. consumer group은 `KAFKA_EXPO_PROJECTION_GROUP_ID`(기본 `expo-attention-server.expo-changed`), 처리하지 못한 메시지는 `expo.expo.changed.dlt`. 켠 뒤 박람회 서비스의 `POST /internal/expo-events/republish`로 전체 상태를 한 번 받는다 |
 | `CANCELLATION_ABORTED_RETENTION_DAYS` | 중단된 취소 작업 기록(`tb_cancellation_aborted`)을 이 일수가 지나면 지운다(기본 `0` = 지우지 않음). 신청 서비스가 중단 뒤 늦게 보낼 수 있는 재시도 기간보다 충분히 길게 둔다. 다른 데이터는 기간으로 지우지 않는다(`docs/data-retention.md`) |
 | `PREREGISTER_ENTRY_LEAD_MINUTES` | 사전등록 입장을 회차 시작 몇 분 전부터 허용할지 (기본 `30`) |
 | `PROGRAM_ATTENDANCE_REQUIRE_CODE` | 켜면 일반 프로그램 출석 스캔에 참가자 `code`가 필수 (기본 `false`) |

@@ -3,6 +3,7 @@ package team.startup.expo.domain.attendance.service.impl
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.core.spec.IsolationMode
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -13,6 +14,7 @@ import team.startup.expo.domain.attendance.entity.CancellationGuard
 import team.startup.expo.domain.attendance.entity.CancellationGuardState
 import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanStandardProgramReqDto
+import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResult
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
 import team.startup.expo.domain.attendance.support.CancellationGuardGate
 import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
@@ -24,6 +26,7 @@ import team.startup.expo.global.client.application.ProgramApplicationResDto
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.expo.StandardProgramResDto
+import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
@@ -44,6 +47,14 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
     private val applicationClient = mockk<ApplicationClient>()
     private val recordService = mockk<RecordProgramAttendanceService>()
     private val nameResolver = mockk<ProgramScanNameResolver>(relaxed = true)
+
+    // 기본은 프로젝션에 없음(꺼져 있을 때와 같이 박람회 서비스를 부른다)
+    private val expoProjection =
+        mockk<ExpoProjectionReader>().also {
+            every { it.period(any()) } returns null
+            every { it.standardProgram(any(), any()) } returns null
+            every { it.trainingProgram(any(), any()) } returns null
+        }
     private val guardRepository = mockk<CancellationGuardRepository>(relaxed = true)
 
     // 03:07:42 UTC. 기록 시각은 분 단위로 잘린다
@@ -57,7 +68,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
             UnitTestSupport.circuitBreaker("user"),
             UnitTestSupport.circuitBreaker("expo"),
             UnitTestSupport.circuitBreaker("application"),
-            ExpoPeriodValidator(expoClient, UnitTestSupport.circuitBreaker("period"), ExpoPeriodCacheProperties(0), clock),
+            ExpoPeriodValidator(expoClient, UnitTestSupport.circuitBreaker("period"), ExpoPeriodCacheProperties(0), clock, expoProjection),
             recordService,
             CancellationGuardGate(
                 UnitTestSupport.transactionManager(),
@@ -68,6 +79,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
             ),
             ProgramAttendanceProperties(requireCode),
             nameResolver,
+            expoProjection,
             clock,
         )
 
@@ -89,6 +101,54 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
     }
 
     init {
+        given("박람회 프로젝션(#240)에서") {
+            `when`("프로그램과 기간이 프로젝션에 있으면") {
+                givenHappyPath()
+                every { expoProjection.standardProgram(expoId, programId) } returns StandardProgramResDto(programId)
+                every { expoProjection.period(expoId) } returns ExpoPeriodResDto("2026-05-10", "2026-05-12")
+                val result = service().scan(programId, withCode)
+
+                then("박람회 서비스를 부르지 않고 기록한다") {
+                    result.result shouldBe ProgramScanResult.ENTERED
+                    verify(exactly = 0) { expoClient.getStandardProgram(any(), any()) }
+                    verify(exactly = 0) { expoClient.getPeriod(any()) }
+                }
+            }
+
+            `when`("프로젝션의 일정으로 지금이 입실 시간이 아니면") {
+                givenHappyPath()
+                every { expoProjection.standardProgram(expoId, programId) } returns
+                    StandardProgramResDto(programId, startedAt = "2026-05-10T18:00", endedAt = "2026-05-10T19:00")
+                every { recordService.record(any(), any(), any(), any(), any(), false) } returns ProgramAttendanceResult.ENTRY_NOT_ALLOWED
+
+                then("박람회 서비스에서 읽었을 때와 같이 400이다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "출석 가능한 시간이 아닙니다.") { service().scan(programId, withCode) }
+                    verify(exactly = 0) { expoClient.getStandardProgram(any(), any()) }
+                }
+            }
+
+            `when`("프로젝션에 없으면") {
+                givenHappyPath()
+                service().scan(programId, withCode)
+
+                then("박람회 서비스를 부른다") {
+                    verify(exactly = 1) { expoClient.getStandardProgram(expoId, programId) }
+                }
+            }
+
+            `when`("프로그램 변경 진행 중이라 프로젝션이 없음으로 보고 박람회 서비스가 409면") {
+                givenHappyPath()
+                every { expoClient.getStandardProgram(expoId, programId) } throws UnitTestSupport.feignConflict()
+
+                then("동기 조회와 같이 503이고 기록하지 않는다") {
+                    shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "박람회 서비스를 잠시 사용할 수 없습니다.") {
+                        service().scan(programId, withCode)
+                    }
+                    verify(exactly = 0) { recordService.record(any(), any(), any(), any(), any()) }
+                }
+            }
+        }
+
         given("일반 프로그램 스캔의 참가자 확인에서") {
             `when`("code가 있으면") {
                 givenHappyPath()

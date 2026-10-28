@@ -10,6 +10,7 @@ import io.mockk.verify
 import org.springframework.http.HttpStatus
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
+import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.config.ExpoPeriodCacheProperties
 import team.startup.expo.support.MutableClock
 import team.startup.expo.support.UnitTestSupport
@@ -21,11 +22,18 @@ class ExpoPeriodValidatorSpec : BehaviorSpec() {
     override fun isolationMode() = IsolationMode.InstancePerLeaf
 
     private val expoClient = mockk<ExpoClient>()
+    private val expoProjection = mockk<ExpoProjectionReader>().also { every { it.period(any()) } returns null }
     private val clock = MutableClock()
     private val expoId = "expo-1"
 
     private fun validator(ttlSeconds: Long = 30) =
-        ExpoPeriodValidator(expoClient, UnitTestSupport.circuitBreaker("expo"), ExpoPeriodCacheProperties(ttlSeconds), clock)
+        ExpoPeriodValidator(
+            expoClient,
+            UnitTestSupport.circuitBreaker("expo"),
+            ExpoPeriodCacheProperties(ttlSeconds),
+            clock,
+            expoProjection,
+        )
 
     private fun givenPeriod(
         start: String = "2026-05-10",
@@ -35,6 +43,35 @@ class ExpoPeriodValidatorSpec : BehaviorSpec() {
     }
 
     init {
+        given("박람회 프로젝션(#240)에서") {
+            `when`("기간이 프로젝션에 있으면") {
+                every { expoProjection.period(expoId) } returns ExpoPeriodResDto("2026-05-10", "2026-05-12")
+                val period = validator(ttlSeconds = 0).period(expoId)
+
+                then("박람회 서비스를 부르지 않는다") {
+                    period shouldBe (LocalDate.of(2026, 5, 10) to LocalDate.of(2026, 5, 12))
+                    verify(exactly = 0) { expoClient.getPeriod(any()) }
+                }
+            }
+
+            `when`("프로젝션의 날짜를 읽을 수 없으면") {
+                every { expoProjection.period(expoId) } returns ExpoPeriodResDto("bad", "2026-05-12")
+
+                then("박람회 서비스가 잘못 줬을 때와 같이 503이다") {
+                    shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "박람회 서비스를 잠시 사용할 수 없습니다.") { validator().period(expoId) }
+                }
+            }
+
+            `when`("프로젝션에 없고 박람회 서비스가 404로 답하면") {
+                every { expoClient.getPeriod(expoId) } throws UnitTestSupport.feignNotFound()
+
+                then("동기 호출 결과대로 404다") {
+                    shouldFailWith(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.") { validator().period(expoId) }
+                    verify(exactly = 1) { expoClient.getPeriod(expoId) }
+                }
+            }
+        }
+
         given("박람회 진행 여부 확인에서") {
             `when`("오늘이 시작일이면") {
                 givenPeriod()
