@@ -19,6 +19,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer
         "eureka.client.enabled=false",
         "qr-entry-review.enabled=false",
         "expo-period-cache.ttl-seconds=0",
+        "preregister-session-cache.ttl-seconds=0",
         "entry-replay.window-seconds=0",
     ],
 )
