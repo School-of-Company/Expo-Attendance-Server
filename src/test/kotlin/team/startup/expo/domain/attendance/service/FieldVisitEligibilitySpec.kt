@@ -205,7 +205,15 @@ class FieldVisitEligibilitySpec : BehaviorSpec() {
                 every { locks.findByExpoIdAndParticipantId(any(), any()) } returns null
                 every { locks.findByExpoIdAndTraineeId(any(), any()) } returns null
                 every { field.held("expo", any(), any(), day) } returns true
-                val gate = CancellationGuardGate(UnitTestSupport.transactionManager(), locks, field, validator(), clock, UnitTestSupport.scanLimiter())
+                val gate =
+                    CancellationGuardGate(
+                        UnitTestSupport.transactionManager(),
+                        locks,
+                        field,
+                        validator(),
+                        clock,
+                        UnitTestSupport.scanLimiter(),
+                    )
                 then("기록 전에 두 스캔을 모두 차단한다") {
                     var ran = false
                     shouldThrow<ExpectedException> { gate.scanning("expo", participantId = 7) { ran = true } }.status shouldBe
