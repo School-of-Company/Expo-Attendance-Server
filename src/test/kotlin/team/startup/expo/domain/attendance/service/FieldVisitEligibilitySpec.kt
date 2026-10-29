@@ -48,6 +48,7 @@ class FieldVisitEligibilitySpec : BehaviorSpec() {
             clock,
             field,
             UnitTestSupport.disabledExpoProjection(),
+            UnitTestSupport.noSessionCache(clock),
         )
 
     private fun visit(
