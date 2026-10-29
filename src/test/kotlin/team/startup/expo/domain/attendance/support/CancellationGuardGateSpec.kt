@@ -33,6 +33,7 @@ class CancellationGuardGateSpec : BehaviorSpec() {
             mockk(relaxed = true),
             validator,
             UnitTestSupport.fixedClock(),
+            UnitTestSupport.scanLimiter(),
         )
     private val expoId = "expo-1"
 

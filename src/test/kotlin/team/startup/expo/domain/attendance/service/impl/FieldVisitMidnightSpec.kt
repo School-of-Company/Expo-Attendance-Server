@@ -64,7 +64,7 @@ class FieldVisitMidnightSpec :
                             UnitTestSupport.circuitBreaker(),
                             mockk(relaxed = true),
                             validator,
-                            CancellationGuardGate(UnitTestSupport.transactionManager(), locks, fields, validator, clock),
+                            CancellationGuardGate(UnitTestSupport.transactionManager(), locks, fields, validator, clock, UnitTestSupport.scanLimiter()),
                             logs,
                             mockk<EntryLogRepository>(relaxed = true),
                             EntryLogWriter(mockk<EntryLogRepository>(relaxed = true)),

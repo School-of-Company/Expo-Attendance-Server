@@ -12,8 +12,10 @@ import org.springframework.http.HttpStatus
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import team.startup.expo.domain.attendance.support.PreregisterSessionValidator
+import team.startup.expo.domain.attendance.support.ScanConcurrencyLimiter
 import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.config.ExpoProjectionProperties
+import team.startup.expo.global.config.ScanConcurrencyProperties
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.Instant
@@ -25,6 +27,9 @@ object UnitTestSupport {
     val NOW: Instant = Instant.parse("2026-05-10T03:00:00Z")
 
     fun fixedClock(instant: Instant = NOW): Clock = Clock.fixed(instant, ZoneOffset.UTC)
+
+    /** 허용 수가 넉넉해 단위 테스트의 스캔을 막지 않는 제한기. */
+    fun scanLimiter(): ScanConcurrencyLimiter = ScanConcurrencyLimiter(ScanConcurrencyProperties(), 30)
 
     fun preregisterValidator(): PreregisterSessionValidator =
         mockk<PreregisterSessionValidator>(relaxed = true).also {
