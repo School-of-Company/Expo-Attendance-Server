@@ -40,6 +40,15 @@ data class ScanEntryResDto(
         nullable = true,
     )
     val badgePrint: String? = null,
+    /** 유저 서비스가 준 값을 그대로 옮긴다. `badgePrint`와 같은 범위(첫 입장)에서만 값이 있다(#279). */
+    @field:Schema(
+        description =
+            "명찰 출력 작업 ID. 유저 서비스 `GET /admin/badge-prints/{expoId}/jobs/{jobId}`로 배정된 출력대를 조회한다. " +
+                "`badgePrint`가 `null`이면(대상 아님, 재입장, 재생, 이전 유저 서비스) 이 값도 `null`이다",
+        example = "42",
+        nullable = true,
+    )
+    val badgePrintJobId: Long? = null,
 ) {
     override fun toString() = "ScanEntryResDto(id=$id, participationType=$participationType)"
 }
