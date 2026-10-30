@@ -172,6 +172,24 @@ class ClientContractTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `유저 서비스 입장 기록은 명찰 출력 요청 결과를 읽고 필드가 없으면 null이다`() {
+        val request = RecordEntryReqDto("expo-1", "TRAINEE", phoneNumber = "01012345678")
+        mapOf(
+            """"badgePrint":"QUEUED",""" to "QUEUED",
+            """"badgePrint":"DUPLICATE",""" to "DUPLICATE",
+            """"badgePrint":null,""" to null,
+            "" to null,
+        ).forEach { (field, expected) ->
+            respond(
+                "/internal/entries",
+                """{$field"id":7,"name":"연수자","phoneNumber":"01012345678",""" +
+                    """"personalInformationStatus":true,"participationType":"TRAINEE","occupation":null,"school":"광주초"}""",
+            )
+            userClient.recordEntry(request).badgePrint shouldBe expected
+        }
+    }
+
+    @Test
     fun `유저 서비스 입장 기록은 확인한 사전등록 회차를 preregisterSessionId로 보낸다`() {
         respond(
             "/internal/entries",

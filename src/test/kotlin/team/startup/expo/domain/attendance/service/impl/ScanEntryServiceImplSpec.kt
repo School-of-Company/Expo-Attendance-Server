@@ -92,7 +92,8 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
         type: String = "STANDARD",
         occupation: String? = "STUDENT",
         phone: String? = "010-1111-2222",
-    ) = RecordEntryResDto(id, "홍길동", phone, true, type, occupation, "한빛중")
+        badgePrint: String? = null,
+    ) = RecordEntryResDto(id, "홍길동", phone, true, type, occupation, "한빛중", badgePrint)
 
     private fun givenPeriodOk() {
         every { userClient.getEntryStatus(any()) } answers { ParticipantEntryStatusResDto(55L, today, true) }
@@ -260,6 +261,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                     res.id shouldBe 55L
                     res.name shouldBe "홍길동"
                     res.badge shouldBe null
+                    res.badgePrint shouldBe null
                     verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any(), any()) }
                 }
             }
@@ -356,6 +358,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                     res.firstEnteredTime shouldBe "02:59"
                     res.id shouldBe 55L
                     res.name shouldBe "홍길동"
+                    res.badgePrint shouldBe null
                     verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any(), any()) }
                     verify(exactly = 0) { entryLogRepository.reenter(any(), any(), any(), any(), any(), any()) }
                 }
@@ -482,6 +485,17 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 then("명찰에 이름과 소속을 돌려준다") {
                     res.badge?.name shouldBe "홍길동"
                     res.badge?.school shouldBe "한빛중"
+                }
+            }
+
+            `when`("유저 서비스가 명찰 출력 요청 결과를 주면(#275)") {
+                givenPeriodOk()
+
+                then("그 값을 그대로 응답한다") {
+                    listOf("QUEUED", "DUPLICATE", null).forEach { badgePrint ->
+                        every { userClient.recordEntry(any()) } returns entry(occupation = "TEACHER", badgePrint = badgePrint)
+                        service.scan(expoId, phoneReq).badgePrint shouldBe badgePrint
+                    }
                 }
             }
 
