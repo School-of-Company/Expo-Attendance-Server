@@ -334,6 +334,7 @@ class ScanEntryServiceImpl(
             entryStatus = EntryStatus.FIRST,
             firstEnteredTime = firstEnteredTime,
             badgePrint = entry.badgePrint,
+            badgePrintJobId = entry.badgePrintJobId,
         )
     }
 

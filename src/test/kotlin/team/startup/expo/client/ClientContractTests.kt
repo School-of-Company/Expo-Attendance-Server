@@ -172,20 +172,22 @@ class ClientContractTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `유저 서비스 입장 기록은 명찰 출력 요청 결과를 읽고 필드가 없으면 null이다`() {
+    fun `유저 서비스 입장 기록은 명찰 출력 요청 결과와 작업 ID를 읽고 필드가 없으면 null이다`() {
         val request = RecordEntryReqDto("expo-1", "TRAINEE", phoneNumber = "01012345678")
         mapOf(
-            """"badgePrint":"QUEUED",""" to "QUEUED",
-            """"badgePrint":"DUPLICATE",""" to "DUPLICATE",
-            """"badgePrint":null,""" to null,
-            "" to null,
+            """"badgePrint":"QUEUED","badgePrintJobId":42,""" to ("QUEUED" to 42L),
+            """"badgePrint":"DUPLICATE","badgePrintJobId":42,""" to ("DUPLICATE" to 42L),
+            """"badgePrint":null,"badgePrintJobId":null,""" to (null to null),
+            """"badgePrint":"QUEUED",""" to ("QUEUED" to null),
+            "" to (null to null),
         ).forEach { (field, expected) ->
             respond(
                 "/internal/entries",
                 """{$field"id":7,"name":"연수자","phoneNumber":"01012345678",""" +
                     """"personalInformationStatus":true,"participationType":"TRAINEE","occupation":null,"school":"광주초"}""",
             )
-            userClient.recordEntry(request).badgePrint shouldBe expected
+            val entry = userClient.recordEntry(request)
+            (entry.badgePrint to entry.badgePrintJobId) shouldBe expected
         }
     }
 

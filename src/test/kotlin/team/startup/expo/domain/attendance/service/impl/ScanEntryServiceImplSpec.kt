@@ -93,7 +93,8 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
         occupation: String? = "STUDENT",
         phone: String? = "010-1111-2222",
         badgePrint: String? = null,
-    ) = RecordEntryResDto(id, "홍길동", phone, true, type, occupation, "한빛중", badgePrint)
+        badgePrintJobId: Long? = null,
+    ) = RecordEntryResDto(id, "홍길동", phone, true, type, occupation, "한빛중", badgePrint, badgePrintJobId)
 
     private fun givenPeriodOk() {
         every { userClient.getEntryStatus(any()) } answers { ParticipantEntryStatusResDto(55L, today, true) }
@@ -492,9 +493,12 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 givenPeriodOk()
 
                 then("그 값을 그대로 응답한다") {
-                    listOf("QUEUED", "DUPLICATE", null).forEach { badgePrint ->
-                        every { userClient.recordEntry(any()) } returns entry(occupation = "TEACHER", badgePrint = badgePrint)
-                        service.scan(expoId, phoneReq).badgePrint shouldBe badgePrint
+                    listOf("QUEUED" to 42L, "DUPLICATE" to 42L, null to null).forEach { (badgePrint, jobId) ->
+                        every { userClient.recordEntry(any()) } returns
+                            entry(occupation = "TEACHER", badgePrint = badgePrint, badgePrintJobId = jobId)
+                        val res = service.scan(expoId, phoneReq)
+                        res.badgePrint shouldBe badgePrint
+                        res.badgePrintJobId shouldBe jobId
                     }
                 }
             }
