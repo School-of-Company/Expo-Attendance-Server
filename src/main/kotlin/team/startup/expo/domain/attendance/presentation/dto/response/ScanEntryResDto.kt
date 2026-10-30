@@ -30,6 +30,16 @@ data class ScanEntryResDto(
     val entryStatus: EntryStatus,
     @field:Schema(description = "오늘 최초 입장 시각(`HH:mm`). 재입장이어도 처음 입장한 시각이다", example = "10:05", nullable = true)
     val firstEnteredTime: String?,
+    /** 유저 서비스가 준 값을 그대로 옮긴다. 재입장, 재생처럼 유저 서비스가 결과를 주지 않으면 `null`이다(#275). */
+    @field:Schema(
+        description =
+            "명찰 자동 출력 요청 결과. `QUEUED`는 출력 작업 저장, `DUPLICATE`는 오늘 작업이 이미 있음, " +
+                "`null`은 대상이 아니거나 결과를 알 수 없음(재입장, 재생, 이전 유저 서비스). 실제 출력 완료를 뜻하지 않는다",
+        allowableValues = ["QUEUED", "DUPLICATE"],
+        example = "QUEUED",
+        nullable = true,
+    )
+    val badgePrint: String? = null,
 ) {
     override fun toString() = "ScanEntryResDto(id=$id, participationType=$participationType)"
 }
