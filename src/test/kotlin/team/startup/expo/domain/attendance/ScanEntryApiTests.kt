@@ -79,6 +79,8 @@ class ScanEntryApiTests : IntegrationTestSupport() {
             .andExpect(jsonPath("$.id").value(4201))
             .andExpect(jsonPath("$.participationType").value("STANDARD"))
             .andExpect(jsonPath("$.badge").doesNotExist())
+            // 유저 서비스가 결과를 주지 않으면(이전 버전) 기존 필드는 그대로이고 `badgePrint`만 null이다(#275)
+            .andExpect(jsonPath("$.badgePrint").value(org.hamcrest.Matchers.nullValue()))
     }
 
     @Test
@@ -115,7 +117,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
     fun `연수자는 항상 명찰을 받는다`() {
         entryReturns(
             "expo-t1",
-            RecordEntryResDto(7, "김연수", "01099998888", true, "TRAINEE", null, "광주중학교"),
+            RecordEntryResDto(7, "김연수", "01099998888", true, "TRAINEE", null, "광주중학교", badgePrint = "QUEUED"),
             type = "TRAINEE",
             phone = "01099998888",
         )
@@ -125,6 +127,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.participationType").value("TRAINEE"))
             .andExpect(jsonPath("$.badge.qrCode").doesNotExist())
+            .andExpect(jsonPath("$.badgePrint").value("QUEUED"))
     }
 
     @Test

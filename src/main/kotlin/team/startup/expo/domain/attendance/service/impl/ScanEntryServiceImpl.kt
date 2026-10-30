@@ -333,6 +333,7 @@ class ScanEntryServiceImpl(
             badge = badge,
             entryStatus = EntryStatus.FIRST,
             firstEnteredTime = firstEnteredTime,
+            badgePrint = entry.badgePrint,
         )
     }
 
