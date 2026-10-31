@@ -29,12 +29,15 @@ import team.startup.expo.domain.attendance.support.EntryReplayPolicy
 import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.support.FieldEntryFence
 import team.startup.expo.domain.attendance.support.PreregisterSessionValidator
+import team.startup.expo.global.client.user.EntryCardsReqDto
+import team.startup.expo.global.client.user.EntryCardsResDto
 import team.startup.expo.global.client.user.ParticipantEntryStatusResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.ResolveParticipantResDto
 import team.startup.expo.global.client.user.ResolveStandardParticipantReqDto
 import team.startup.expo.global.client.user.ResolveStandardParticipantResDto
+import team.startup.expo.global.client.user.StandardParticipantEntryCardResDto
 import team.startup.expo.global.client.user.StandardParticipantNameResDto
 import team.startup.expo.global.client.user.TraineeNameResDto
 import team.startup.expo.global.client.user.UserClient
@@ -99,7 +102,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
     private fun givenPeriodOk() {
         every { userClient.getEntryStatus(any()) } answers { ParticipantEntryStatusResDto(55L, today, true) }
         every { expoPeriodValidator.checkInProgress(expoId, today) } just Runs
-        every { preregisterSessionValidator.check(any(), any(), any()) } returns null
+        every { preregisterSessionValidator.check(any(), any(), any(), any()) } returns null
         every { preregisterSessionValidator.checkNotCancelled(any(), any(), any(), any()) } answers { thirdArg() }
         every { preregisterSessionValidator.activeField(any(), any(), any()) } returns null
         every { userClient.resolveStandardParticipant(any()) } returns ResolveStandardParticipantResDto(55L)
@@ -469,7 +472,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                             RecordEntryReqDto(expoId, "STANDARD", phoneNumber = "010-1111-2222", attendanceDate = today),
                         )
                     }
-                    verify(exactly = 0) { preregisterSessionValidator.check(any(), any(), any()) }
+                    verify(exactly = 0) { preregisterSessionValidator.check(any(), any(), any(), any()) }
                     verify(exactly = 1) { guardRepository.lockShared(CancellationGuardGate.participantKey(expoId, 55L)) }
                 }
                 then("교사가 아니면 명찰이 없다") {
@@ -645,7 +648,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                     verify { guardRepository.lockShared(CancellationGuardGate.participantKey(expoId, 55L)) }
                 }
                 then("사전등록 회차 확인을 요청한다") {
-                    verify(exactly = 1) { preregisterSessionValidator.check(expoId, 55L, any()) }
+                    verify(exactly = 1) { preregisterSessionValidator.check(expoId, 55L, any(), any()) }
                 }
                 then("입장 로그를 STANDARD와 참가자 ID로 남기고 코드는 남기지 않는다") {
                     verify(
@@ -656,7 +659,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
 
             `when`("신청한 회차의 입장 시간에 스캔하면") {
                 givenPeriodOk()
-                every { preregisterSessionValidator.check(expoId, 55L, any()) } returns 11L
+                every { preregisterSessionValidator.check(expoId, 55L, any(), any()) } returns 11L
                 every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, 11L, today) } returns 11L
                 every { userClient.recordEntry(any()) } returns entry()
 
@@ -680,7 +683,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
 
             `when`("회차를 고른 뒤 락을 잡기 전에 그 회차가 취소되면") {
                 givenPeriodOk()
-                every { preregisterSessionValidator.check(expoId, 55L, any()) } returns 11L
+                every { preregisterSessionValidator.check(expoId, 55L, any(), any()) } returns 11L
                 every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, 11L, today) } throws
                     ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청입니다.")
 
@@ -692,7 +695,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
 
             `when`("같은 날 같은 회차로 이미 입장해 유저 서비스가 409로 답하면") {
                 givenPeriodOk()
-                every { preregisterSessionValidator.check(expoId, 55L, any()) } returns 11L
+                every { preregisterSessionValidator.check(expoId, 55L, any(), any()) } returns 11L
                 every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, 11L, today) } returns 11L
                 every { userClient.recordEntry(any()) } throws UnitTestSupport.feignConflict()
 
@@ -705,7 +708,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
             `when`("회차 확인이 넘겨받은 코드 확인을 실행하면") {
                 givenPeriodOk()
                 val verifyCode = slot<() -> Unit>()
-                every { preregisterSessionValidator.check(expoId, 55L, capture(verifyCode)) } returns null
+                every { preregisterSessionValidator.check(expoId, 55L, any(), capture(verifyCode)) } returns null
                 every { userClient.recordEntry(any()) } returns entry()
                 every { userClient.verifyStandardParticipant(any()) } just Runs
 
@@ -719,10 +722,29 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 }
             }
 
+            `when`("회차 확인이 넘겨받은 직업 조회를 실행하면(#283)") {
+                givenPeriodOk()
+                val occupation = slot<() -> String?>()
+                every { preregisterSessionValidator.check(expoId, 55L, capture(occupation), any()) } returns 11L
+                every { userClient.recordEntry(any()) } returns entry()
+                every { userClient.getEntryCards(EntryCardsReqDto(expoId, listOf(55L), emptyList())) } returns
+                    EntryCardsResDto(
+                        standardParticipants = listOf(StandardParticipantEntryCardResDto(55L, "교사", null, true, "TEACHER", "학교")),
+                        trainees = emptyList(),
+                    )
+
+                service.scan(expoId, codeReq)
+
+                then("클라이언트 값이 아니라 유저 서비스의 직업을 읽고, 고른 회차로 입장을 기록한다") {
+                    occupation.captured.invoke() shouldBe "TEACHER"
+                    verify(exactly = 1) { userClient.recordEntry(match { it.preregisterSessionId == 11L }) }
+                }
+            }
+
             `when`("코드 확인에서 유저 서비스가 404로 답하면") {
                 givenPeriodOk()
                 val verifyCode = slot<() -> Unit>()
-                every { preregisterSessionValidator.check(expoId, 55L, capture(verifyCode)) } returns null
+                every { preregisterSessionValidator.check(expoId, 55L, any(), capture(verifyCode)) } returns null
                 every { userClient.recordEntry(any()) } returns entry()
                 every { userClient.verifyStandardParticipant(any()) } throws UnitTestSupport.feignNotFound()
 
@@ -735,7 +757,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
 
             `when`("사전등록 회차 확인이 거절하면") {
                 every { expoPeriodValidator.checkInProgress(expoId, today) } just Runs
-                every { preregisterSessionValidator.check(any(), any(), any()) } throws
+                every { preregisterSessionValidator.check(any(), any(), any(), any()) } throws
                     ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청입니다.")
 
                 then("입장을 기록하지 않는다") {

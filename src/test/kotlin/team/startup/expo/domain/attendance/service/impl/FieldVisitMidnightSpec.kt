@@ -42,7 +42,7 @@ class FieldVisitMidnightSpec :
                     every { clock.instant() } answers { instant }
                     every { clock.zone } returns ZoneId.of("Asia/Seoul")
                     val validator = mockk<PreregisterSessionValidator>(relaxed = true)
-                    every { validator.check("expo", 7, any()) } answers {
+                    every { validator.check("expo", 7, any(), any()) } answers {
                         instant = Instant.parse("2026-10-22T15:00:01Z")
                         null
                     }
