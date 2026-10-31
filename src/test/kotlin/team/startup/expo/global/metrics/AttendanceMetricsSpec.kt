@@ -123,6 +123,7 @@ class AttendanceMetricsSpec :
                     mockk(relaxed = true),
                     UnitTestSupport.preregisterValidator(),
                     UnitTestSupport.fixedClock(),
+                    UnitTestSupport.scanLimiter(),
                 )
 
             `when`("스캔이 끝나면") {

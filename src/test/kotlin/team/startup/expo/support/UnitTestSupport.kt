@@ -11,9 +11,13 @@ import io.mockk.mockk
 import org.springframework.http.HttpStatus
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
+import team.startup.expo.domain.attendance.support.PreregisterSessionCache
 import team.startup.expo.domain.attendance.support.PreregisterSessionValidator
+import team.startup.expo.domain.attendance.support.ScanConcurrencyLimiter
 import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.config.ExpoProjectionProperties
+import team.startup.expo.global.config.PreregisterSessionCacheProperties
+import team.startup.expo.global.config.ScanConcurrencyProperties
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.Instant
@@ -25,6 +29,13 @@ object UnitTestSupport {
     val NOW: Instant = Instant.parse("2026-05-10T03:00:00Z")
 
     fun fixedClock(instant: Instant = NOW): Clock = Clock.fixed(instant, ZoneOffset.UTC)
+
+    /** 허용 수가 넉넉해 단위 테스트의 스캔을 막지 않는 제한기. */
+    fun scanLimiter(): ScanConcurrencyLimiter = ScanConcurrencyLimiter(ScanConcurrencyProperties(), 30)
+
+    /** 캐시를 끈(TTL 0) 회차 캐시. 기존 테스트가 호출마다 원격 응답을 바꿔도 그대로 보게 한다. */
+    fun noSessionCache(clock: Clock = fixedClock()): PreregisterSessionCache =
+        PreregisterSessionCache(PreregisterSessionCacheProperties(ttlSeconds = 0), clock)
 
     fun preregisterValidator(): PreregisterSessionValidator =
         mockk<PreregisterSessionValidator>(relaxed = true).also {

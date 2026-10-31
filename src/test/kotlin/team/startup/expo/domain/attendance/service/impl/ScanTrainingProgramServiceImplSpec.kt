@@ -72,6 +72,7 @@ class ScanTrainingProgramServiceImplSpec : BehaviorSpec() {
                 mockk(relaxed = true),
                 UnitTestSupport.preregisterValidator(),
                 clock,
+                UnitTestSupport.scanLimiter(),
             ),
             nameResolver,
             expoProjection,

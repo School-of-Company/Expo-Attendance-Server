@@ -73,6 +73,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 mockk(relaxed = true),
                 UnitTestSupport.preregisterValidator(),
                 clock,
+                UnitTestSupport.scanLimiter(),
             ),
             entryLogService,
             entryLogRepository,

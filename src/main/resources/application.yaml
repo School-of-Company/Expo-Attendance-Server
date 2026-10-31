@@ -79,8 +79,15 @@ cancellation-aborted-retention:
   days: ${CANCELLATION_ABORTED_RETENTION_DAYS:0}
 entry-replay:
   window-seconds: ${ENTRY_REPLAY_WINDOW_SECONDS:30}
+# #247 동시 스캔 수 = hikari 풀 크기 - reserve. 스캔 하나가 커넥션을 둘 쥘 수 있어, 풀 크기에 닿으면 서로 기다리다 풀 타임아웃으로만 풀린다
+scan-concurrency:
+  reserve: ${SCAN_CONCURRENCY_RESERVE:6}
+  wait-ms: ${SCAN_CONCURRENCY_WAIT_MS:500}
 expo-period-cache:
   ttl-seconds: ${EXPO_PERIOD_CACHE_TTL_SECONDS:30}
+# #249 회차 시간 조회 캐시. 회차 시간을 고친 직후 최대 이 시간만큼 이전 시간으로 입장이 판정된다. 0이면 끈다
+preregister-session-cache:
+  ttl-seconds: ${PREREGISTER_SESSION_CACHE_TTL_SECONDS:30}
 # #240 박람회 변경 이벤트(expo.expo.changed)로 채우는 로컬 프로젝션. 켜면 기간·프로그램·회차를 프로젝션에서 먼저 읽고, 없으면 박람회 서비스를 부른다
 expo-projection:
   enabled: ${KAFKA_EXPO_PROJECTION_ENABLED:false}
