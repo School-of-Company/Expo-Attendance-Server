@@ -73,10 +73,13 @@ class PreregisterSessionValidator(
     /**
      * 확정 상태인 회차 중 지금이 입장 시간인 회차 ID를 돌려준다. 입장 시간이 겹치면 시작이 이른 회차를 고른다.
      * 오늘 ACTIVE FIELD는 회차 없이 통과한다.
+     * 열린 회차가 없을 때 [occupation]이 교원·예비교사이면 오늘 확정 회차 중 시작이 가장 이른 회차로 시간과 관계없이 입장한다(#283).
+     * [occupation]은 코드를 확인한 뒤에만, 열린 회차가 없을 때만 부른다.
      */
     fun check(
         expoId: String,
         participantId: Long,
+        occupation: () -> String? = { null },
         verifyCode: () -> Unit,
     ): Long? {
         val records = records(expoId, participantId)
@@ -95,6 +98,12 @@ class PreregisterSessionValidator(
         val now = clock.instant()
         val open = sessions.filter { !now.isBefore(it.opensAt) && !now.isAfter(it.endedAt) }
         open.minWithOrNull(compareBy<Window>({ it.startedAt }, { it.sessionId }))?.let { return it.sessionId }
+
+        val today = LocalDate.now(clock)
+        val todaySessions = sessions.filter { it.startedAt.atZone(clock.zone).toLocalDate() == today }
+        if (todaySessions.isNotEmpty() && occupation() in ALL_DAY_OCCUPATIONS) {
+            return todaySessions.minWith(compareBy<Window>({ it.startedAt }, { it.sessionId })).sessionId
+        }
 
         if (sessions.all { now.isAfter(it.endedAt) }) {
             throw ExpectedException(HttpStatus.BAD_REQUEST, "신청한 회차가 이미 끝났습니다.")
@@ -153,6 +162,11 @@ class PreregisterSessionValidator(
     ): PreregisterSessionResDto =
         expoProjection.preregisterSession(expoId, sessionId)
             ?: expoCircuitBreaker.callService("박람회") { expoClient.getPreregisterSession(expoId, sessionId) }
+
+    private companion object {
+        // 신청 회차 시간과 관계없이 당일 입장하는 직업(#283)
+        val ALL_DAY_OCCUPATIONS = setOf("TEACHER", "PRE_SERVICE_TEACHER")
+    }
 
     private data class Window(
         val sessionId: Long,
