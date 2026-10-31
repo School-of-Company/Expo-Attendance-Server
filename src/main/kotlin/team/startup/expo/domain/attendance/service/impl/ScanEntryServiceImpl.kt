@@ -22,6 +22,7 @@ import team.startup.expo.domain.attendance.support.FieldEntryFence
 import team.startup.expo.domain.attendance.support.PreregisterSessionValidator
 import team.startup.expo.domain.attendance.support.ScannerName
 import team.startup.expo.global.client.callService
+import team.startup.expo.global.client.user.EntryCardsReqDto
 import team.startup.expo.global.client.user.ParticipantEntryStatusReqDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
@@ -70,7 +71,11 @@ class ScanEntryServiceImpl(
         val checkedSessionId =
             if (reqDto.authority == EntryAuthority.ROLE_STANDARD && reqDto.participantId != null && !reqDto.code.isNullOrBlank()) {
                 val code = reqDto.code
-                preregisterSessionValidator.check(expoId, reqDto.participantId) {
+                preregisterSessionValidator.check(
+                    expoId,
+                    reqDto.participantId,
+                    occupation = { occupation(expoId, reqDto.participantId) },
+                ) {
                     // 코드가 틀리면 입장 기록과 같은 404여야 해서, 신청 상태를 알리기 전에 먼저 확인한다
                     userCircuitBreaker.callService("유저", participantNotFound(reqDto)) {
                         userClient.verifyStandardParticipant(VerifyStandardParticipantReqDto(expoId, reqDto.participantId, code))
@@ -233,6 +238,17 @@ class ScanEntryServiceImpl(
                     .name
             }
         }
+
+    /** 교원·예비교사 당일 입장(#283)을 위해 클라이언트가 아니라 유저 서비스가 가진 직업을 읽는다. */
+    private fun occupation(
+        expoId: String,
+        participantId: Long,
+    ): String? =
+        userCircuitBreaker
+            .callService("유저") { userClient.getEntryCards(EntryCardsReqDto(expoId, listOf(participantId), emptyList())) }
+            .standardParticipants
+            .firstOrNull { it.participantId == participantId }
+            ?.occupation
 
     private fun alreadyEntered() = ExpectedException(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.")
 

@@ -4,6 +4,7 @@ import feign.FeignException
 import feign.Request
 import feign.RequestTemplate
 import io.kotest.matchers.shouldBe
+import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.anyLong
@@ -25,6 +26,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -33,10 +35,15 @@ import team.startup.expo.domain.qr.service.DeleteExpoDataService
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.expo.PreregisterSessionResDto
+import team.startup.expo.global.client.user.EntryCardsReqDto
+import team.startup.expo.global.client.user.EntryCardsResDto
+import team.startup.expo.global.client.user.ParticipantEntryStatusReqDto
+import team.startup.expo.global.client.user.ParticipantEntryStatusResDto
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.ResolveStandardParticipantReqDto
 import team.startup.expo.global.client.user.ResolveStandardParticipantResDto
+import team.startup.expo.global.client.user.StandardParticipantEntryCardResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.support.FieldVisitFixtures
@@ -45,6 +52,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 
 @Import(PreregisterSessionApiTests.FixedClockConfig::class)
@@ -97,6 +105,9 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
                 attendanceDate = LocalDate.now(clock),
             ),
         )
+        doReturn(
+            EntryCardsResDto(emptyList(), emptyList()),
+        ).`when`(userClient).getEntryCards(EntryCardsReqDto(EXPO, listOf(PARTICIPANT), emptyList()))
         // 회차 입장 시간 안의 QR 입장은 확인한 회차를 함께 보낸다(#142)
         listOf(SESSION, OTHER_SESSION).forEach { session ->
             doReturn(entry(PARTICIPANT)).`when`(userClient).recordEntry(withSession(session))
@@ -206,6 +217,69 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
         // 오후 회차 시간
         sessionAt(start = now.minus(Duration.ofHours(6)), end = now.minus(Duration.ofHours(4)))
         sessionAt(start = now.minus(Duration.ofMinutes(10)), end = now.plus(Duration.ofHours(1)), sessionId = OTHER_SESSION)
+        scan().andExpect(status().isOk)
+        verify(userClient).recordEntry(withSession(OTHER_SESSION))
+    }
+
+    @Test
+    fun `교원과 예비교사는 당일 신청 회차의 시간 밖에도 그 회차로 입장하고 실제 입장 시각을 남긴다`() {
+        jdbcTemplate.execute("TRUNCATE TABLE tb_entry_log, tb_entry_event RESTART IDENTITY")
+        assign(SESSION).andExpect(status().isNoContent)
+        // 지금은 12:00(KST). 오전 09:00~11:00 회차만 신청했다
+        sessionAt(start = now.minus(Duration.ofHours(3)), end = now.minus(Duration.ofHours(1)))
+
+        // 서버가 가진 직업이 교원이 아니면 기존처럼 거절한다
+        scan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("신청한 회차가 이미 끝났습니다."))
+        verify(userClient, never()).recordEntry(withSession(SESSION))
+
+        occupation("TEACHER")
+        scan()
+            .andExpect(
+                status().isOk,
+            ).andExpect(jsonPath("$.entryStatus").value("FIRST"))
+            .andExpect(jsonPath("$.firstEnteredTime").value("12:00"))
+        verify(userClient).recordEntry(withSession(SESSION))
+        // 거절된 첫 스캔과 이번 스캔 모두 서버의 직업을 읽었다
+        verify(userClient, times(2)).getEntryCards(EntryCardsReqDto(EXPO, listOf(PARTICIPANT), emptyList()))
+
+        // 입장 로그와 ENTER 이벤트는 실제 입장 시각으로 남아 엑셀(entry-records)에 나온다
+        val enteredAt = LocalDateTime.now(clock)
+        jdbcTemplate.queryForObject(
+            "SELECT entered_at FROM tb_entry_log WHERE expo_id = ? AND subject_id = ?",
+            LocalDateTime::class.java,
+            EXPO,
+            PARTICIPANT.toString(),
+        ) shouldBe enteredAt
+        mockMvc
+            .perform(get("/internal/expos/$EXPO/entry-records").header("X-Internal-Token", INTERNAL_TOKEN))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.records.length()").value(1))
+            .andExpect(jsonPath("$.records[0].eventType").value("ENTER"))
+            .andExpect(jsonPath("$.records[0].subjectType").value("STANDARD"))
+            .andExpect(jsonPath("$.records[0].subjectId").value(PARTICIPANT.toString()))
+            .andExpect(jsonPath("$.records[0].occurredAt").value(startsWith(enteredAt.toLocalDate().toString() + "T12:00")))
+
+        // 퇴장 없이 다시 찍으면 기존처럼 400이고(재생 창 밖) 기록은 늘지 않는다
+        doThrow(feignException(409)).`when`(userClient).recordEntry(withSession(SESSION))
+        doReturn(ParticipantEntryStatusResDto(PARTICIPANT, LocalDate.now(clock), true))
+            .`when`(userClient)
+            .getEntryStatus(ParticipantEntryStatusReqDto(EXPO, PARTICIPANT, LocalDate.now(clock)))
+        jdbcTemplate.update("UPDATE tb_entry_log SET entered_at = entered_at - INTERVAL '1 hour'")
+        scan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("이미 박람회에 입장한 유저입니다."))
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_entry_event", Long::class.java) shouldBe 1L
+    }
+
+    @Test
+    fun `예비교사는 오후 회차만 신청해도 오전에 그 회차로 입장하고 다른 날짜 신청만 있으면 거절한다`() {
+        assign(OTHER_SESSION).andExpect(status().isNoContent)
+        occupation("PRE_SERVICE_TEACHER")
+
+        // 다음 날 00:00(KST) 시작 회차는 오늘 신청이 아니다
+        sessionAt(start = Instant.parse("2026-10-22T15:00:00Z"), end = Instant.parse("2026-10-22T17:00:00Z"), sessionId = OTHER_SESSION)
+        scan().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("입장 시간이 아닙니다. 신청한 회차 시작 30분 전부터 입장할 수 있습니다."))
+
+        // 오늘 23:59(KST) 시작 회차는 오늘 신청이다
+        sessionAt(start = Instant.parse("2026-10-22T14:59:00Z"), end = Instant.parse("2026-10-22T16:00:00Z"), sessionId = OTHER_SESSION)
         scan().andExpect(status().isOk)
         verify(userClient).recordEntry(withSession(OTHER_SESSION))
     }
@@ -488,6 +562,15 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
                 EXPO,
                 PARTICIPANT,
             ).firstOrNull()
+
+    private fun occupation(occupation: String) {
+        doReturn(
+            EntryCardsResDto(
+                listOf(StandardParticipantEntryCardResDto(PARTICIPANT, "홍길동", "01012345678", true, occupation, "학교")),
+                emptyList(),
+            ),
+        ).`when`(userClient).getEntryCards(EntryCardsReqDto(EXPO, listOf(PARTICIPANT), emptyList()))
+    }
 
     private fun entry(id: Long) = RecordEntryResDto(id, "홍길동", "01012345678", true, "STANDARD", "STUDENT", null)
 

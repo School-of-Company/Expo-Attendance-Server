@@ -74,7 +74,7 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
         every { expoClient.getPreregisterSession(expoId, sessionId) } returns PreregisterSessionResDto(sessionId, startedAt, endedAt)
     }
 
-    private fun check() = validator.check(expoId, participantId, verifyCode)
+    private fun check() = validator.check(expoId, participantId, verifyCode = verifyCode)
 
     init {
         given("박람회 프로젝션(#240)에서") {
@@ -219,6 +219,118 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
 
                 then("오후 회차로 입장한다") {
                     check() shouldBe afternoon
+                }
+            }
+        }
+        given("교원·예비교사의 당일 QR 입장에서(#283)") {
+            val morning = 11L
+            val afternoon = 12L
+            // 고정 시각은 2026-05-10 03:00 UTC(시계 영역 UTC)라서 같은 날 오전 회차는 이미 끝났고 오후 회차는 아직 열리지 않았다
+            val morningStart = Instant.parse("2026-05-10T00:00:00Z")
+            val afternoonStart = Instant.parse("2026-05-10T06:00:00Z")
+
+            fun teacherCheck(occupation: String?) = validator.check(expoId, participantId, { occupation }, verifyCode)
+
+            listOf("TEACHER", "PRE_SERVICE_TEACHER").forEach { occupation ->
+                `when`("$occupation 이 오전만 신청하고 오후에 찍으면") {
+                    givenRecords(listOf(record(sessionId = morning)))
+                    givenSession(morningStart, morningStart.plusSeconds(2 * 3600), morning)
+
+                    then("신청한 오전 회차로 입장한다") {
+                        teacherCheck(occupation) shouldBe morning
+                    }
+                }
+
+                `when`("$occupation 이 오후만 신청하고 오전에 찍으면") {
+                    givenRecords(listOf(record(sessionId = afternoon)))
+                    givenSession(afternoonStart, afternoonStart.plusSeconds(2 * 3600), afternoon)
+
+                    then("신청한 오후 회차로 입장한다") {
+                        teacherCheck(occupation) shouldBe afternoon
+                    }
+                }
+            }
+
+            `when`("다른 직업이면") {
+                givenRecords(listOf(record(sessionId = morning)))
+                givenSession(morningStart, morningStart.plusSeconds(2 * 3600), morning)
+
+                then("기존 시간 제한대로 거절한다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "신청한 회차가 이미 끝났습니다.") { teacherCheck("PARENT") }
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "신청한 회차가 이미 끝났습니다.") { teacherCheck(null) }
+                }
+            }
+
+            `when`("지금 열린 회차가 있으면") {
+                givenRecords(listOf(record(sessionId = morning), record(sessionId = afternoon)))
+                givenSession(morningStart, morningStart.plusSeconds(3600), morning)
+                givenSession(now.minusSeconds(600), now.plusSeconds(3600), afternoon)
+                var occupationCalls = 0
+
+                then("열린 회차를 고르고 직업은 조회하지 않는다") {
+                    validator.check(expoId, participantId, {
+                        occupationCalls++
+                        "TEACHER"
+                    }, verifyCode) shouldBe afternoon
+                    occupationCalls shouldBe 0
+                }
+            }
+
+            `when`("당일 신청이 여럿인데 열린 회차가 없으면") {
+                givenRecords(listOf(record(sessionId = 13L), record(sessionId = afternoon), record(sessionId = morning)))
+                givenSession(afternoonStart, afternoonStart.plusSeconds(3600), 13L)
+                givenSession(afternoonStart, afternoonStart.plusSeconds(3600), afternoon)
+                givenSession(afternoonStart.plusSeconds(3600), afternoonStart.plusSeconds(7200), morning)
+
+                then("시작이 가장 이른 회차를, 같으면 ID가 작은 회차를 고른다") {
+                    teacherCheck("TEACHER") shouldBe afternoon
+                }
+            }
+
+            `when`("다른 날짜 신청만 있으면") {
+                givenRecords(listOf(record(sessionId = morning), record(sessionId = afternoon)))
+                // 어제 23:59:59 시작(날짜 경계), 내일 00:00 시작
+                givenSession(Instant.parse("2026-05-09T23:59:59Z"), Instant.parse("2026-05-10T00:59:59Z"), morning)
+                givenSession(Instant.parse("2026-05-11T00:00:00Z"), Instant.parse("2026-05-11T02:00:00Z"), afternoon)
+
+                then("기존처럼 거절한다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "입장 시간이 아닙니다. 신청한 회차 시작 30분 전부터 입장할 수 있습니다.") {
+                        teacherCheck("TEACHER")
+                    }
+                }
+            }
+
+            `when`("당일 신청이 취소되었으면") {
+                givenRecords(listOf(record(status = PreregisterSessionStatus.CANCELLED, sessionId = morning)))
+
+                then("취소된 신청으로 거절한다") {
+                    shouldFailWith(HttpStatus.BAD_REQUEST, "취소된 신청입니다.") { teacherCheck("TEACHER") }
+                }
+            }
+
+            `when`("코드가 틀리면") {
+                givenRecords(listOf(record(sessionId = morning)))
+                var occupationCalls = 0
+
+                then("직업을 조회하기 전에 404로 거절한다") {
+                    shouldFailWith(HttpStatus.NOT_FOUND, "행사 참가자를 찾지 못 했습니다.") {
+                        validator.check(expoId, participantId, {
+                            occupationCalls++
+                            "TEACHER"
+                        }) {
+                            throw ExpectedException(HttpStatus.NOT_FOUND, "행사 참가자를 찾지 못 했습니다.")
+                        }
+                    }
+                    occupationCalls shouldBe 0
+                }
+            }
+
+            `when`("락 안에서 고른 당일 회차를 다시 확인하면") {
+                givenRecords(listOf(record(sessionId = morning)))
+                givenSession(morningStart, morningStart.plusSeconds(2 * 3600), morning)
+
+                then("시간과 관계없이 같은 회차를 돌려준다") {
+                    validator.checkNotCancelled(expoId, participantId, teacherCheck("TEACHER")) shouldBe morning
                 }
             }
         }
