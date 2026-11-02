@@ -54,18 +54,22 @@ class FieldVisitServiceImpl(
     ) {
         locked(expoId, participantId, registrationId) {
             val old = visits.find(registrationId)
-            old?.let { checkIdentity(it, expoId, participantId, request.visitDate) }
-            if (old != null && request.generation < old.generation) return@locked
-            if (old != null && request.generation == old.generation && old.status == FieldVisitStatus.CANCELLED) return@locked
-            if (old != null && request.generation == old.generation && old.operationId == request.operationId &&
-                old.status != request.status
-            ) {
-                throw conflict()
-            }
-            if (request.status == FieldVisitStatus.CANCELLED && old != null && request.generation == old.generation &&
-                visits.guards(registrationId, old.generation).any { it.state == FieldVisitGuardState.HELD }
-            ) {
-                throw conflict()
+            if (old != null) {
+                checkIdentity(old, expoId, participantId, request.visitDate)
+                // 이전 세대 요청은 아무것도 바꾸지 않는다
+                if (request.generation < old.generation) return@locked
+                if (request.generation == old.generation) {
+                    // 같은 세대의 CANCELLED는 최종 상태다
+                    if (old.status == FieldVisitStatus.CANCELLED) return@locked
+                    // 같은 작업이 다른 상태를 보내면 충돌이다
+                    if (old.operationId == request.operationId && old.status != request.status) throw conflict()
+                    // 취소 보호가 HELD인 동안 온 취소 projection은 commit보다 먼저 온 것이라 충돌이다(acquire → commit → projection 순서)
+                    if (request.status == FieldVisitStatus.CANCELLED &&
+                        visits.guards(registrationId, old.generation).any { it.state == FieldVisitGuardState.HELD }
+                    ) {
+                        throw conflict()
+                    }
+                }
             }
             visits.save(
                 FieldVisit(
