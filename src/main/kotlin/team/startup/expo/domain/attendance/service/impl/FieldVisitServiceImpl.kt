@@ -15,6 +15,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.FieldVisitG
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.repository.FieldVisit
+import team.startup.expo.domain.attendance.repository.FieldVisitGuard
 import team.startup.expo.domain.attendance.repository.FieldVisitRepository
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
@@ -128,7 +129,13 @@ class FieldVisitServiceImpl(
         registrationId: UUID,
         operationId: UUID,
         request: FinishFieldVisitGuardReqDto,
-    ) = finish(expoId, participantId, registrationId, operationId, request, true)
+    ) =
+        finishGuard(expoId, participantId, registrationId, operationId, request) { visit, guard ->
+            if (guard == null || guard.state == FieldVisitGuardState.ABORTED) throw conflict()
+            if (guard.state == FieldVisitGuardState.COMMITTED) return@finishGuard
+            visits.save(visit.copy(status = FieldVisitStatus.CANCELLED, operationId = operationId))
+            visits.saveGuard(visit, operationId, FieldVisitGuardState.COMMITTED, null)
+        }
 
     override fun abort(
         expoId: String,
@@ -136,30 +143,29 @@ class FieldVisitServiceImpl(
         registrationId: UUID,
         operationId: UUID,
         request: FinishFieldVisitGuardReqDto,
-    ) = finish(expoId, participantId, registrationId, operationId, request, false)
+    ) =
+        finishGuard(expoId, participantId, registrationId, operationId, request) { visit, guard ->
+            if (guard?.state == FieldVisitGuardState.COMMITTED) throw conflict()
+            visits.saveGuard(visit, operationId, FieldVisitGuardState.ABORTED, null)
+        }
 
-    private fun finish(
+    /**
+     * commit·abort의 공통 앞부분이다. 등록을 확인하고, 이전 세대 요청이면 아무것도 하지 않으며, 같은 세대면 이 작업의 보호(없으면 null)를
+     * [finish]에 넘긴다.
+     */
+    private fun finishGuard(
         expoId: String,
         participantId: Long,
         registrationId: UUID,
         operationId: UUID,
         request: FinishFieldVisitGuardReqDto,
-        commit: Boolean,
+        finish: (FieldVisit, FieldVisitGuard?) -> Unit,
     ) {
         locked(expoId, participantId, registrationId) {
             val visit = target(expoId, participantId, registrationId, request.visitDate)
             if (request.generation < visit.generation) return@locked
             if (request.generation != visit.generation) throw conflict()
-            val guard = visits.guards(registrationId, request.generation).find { it.operationId == operationId }
-            if (commit) {
-                if (guard == null || guard.state == FieldVisitGuardState.ABORTED) throw conflict()
-                if (guard.state == FieldVisitGuardState.COMMITTED) return@locked
-                visits.save(visit.copy(status = FieldVisitStatus.CANCELLED, operationId = operationId))
-                visits.saveGuard(visit, operationId, FieldVisitGuardState.COMMITTED, null)
-            } else {
-                if (guard?.state == FieldVisitGuardState.COMMITTED) throw conflict()
-                visits.saveGuard(visit, operationId, FieldVisitGuardState.ABORTED, null)
-            }
+            finish(visit, visits.guards(registrationId, request.generation).find { it.operationId == operationId })
         }
     }
 
