@@ -66,16 +66,18 @@ class EntryListServiceImpl(
         return rows.map { row ->
             val card =
                 when (row.type) {
-                    EntrySubjectType.TRAINEE ->
+                    EntrySubjectType.TRAINEE -> {
                         trainees[row.id]?.let {
                             Card(it.name, it.phoneNumber, it.personalInformationStatus, EntryBadge.of(true, null, it.name, it.school))
                         }
+                    }
 
-                    else ->
+                    else -> {
                         participants[row.id]?.let {
                             val badge = EntryBadge.of(false, it.occupation, it.name, it.school)
                             Card(it.name, it.phoneNumber, it.personalInformationStatus, badge)
                         }
+                    }
                 }
             EntryListItemResDto(
                 id = row.id,
