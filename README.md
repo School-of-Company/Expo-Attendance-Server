@@ -1,44 +1,55 @@
-Expo-Attention-Server
+# Expo-Attention-Server
 
-[ 스타트업 박람회 프로젝트 | Server-V2 ] 참여 서비스 — 박람회 입장 스캔, 프로그램 출석, 현장 종이 QR 도메인을 담당한다.
+[ 스타트업 박람회 프로젝트 | Server-V2 ] 참여 서비스 — 박람회 입장 스캔, 프로그램 출석, 현장 종이 QR 도메인을 담당한다. 규칙과 서비스 간 계약은 `AGENTS.md`와 `docs/service-contracts.md`에 있다.
+
+## 실행
+
+1. `.env.example`을 `.env`로 복사해 채운다. 토큰은 서버 간 호출 인증용이라 32자 이상이어야 하며, 짧으면 기동이 실패한다.
+2. `docker compose up -d`로 로컬 PostgreSQL(`127.0.0.1:15434`)을 띄운다.
+3. `.env` 값을 환경변수로 올린 뒤(`set -a; . ./.env; set +a`) `./gradlew bootRun`. 스키마는 Flyway가 기동 중에 맞춘다.
 
 ## 환경 변수
 
-로컬 값은 `.env.example`을 복사해 `.env`로 만들어 채운다. 토큰은 서버 간 호출 인증용이라 32자 이상이어야 하며, 짧으면 기동이 실패한다.
+필수:
 
 | 변수 | 설명 |
 | --- | --- |
-| `INTERNAL_TOKEN` | 이 서비스의 `/internal/**`를 보호하는 `X-Internal-Token` 값. 이 서비스의 `/internal`을 부르는 박람회·신청·리포트 서비스가 같은 값을 들고 있다 |
-| `USER_INTERNAL_TOKEN`, `EXPO_INTERNAL_TOKEN`, `APPLICATION_INTERNAL_TOKEN` | 유저·박람회·신청 서비스를 호출할 때 보내는 토큰. 각 서비스의 `INTERNAL_TOKEN`과 같은 값 |
-| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | PostgreSQL 접속 정보. `DB_URL` 기본값은 `jdbc:postgresql://localhost:5432/expo_attention`, `DB_USERNAME` 기본값은 `expo_attention`이고 `DB_PASSWORD`는 기본값이 없다 |
-| `EUREKA_CLIENT_ENABLED` | `false`면 Eureka에 등록하지 않고 찾지도 않는다(로컬 개발용, `eureka.client.enabled`). 이때는 `USER_URL` 등으로 직접 지정한다 |
-| `USER_URL`, `EXPO_URL`, `APPLICATION_URL` | 비우면 Eureka로 찾는다. Gateway·Eureka 없이 로컬에서 직접 부를 때만 지정한다 |
-| `QR_ENTRY_REVIEW_ENABLED`, `QR_ENTRY_REVIEW_INTERVAL_MS` | 박람회 서비스 장애 때 기간 확인 없이 기록한 종이 QR 입장을 다시 확인하는 작업을 켜고 끄는 값(기본 `true`)과 주기(기본 5분) |
-| `ENTRY_REPLAY_WINDOW_SECONDS` | 입장이 기록된 뒤 이 시간(초, 기본 `30`, `0`이면 끔) 안에 같은 스캐너가 같은 QR을 퇴장 없이 다시 찍으면 400 대신 직전 입장 결과를 다시 돌려준다(타임아웃 뒤 재시도, #176) |
-| `EXPO_PERIOD_CACHE_TTL_SECONDS` | 박람회 서비스에서 읽은 박람회 기간을 다시 부르지 않고 쓰는 시간(초, 기본 `30`, `0`이면 끔). 박람회 기간을 고친 직후 최대 이 시간만큼 이전 기간으로 판단될 수 있다 |
-| `KAFKA_EXPO_PROJECTION_ENABLED` | 켜면 `expo.expo.changed`를 받아 박람회 기간·일반/연수 프로그램·사전등록 회차 시간을 로컬 프로젝션(`tb_expo_projection*`)에 담고, 이 값들을 박람회 서비스 대신 프로젝션에서 읽는다 (기본 `false` = 지금처럼 항상 동기 호출). 프로젝션에 없으면(아직 받지 못함, 삭제 중, 프로그램 조회에서 박람회 서비스의 프로그램 변경 진행 중) 동기 호출로 넘어가고 박람회·조회 종류마다 한 번 로그를 남긴다. `KAFKA_BOOTSTRAP_SERVERS`가 있어야 하며 없으면 기동이 실패한다. consumer group은 `KAFKA_EXPO_PROJECTION_GROUP_ID`(기본 `expo-attention-server.expo-changed`), 처리하지 못한 메시지는 `expo.expo.changed.dlt`. 켠 뒤 박람회 서비스의 `POST /internal/expo-events/republish`로 전체 상태를 한 번 받는다 |
-| `KAFKA_BOOTSTRAP_SERVERS` | Kafka 브로커 주소(기본 빈 값). `KAFKA_EXPO_PROJECTION_ENABLED`를 켤 때만 필요하다 |
-| `SHUTDOWN_TIMEOUT` | 종료할 때 처리 중인 요청을 기다리는 시간(기본 `20s`, graceful shutdown). 스캔 한 번보다 길게 둔다 |
-| `METRICS_PORT` | `/actuator/prometheus`와 헬스 경로를 서비스 포트와 다른 내부 포트에서 제공한다(기본 서비스 포트). Eureka 메타데이터의 `prometheus.port`에도 실린다 |
-| `DB_POOL_SIZE`, `DB_POOL_CONNECTION_TIMEOUT_MS` | DB 커넥션 풀 크기(기본 `30`)와 빈 커넥션을 기다리는 시간(ms, 기본 `3000`). 넘으면 503으로 답한다. 입장 스캔은 다른 서비스를 부르는 동안 커넥션을 하나 잡고 있다(`load-test/README.md`) |
-| `TRANSACTION_TIMEOUT` | 트랜잭션 기본 제한 시간(기본 `15s`). 넘으면 503으로 답한다 |
-| `CANCELLATION_ABORTED_RETENTION_DAYS` | 중단된 취소 작업 기록(`tb_cancellation_aborted`)을 이 일수가 지나면 지운다(기본 `0` = 지우지 않음). 신청 서비스가 중단 뒤 늦게 보낼 수 있는 재시도 기간보다 충분히 길게 둔다. 다른 데이터는 기간으로 지우지 않는다(`docs/data-retention.md`) |
-| `PREREGISTER_ENTRY_LEAD_MINUTES` | 사전등록 입장을 회차 시작 몇 분 전부터 허용할지 (기본 `30`) |
-| `PROGRAM_ATTENDANCE_REQUIRE_CODE` | 켜면 일반 프로그램 출석 스캔에 참가자 `code`가 필수 (기본 `false`) |
-| `PROGRAM_ATTENDANCE_LEAD_MINUTES` | 일반 프로그램 입실(첫 스캔)을 시작 몇 분 전부터 받을지 (기본 `10`). 종료 시각까지 받고, 이미 입실한 사람의 퇴실은 시각을 보지 않는다 |
-| `ATTENDANCE_ADMIN_EVENTS_ENABLED` | 켜면 실시간 입·퇴장 현황 변경 SSE(`GET /attendance/summary/{expoId}/events`)와 DB LISTEN 연결을 연다 (기본 `false`). 한도·수명·heartbeat·병합 간격(`..._MAX_CONNECTIONS` `500`, `..._MAX_CONNECTIONS_PER_EXPO` `50`, `..._CONNECTION_LIFETIME` `PT30M`, `..._HEARTBEAT_INTERVAL` `PT25S`, `..._COALESCE_INTERVAL` `PT1S`)은 `docs/admin-data-change-events.md` |
-| `LOGGING_HTTP_ACCESS_ENABLED` | 요청마다 접근 로그를 한 줄(`module`=`HttpAccess`, 메시지 `<METHOD> <경로 템플릿> status: <상태> (<ms>ms)`, 4xx는 WARN·5xx와 클라이언트 끊김 499는 ERROR) 남길지 (기본 `true`). `/actuator/**`와 API 문서 경로는 남기지 않고, 쿼리·헤더·본문은 싣지 않는다 |
-| `LOG_LEVEL_ROOT` | 전체 로그 레벨(기본 `info`) |
-| `LOG_LEVEL_CLIENT` | 다른 서비스 호출(`team.startup.expo.global.client`) 로그 레벨(기본 `info`). 임시로 `debug`로 올리면 회로가 열려 차단된 호출도 호출마다 남는다 |
-| `LOG_LEVEL_SCAN_REJECTION` | 스캔 거절 로그(`ScanRejection`) 레벨(기본 `info`). 입구에서 시끄러우면 `warn`으로 올려 끈다 |
-| `SWAGGER_ENABLED` | 켜면 API 문서를 `/attendance/swagger-ui.html`, `/attendance/v3/api-docs`로 제공 (기본 `false`). 밖에서 보려면 게이트웨이 `publicPaths`에도 이 경로를 열어야 한다 |
-| `SWAGGER_INCLUDE_INTERNAL` | 켜면 문서에 `/internal/**` 엔드포인트도 싣고 `X-Internal-Token` 헤더를 안내 (기본 `false`, `SWAGGER_ENABLED`가 켜져 있을 때만 의미가 있다) |
+| `INTERNAL_TOKEN` | 이 서비스의 `/internal/**`를 보호하는 `X-Internal-Token` 값. `/internal`을 부르는 박람회·신청·리포트 서비스가 같은 값을 들고 있다 |
+| `USER_INTERNAL_TOKEN`, `EXPO_INTERNAL_TOKEN`, `APPLICATION_INTERNAL_TOKEN` | 유저·박람회·신청 서비스를 부를 때 보내는 토큰. 각 서비스의 `INTERNAL_TOKEN`과 같은 값 |
+| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | PostgreSQL 접속 정보. 기본값은 `jdbc:postgresql://localhost:5432/expo_attention`, `expo_attention`이고 `DB_PASSWORD`는 기본값이 없다 |
 
-`/internal`은 게이트웨이 라우팅에 넣지 않는다. 게이트웨이가 모르는 경로는 404로 막아 주기 때문에 외부에서 닿지 않는다.
+선택(괄호 안이 기본값):
+
+| 변수 | 설명 |
+| --- | --- |
+| `EUREKA_CLIENT_ENABLED` | `false`면 Eureka에 등록하지도 찾지도 않는다(로컬 개발용, `eureka.client.enabled`). 이때는 아래 `*_URL`을 지정한다 |
+| `USER_URL`, `EXPO_URL`, `APPLICATION_URL` | 비우면 Eureka로 찾는다. Gateway·Eureka 없이 직접 부를 때만 지정 |
+| `QR_ENTRY_REVIEW_ENABLED` (`true`), `QR_ENTRY_REVIEW_INTERVAL_MS` (5분) | 박람회 서비스 장애 때 기간 확인 없이 기록한 종이 QR 입장을 다시 확인하는 작업과 그 주기 |
+| `ENTRY_REPLAY_WINDOW_SECONDS` (`30`, `0`=끔) | 입장 뒤 이 시간 안에 같은 스캐너가 같은 QR을 퇴장 없이 다시 찍으면 400 대신 직전 결과를 돌려준다(타임아웃 뒤 재시도, #176) |
+| `EXPO_PERIOD_CACHE_TTL_SECONDS` (`30`, `0`=끔) | 박람회 기간 캐시 시간. 기간을 고친 직후 최대 이 시간만큼 이전 기간으로 판단될 수 있다 |
+| `KAFKA_EXPO_PROJECTION_ENABLED` (`false`) | 켜면 `expo.expo.changed`로 받은 박람회 기간·프로그램·회차 시간을 로컬 프로젝션에서 먼저 읽고, 없으면 동기 호출로 넘어간다. `KAFKA_BOOTSTRAP_SERVERS`가 없으면 기동 실패. consumer group `KAFKA_EXPO_PROJECTION_GROUP_ID`(`expo-attention-server.expo-changed`), 실패 메시지는 `expo.expo.changed.dlt`. 켠 뒤 박람회 서비스 `POST /internal/expo-events/republish`로 전체 상태를 한 번 받는다. 자세한 동작은 `docs/service-contracts.md` |
+| `KAFKA_BOOTSTRAP_SERVERS` (빈 값) | Kafka 브로커 주소. 프로젝션을 켤 때만 필요 |
+| `PREREGISTER_ENTRY_LEAD_MINUTES` (`30`) | 사전등록 입장을 회차 시작 몇 분 전부터 허용할지 |
+| `PROGRAM_ATTENDANCE_REQUIRE_CODE` (`false`) | 켜면 일반 프로그램 출석 스캔에 참가자 `code`가 필수 |
+| `PROGRAM_ATTENDANCE_LEAD_MINUTES` (`10`) | 일반 프로그램 입실(첫 스캔)을 시작 몇 분 전부터 받을지. 종료 시각까지 받고, 퇴실은 시각을 보지 않는다 |
+| `ATTENDANCE_ADMIN_EVENTS_ENABLED` (`false`) | 실시간 입·퇴장 현황 SSE(`GET /attendance/summary/{expoId}/events`)와 DB LISTEN 연결. 한도·수명·heartbeat·병합 간격(`..._MAX_CONNECTIONS` `500`, `..._MAX_CONNECTIONS_PER_EXPO` `50`, `..._CONNECTION_LIFETIME` `PT30M`, `..._HEARTBEAT_INTERVAL` `PT25S`, `..._COALESCE_INTERVAL` `PT1S`)은 `docs/admin-data-change-events.md` |
+| `CANCELLATION_ABORTED_RETENTION_DAYS` (`0`=지우지 않음) | 중단된 취소 작업 기록(`tb_cancellation_aborted`)을 이 일수가 지나면 지운다. 신청 서비스의 늦은 재시도 기간보다 충분히 길게 둔다. 다른 데이터는 기간으로 지우지 않는다(`docs/data-retention.md`) |
+| `SHUTDOWN_TIMEOUT` (`20s`) | graceful shutdown 때 처리 중인 요청을 기다리는 시간. 스캔 한 번보다 길게 둔다 |
+| `METRICS_PORT` (서비스 포트) | `/actuator/prometheus`와 헬스 경로를 별도 내부 포트에서 제공. Eureka 메타데이터 `prometheus.port`에도 실린다 |
+| `DB_POOL_SIZE` (`30`), `DB_POOL_CONNECTION_TIMEOUT_MS` (`3000`) | 커넥션 풀 크기와 빈 커넥션 대기 시간(ms). 넘으면 503. 입장 스캔은 다른 서비스를 부르는 동안 커넥션을 하나 잡는다(`load-test/README.md`) |
+| `TRANSACTION_TIMEOUT` (`15s`) | 트랜잭션 기본 제한 시간. 넘으면 503 |
+| `LOGGING_HTTP_ACCESS_ENABLED` (`true`) | 요청마다 접근 로그 한 줄(`module`=`HttpAccess`). 형식은 `AGENTS.md`의 Logging |
+| `LOG_LEVEL_ROOT` (`info`) | 전체 로그 레벨 |
+| `LOG_LEVEL_CLIENT` (`info`) | 다른 서비스 호출(`team.startup.expo.global.client`) 로그. 임시로 `debug`면 회로가 열려 차단된 호출도 호출마다 남는다 |
+| `LOG_LEVEL_SCAN_REJECTION` (`info`) | 스캔 거절 로그(`ScanRejection`). 입구에서 시끄러우면 `warn`으로 올려 끈다 |
+| `SWAGGER_ENABLED` (`false`) | API 문서를 `/attendance/swagger-ui.html`, `/attendance/v3/api-docs`로 제공. 밖에서 보려면 게이트웨이 `publicPaths`에도 열어야 한다 |
+| `SWAGGER_INCLUDE_INTERNAL` (`false`) | 문서에 `/internal/**`와 `X-Internal-Token` 안내도 싣는다(`SWAGGER_ENABLED`가 켜져 있을 때만) |
+
+`/internal`은 게이트웨이 라우팅에 넣지 않는다. 게이트웨이가 모르는 경로는 404로 막혀 외부에서 닿지 않는다.
 
 ## 여러 인스턴스와 주기 작업
 
-종이 QR 입장 재확인(`QrEntryPeriodReviewScheduler`)과 중단된 취소 기록 정리는 PostgreSQL 어드바이저리 락(`pg_try_advisory_xact_lock`)을 잡고 돈다. 재확인은 박람회마다 락을 잡으며, 다른 인스턴스가 이미 처리 중인 박람회는 기다리지 않고 건너뛴다. 락은 트랜잭션이 끝나거나 인스턴스가 죽어 연결이 끊기면 저절로 풀린다. 별도 의존성은 없다.
+종이 QR 입장 재확인(`QrEntryPeriodReviewScheduler`)과 중단된 취소 기록 정리는 PostgreSQL 어드바이저리 락(`pg_try_advisory_xact_lock`)을 잡고 돈다. 재확인은 박람회마다 락을 잡고, 다른 인스턴스가 처리 중인 박람회는 건너뛴다. 락은 트랜잭션이 끝나거나 연결이 끊기면 풀린다. 별도 의존성은 없다.
 
 ## 헬스 프로브
 
