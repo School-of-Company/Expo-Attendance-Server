@@ -14,7 +14,6 @@ import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 /**
@@ -113,11 +112,7 @@ abstract class AbstractProgramScanService<P>(
         return ProgramScanResDto(
             result = scanResult,
             name = resolveName(expoId, personId),
-            time = if (scanResult == ProgramScanResult.UNCHANGED) null else now.format(TIME),
+            time = if (scanResult == ProgramScanResult.UNCHANGED) null else now.format(TimeFormat.HOUR_MINUTE),
         )
-    }
-
-    private companion object {
-        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }

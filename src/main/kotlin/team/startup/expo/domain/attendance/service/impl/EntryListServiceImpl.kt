@@ -11,6 +11,7 @@ import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.EntryListService
 import team.startup.expo.domain.attendance.support.EntryBadge
 import team.startup.expo.domain.attendance.support.PhoneNumberMask
+import team.startup.expo.domain.attendance.support.TimeFormat
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.EntryCardsReqDto
 import team.startup.expo.global.client.user.UserClient
@@ -18,7 +19,6 @@ import java.sql.Timestamp
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 /**
  * 이 서비스는 이름·연락처를 저장하지 않으므로, 입장 로그 한 페이지를 읽은 뒤 그 페이지의 사람만 유저 서비스에서 한 번에 가져온다.
@@ -63,7 +63,7 @@ class EntryListServiceImpl(
         val participants = cards.standardParticipants.associateBy { it.participantId }
         val trainees = cards.trainees.associateBy { it.traineeId }
         return rows.map { row ->
-            val time = row.enteredAt.format(TIME)
+            val time = row.enteredAt.format(TimeFormat.HOUR_MINUTE)
             val inside = row.exitedAt == null
             when (row.type) {
                 EntrySubjectType.TRAINEE -> {
@@ -121,9 +121,5 @@ class EntryListServiceImpl(
                     else -> throw IllegalStateException("시각 열의 타입을 알 수 없습니다: ${value.javaClass}")
                 }
         }
-    }
-
-    private companion object {
-        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }

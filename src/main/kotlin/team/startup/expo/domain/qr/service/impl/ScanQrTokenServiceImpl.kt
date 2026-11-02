@@ -9,6 +9,7 @@ import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.support.EntryReplayPolicy
 import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.support.ScannerName
+import team.startup.expo.domain.attendance.support.TimeFormat
 import team.startup.expo.domain.qr.entity.QrEntryPeriodCheck
 import team.startup.expo.domain.qr.presentation.dto.request.ScanQrTokenReqDto
 import team.startup.expo.domain.qr.presentation.dto.response.ScanQrTokenResDto
@@ -20,7 +21,6 @@ import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 /**
  * 종이 QR 입구 스캔. 일반 입장 스캔처럼 진행 중인 박람회에서만 입장을 기록한다. 다만 종이 QR은 입구 줄을 줄이려고 나눠 주는
@@ -59,7 +59,7 @@ class ScanQrTokenServiceImpl(
             if (periodCheck == QrEntryPeriodCheck.PENDING) {
                 logger.warn("박람회 기간을 확인하지 못한 채 종이 QR 입장을 기록했습니다(나중에 다시 확인): expoId={}", expoId)
             }
-            return ScanQrTokenResDto(EntryStatus.FIRST, now.format(TIME))
+            return ScanQrTokenResDto(EntryStatus.FIRST, now.format(TimeFormat.HOUR_MINUTE))
         }
         // 오늘 이미 입장했더라도 퇴장한 뒤라면 재입장이다. 퇴장 없이 다시 찍은 것은 재입장이 아니라 거절한다(#148)
         if (qrEntryWriter.reenter(token, expoId, today, now, scanner) == 1) {
@@ -82,7 +82,7 @@ class ScanQrTokenServiceImpl(
                 today,
             )
         if (entryReplayPolicy.allows(log, now, scanner)) {
-            return ScanQrTokenResDto(EntryStatus.FIRST, log!!.enteredAt.format(TIME))
+            return ScanQrTokenResDto(EntryStatus.FIRST, log!!.enteredAt.format(TimeFormat.HOUR_MINUTE))
         }
         throw ExpectedException(HttpStatus.BAD_REQUEST, "오늘 이미 입장한 QR입니다.")
     }
@@ -95,7 +95,7 @@ class ScanQrTokenServiceImpl(
         entryLogRepository
             .findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(expoId, EntrySubjectType.PAPER_QR, token, today)
             ?.enteredAt
-            ?.format(TIME)
+            ?.format(TimeFormat.HOUR_MINUTE)
 
     /** 박람회 서비스가 응답하지 못한 경우(503)에만 확인을 미루고, 없음(404)이나 기간 밖(400)은 그대로 던진다. */
     private fun checkPeriod(
@@ -109,8 +109,4 @@ class ScanQrTokenServiceImpl(
             if (e.status != HttpStatus.SERVICE_UNAVAILABLE) throw e
             QrEntryPeriodCheck.PENDING
         }
-
-    private companion object {
-        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-    }
 }
