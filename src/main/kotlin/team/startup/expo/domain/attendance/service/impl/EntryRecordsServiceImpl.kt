@@ -14,6 +14,7 @@ import team.startup.expo.domain.attendance.repository.WalkInLogRepository
 import team.startup.expo.domain.attendance.service.EntryRecordsService
 import team.startup.expo.domain.attendance.support.EntryScope
 import team.startup.expo.domain.attendance.support.ExpoIdFormat
+import team.startup.expo.domain.attendance.support.NativeRows
 import team.startup.expo.global.exception.ExpectedException
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -43,7 +44,7 @@ class EntryRecordsServiceImpl(
             if (reqDto.page == 0) {
                 walkInLogRepository
                     .sumByDateAndCategory(expoId, from, to)
-                    .map { EntryRecordWalkInResDto(it[0] as LocalDate, it[1] as String, (it[2] as Number).toLong()) }
+                    .map { EntryRecordWalkInResDto(it[0] as LocalDate, it[1] as String, NativeRows.long(it[2])) }
                     .filter { it.count != 0L }
             } else {
                 emptyList()

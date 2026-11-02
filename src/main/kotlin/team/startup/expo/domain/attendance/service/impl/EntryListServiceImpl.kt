@@ -10,12 +10,12 @@ import team.startup.expo.domain.attendance.presentation.dto.response.EntryListRe
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.EntryListService
 import team.startup.expo.domain.attendance.support.EntryBadge
+import team.startup.expo.domain.attendance.support.NativeRows
 import team.startup.expo.domain.attendance.support.PhoneNumberMask
 import team.startup.expo.domain.attendance.support.TimeFormat
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.EntryCardsReqDto
 import team.startup.expo.global.client.user.UserClient
-import java.sql.Timestamp
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -109,17 +109,9 @@ class EntryListServiceImpl(
                 Row(
                     type = EntrySubjectType.valueOf(columns[0] as String),
                     id = (columns[1] as String).toLong(),
-                    enteredAt = toDateTime(columns[2])!!,
-                    exitedAt = toDateTime(columns[3]),
+                    enteredAt = NativeRows.dateTimeOrNull(columns[2])!!,
+                    exitedAt = NativeRows.dateTimeOrNull(columns[3]),
                 )
-
-            private fun toDateTime(value: Any?): LocalDateTime? =
-                when (value) {
-                    null -> null
-                    is LocalDateTime -> value
-                    is Timestamp -> value.toLocalDateTime()
-                    else -> throw IllegalStateException("시각 열의 타입을 알 수 없습니다: ${value.javaClass}")
-                }
         }
     }
 }

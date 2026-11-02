@@ -13,6 +13,7 @@ import team.startup.expo.domain.attendance.repository.WalkInLogRepository
 import team.startup.expo.domain.attendance.service.EntrySummaryService
 import team.startup.expo.domain.attendance.service.WalkInService
 import team.startup.expo.domain.attendance.support.EntryScope
+import team.startup.expo.domain.attendance.support.NativeRows
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDateTime
@@ -37,9 +38,9 @@ class EntrySummaryServiceImpl(
                 Row(
                     EntrySubjectType.valueOf(it[0] as String),
                     it[1] as String?,
-                    (it[2] as Number).toLong(),
-                    (it[3] as Number).toLong(),
-                    (it[4] as Number).toLong(),
+                    NativeRows.long(it[2]),
+                    NativeRows.long(it[3]),
+                    NativeRows.long(it[4]),
                 )
             }
 

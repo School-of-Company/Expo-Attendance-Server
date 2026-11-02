@@ -12,6 +12,7 @@ import team.startup.expo.domain.attendance.repository.WalkInLogRepository
 import team.startup.expo.domain.attendance.service.WalkInService
 import team.startup.expo.domain.attendance.support.ExpoIdFormat
 import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
+import team.startup.expo.domain.attendance.support.NativeRows
 import team.startup.expo.domain.attendance.support.ScannerName
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.domain.qr.support.lockAndRequireAlive
@@ -85,7 +86,7 @@ class WalkInServiceImpl(
         to: LocalDate,
         date: LocalDate?,
     ): WalkInCountsResDto {
-        val sums = walkInLogRepository.countsByCategory(expoId, from, to).associate { (it[0] as String) to (it[1] as Number).toLong() }
+        val sums = walkInLogRepository.countsByCategory(expoId, from, to).associate { (it[0] as String) to NativeRows.long(it[1]) }
         val counts = WalkInCategory.entries.map { WalkInCountResDto(it, sums[it.name] ?: 0L) }
         return WalkInCountsResDto(expoId, date, counts, counts.sumOf { it.count })
     }

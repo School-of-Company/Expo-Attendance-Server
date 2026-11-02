@@ -19,14 +19,12 @@ import team.startup.expo.domain.attendance.presentation.dto.response.ScannerEntr
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.EntryStatsService
 import team.startup.expo.domain.attendance.support.EntryScope
+import team.startup.expo.domain.attendance.support.NativeRows
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
-import java.sql.Date
-import java.sql.Timestamp
 import java.time.Clock
-import java.time.LocalDate
 import java.time.LocalDateTime
 
 @Service
@@ -45,7 +43,7 @@ class EntryStatsServiceImpl(
         val scope = EntryScope.of(reqDto.date, reqDto.all, clock)
         val buckets =
             entryLogRepository.hourly(expoId, scope.from, scope.to).map {
-                HourlyEntryBucketResDto(toDate(it[0]), (it[1] as Number).toInt(), (it[2] as Number).toLong(), (it[3] as Number).toLong())
+                HourlyEntryBucketResDto(NativeRows.date(it[0]), (it[1] as Number).toInt(), NativeRows.long(it[2]), NativeRows.long(it[3]))
             }
         return HourlyEntryResDto(expoId, scope.date, buckets)
     }
@@ -78,7 +76,7 @@ class EntryStatsServiceImpl(
         val scope = EntryScope.of(reqDto.date, reqDto.all, clock)
         val scanners =
             entryLogRepository.scanners(expoId, scope.from, scope.to, reqDto.limit).map {
-                ScannerEntryCountResDto(it[0] as String, (it[1] as Number).toLong(), (it[2] as Number).toLong())
+                ScannerEntryCountResDto(it[0] as String, NativeRows.long(it[1]), NativeRows.long(it[2]))
             }
         return ScannerEntryCountsResDto(expoId, scope.date, scanners)
     }
@@ -145,7 +143,7 @@ class EntryStatsServiceImpl(
                         else -> EntryMethod.WALK_IN
                     }
                 return Row(
-                    at = toDateTime(columns[0]),
+                    at = NativeRows.dateTime(columns[0]),
                     type = EntryRecordType.valueOf(columns[1] as String),
                     method = method,
                     category = columns[3] as String?,
@@ -156,21 +154,5 @@ class EntryStatsServiceImpl(
 
             private fun EntryMethod.isRegistered() = this == EntryMethod.REGISTERED_STANDARD || this == EntryMethod.REGISTERED_TRAINEE
         }
-    }
-
-    private companion object {
-        fun toDate(value: Any?): LocalDate =
-            when (value) {
-                is LocalDate -> value
-                is Date -> value.toLocalDate()
-                else -> throw IllegalStateException("날짜 열의 타입을 알 수 없습니다: ${value?.javaClass}")
-            }
-
-        fun toDateTime(value: Any?): LocalDateTime =
-            when (value) {
-                is LocalDateTime -> value
-                is Timestamp -> value.toLocalDateTime()
-                else -> throw IllegalStateException("시각 열의 타입을 알 수 없습니다: ${value?.javaClass}")
-            }
     }
 }
