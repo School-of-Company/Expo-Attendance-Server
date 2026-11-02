@@ -1,6 +1,5 @@
 package team.startup.expo.domain.qr.service.impl
 
-import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.support.ExpoIdFormat
@@ -12,7 +11,7 @@ import team.startup.expo.domain.qr.presentation.dto.response.QrTokenItemResDto
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.domain.qr.repository.QrTokenRepository
 import team.startup.expo.domain.qr.service.IssueQrTokensService
-import team.startup.expo.global.exception.ExpectedException
+import team.startup.expo.domain.qr.support.lockAndRequireAlive
 import java.security.SecureRandom
 import java.time.Clock
 import java.time.LocalDateTime
@@ -36,10 +35,7 @@ class IssueQrTokensServiceImpl(
         ExpoIdFormat.requireValid(expoId)
 
         // 삭제와 같은 락을 잡은 뒤에 삭제 기록을 확인해, 삭제된 박람회의 토큰이 되살아나지 않게 한다
-        deletedExpoRepository.lockExpo(expoId)
-        if (deletedExpoRepository.existsById(expoId)) {
-            throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
-        }
+        deletedExpoRepository.lockAndRequireAlive(expoId)
 
         val now = LocalDateTime.now(clock)
         // 같은 박람회 락 안이라 구분별 연번이 겹치지 않는다. 무효화한 토큰의 연번도 다시 쓰지 않는다.

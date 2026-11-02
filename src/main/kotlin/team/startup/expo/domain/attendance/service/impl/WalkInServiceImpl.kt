@@ -14,6 +14,7 @@ import team.startup.expo.domain.attendance.support.ExpoIdFormat
 import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.support.ScannerName
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
+import team.startup.expo.domain.qr.support.lockAndRequireAlive
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDate
@@ -46,8 +47,7 @@ class WalkInServiceImpl(
         // 박람회 서비스 호출은 트랜잭션 밖에서 끝냈다. 여기서는 락과 기록만 한 트랜잭션으로 한다.
         transaction.executeWithoutResult {
             // 삭제와 같은 락을 잡은 뒤 삭제 기록을 확인해, 삭제된 박람회의 집계가 되살아나지 않게 한다
-            deletedExpoRepository.lockExpo(expoId)
-            if (deletedExpoRepository.existsById(expoId)) throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
+            deletedExpoRepository.lockAndRequireAlive(expoId)
 
             walkInLogRepository.lock("walk-in:$expoId:$today:$category")
             // 이미 처리한 requestId의 재전송은 줄일 수 있는지 따지기 전에 현재 합계로 답한다(응답이 유실된 마지막 UNDO의 재시도가 400이 되지 않게)
