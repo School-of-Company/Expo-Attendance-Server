@@ -2,11 +2,9 @@ package team.startup.expo.domain.attendance.service.impl
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.dao.CannotAcquireLockException
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.support.TransactionTemplate
 import team.startup.expo.domain.attendance.entity.CancellationGuardState
 import team.startup.expo.domain.attendance.entity.PreregisterSessionStatus
 import team.startup.expo.domain.attendance.presentation.dto.request.AcquireCancellationGuardReqDto
@@ -18,13 +16,13 @@ import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceR
 import team.startup.expo.domain.attendance.service.AcquireCancellationGuardResult
 import team.startup.expo.domain.attendance.service.CancellationGuardService
 import team.startup.expo.domain.attendance.support.CancellationGuardGate
+import team.startup.expo.domain.attendance.support.GuardLockExecutor
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.AdminCancellationStatusReqDto
 import team.startup.expo.global.client.user.CancellationStatusReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.exception.ExpectedException
-import team.startup.expo.global.metrics.AttendanceMetrics
 import java.time.Clock
 import java.time.LocalDateTime
 
@@ -40,7 +38,7 @@ class CancellationGuardServiceImpl(
     @Qualifier("userCircuitBreaker") private val userCircuitBreaker: CircuitBreaker,
     private val clock: Clock,
 ) : CancellationGuardService {
-    private val transaction = TransactionTemplate(transactionManager)
+    private val lockExecutor = GuardLockExecutor(transactionManager, cancellationGuardRepository)
 
     override fun acquire(
         expoId: String,
@@ -228,23 +226,10 @@ class CancellationGuardServiceImpl(
         key: String,
         expoIdToLock: String?,
         block: () -> T,
-    ): T {
-        try {
-            return requireNotNull(
-                transaction.execute {
-                    cancellationGuardRepository.setLockTimeout(CancellationGuardGate.LOCK_TIMEOUT)
-                    if (expoIdToLock != null) deletedExpoRepository.lockExpo(expoIdToLock)
-                    val start = System.nanoTime()
-                    try {
-                        cancellationGuardRepository.lockExclusive(key)
-                    } finally {
-                        AttendanceMetrics.recordLockWait("cancel", System.nanoTime() - start)
-                    }
-                    block()
-                },
-            )
-        } catch (e: CannotAcquireLockException) {
-            throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "진행 중인 스캔이 끝나지 않아 잠시 후 다시 시도해 주세요.")
+    ): T =
+        lockExecutor.execute("진행 중인 스캔이 끝나지 않아 잠시 후 다시 시도해 주세요.") {
+            if (expoIdToLock != null) deletedExpoRepository.lockExpo(expoIdToLock)
+            lockExecutor.lockExclusive(key, GuardLockExecutor.WAIT_CANCEL)
+            block()
         }
-    }
 }

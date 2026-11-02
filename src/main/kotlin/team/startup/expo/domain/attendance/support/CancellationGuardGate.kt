@@ -1,16 +1,13 @@
 package team.startup.expo.domain.attendance.support
 
-import org.springframework.dao.CannotAcquireLockException
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.support.TransactionTemplate
 import team.startup.expo.domain.attendance.entity.CancellationGuard
 import team.startup.expo.domain.attendance.entity.CancellationGuardState
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
 import team.startup.expo.domain.attendance.repository.FieldVisitRepository
 import team.startup.expo.global.exception.ExpectedException
-import team.startup.expo.global.metrics.AttendanceMetrics
 import java.time.Clock
 import java.time.LocalDate
 import java.util.UUID
@@ -30,7 +27,7 @@ class CancellationGuardGate(
     private val preregisterSessionValidator: PreregisterSessionValidator,
     private val clock: Clock,
 ) {
-    private val transaction = TransactionTemplate(transactionManager)
+    private val lockExecutor = GuardLockExecutor(transactionManager, cancellationGuardRepository)
 
     fun <T> scanning(
         expoId: String,
@@ -40,54 +37,37 @@ class CancellationGuardGate(
         block: () -> T,
     ): T {
         val date = attendanceDate ?: LocalDate.now(clock)
-        try {
-            return requireNotNull(
-                transaction.execute {
-                    cancellationGuardRepository.setLockTimeout(LOCK_TIMEOUT)
-                    if (participantId != null) {
-                        timedLock { cancellationGuardRepository.lockShared(participantKey(expoId, participantId)) }
-                        cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId)?.let {
-                            if (it.state == CancellationGuardState.HELD ||
-                                preregisterSessionValidator.activeField(expoId, participantId, date) == null
-                            ) {
-                                reject(it)
-                            }
-                        }
+        return lockExecutor.execute("취소 처리와 겹쳐 잠시 후 다시 시도해 주세요.") {
+            if (participantId != null) {
+                lockExecutor.lockShared(participantKey(expoId, participantId), GuardLockExecutor.WAIT_SCAN)
+                cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId)?.let {
+                    if (it.state == CancellationGuardState.HELD ||
+                        preregisterSessionValidator.activeField(expoId, participantId, date) == null
+                    ) {
+                        reject(it)
                     }
-                    if (traineeId != null) {
-                        timedLock { cancellationGuardRepository.lockShared(traineeKey(expoId, traineeId)) }
-                        cancellationGuardRepository.findByExpoIdAndTraineeId(expoId, traineeId)?.let {
-                            if (it.state == CancellationGuardState.HELD ||
-                                preregisterSessionValidator.activeField(expoId, it.participantId, date) == null
-                            ) {
-                                reject(it)
-                            }
-                        }
+                }
+            }
+            if (traineeId != null) {
+                lockExecutor.lockShared(traineeKey(expoId, traineeId), GuardLockExecutor.WAIT_SCAN)
+                cancellationGuardRepository.findByExpoIdAndTraineeId(expoId, traineeId)?.let {
+                    if (it.state == CancellationGuardState.HELD ||
+                        preregisterSessionValidator.activeField(expoId, it.participantId, date) == null
+                    ) {
+                        reject(it)
                     }
-                    if (fieldVisits.held(expoId, participantId, traineeId, date)) {
-                        throw ExpectedException(HttpStatus.CONFLICT, "신청 취소를 처리 중입니다.")
-                    }
-                    if (participantId != null) preregisterSessionValidator.checkToday(expoId, participantId, date)
-                    if (participantId == null && traineeId != null) {
-                        fieldVisits.linkedParticipants(expoId, traineeId, date).forEach {
-                            preregisterSessionValidator.checkToday(expoId, it, date)
-                        }
-                    }
-                    block()
-                },
-            )
-        } catch (e: CannotAcquireLockException) {
-            throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "취소 처리와 겹쳐 잠시 후 다시 시도해 주세요.")
-        }
-    }
-
-    /** 락을 얻기까지 기다린 시간을 `attendance.guard.lock.wait{kind=scan}`으로 기록한다. 락을 못 얻어 실패해도 기다린 시간은 남는다. */
-    private fun timedLock(acquire: () -> Unit) {
-        val start = System.nanoTime()
-        try {
-            acquire()
-        } finally {
-            AttendanceMetrics.recordLockWait("scan", System.nanoTime() - start)
+                }
+            }
+            if (fieldVisits.held(expoId, participantId, traineeId, date)) {
+                throw ExpectedException(HttpStatus.CONFLICT, "신청 취소를 처리 중입니다.")
+            }
+            if (participantId != null) preregisterSessionValidator.checkToday(expoId, participantId, date)
+            if (participantId == null && traineeId != null) {
+                fieldVisits.linkedParticipants(expoId, traineeId, date).forEach {
+                    preregisterSessionValidator.checkToday(expoId, it, date)
+                }
+            }
+            block()
         }
     }
 

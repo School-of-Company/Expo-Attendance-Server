@@ -2,11 +2,9 @@ package team.startup.expo.domain.attendance.service.impl
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.dao.CannotAcquireLockException
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.support.TransactionTemplate
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.presentation.dto.request.FieldVisitCancellationReqDto
 import team.startup.expo.domain.attendance.presentation.dto.request.FieldVisitStatus
@@ -23,6 +21,7 @@ import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceR
 import team.startup.expo.domain.attendance.service.FieldVisitService
 import team.startup.expo.domain.attendance.support.CancellationGuardGate
 import team.startup.expo.domain.attendance.support.FieldEntryFence
+import team.startup.expo.domain.attendance.support.GuardLockExecutor
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.CancellationStatusReqDto
@@ -45,7 +44,7 @@ class FieldVisitServiceImpl(
     private val user: UserClient,
     @Qualifier("userCircuitBreaker") private val circuit: CircuitBreaker,
 ) : FieldVisitService {
-    private val transaction = TransactionTemplate(transactionManager)
+    private val lockExecutor = GuardLockExecutor(transactionManager, locks)
 
     override fun project(
         expoId: String,
@@ -112,7 +111,7 @@ class FieldVisitServiceImpl(
             if (guards.any { it.operationId != operationId && it.state != FieldVisitGuardState.ABORTED }) throw conflict()
             val trainee = ownership(expoId, participantId, request.phoneNumber)
             if (same?.state == FieldVisitGuardState.COMMITTED) return@locked
-            if (trainee != null) locks.lockExclusive(CancellationGuardGate.traineeKey(expoId, trainee))
+            if (trainee != null) lockExecutor.lockExclusive(CancellationGuardGate.traineeKey(expoId, trainee))
             val status = statusOf(visit, trainee)
             if (status.enteredOnVisitDate || status.programAttended || visit.status != FieldVisitStatus.ACTIVE) throw conflict()
             visits.saveGuard(visit, operationId, FieldVisitGuardState.HELD, trainee)
@@ -233,29 +232,26 @@ class FieldVisitServiceImpl(
         if (visit.expoId != expoId || visit.participantId != participantId || visit.visitDate != date) throw conflict()
     }
 
+    /** 박람회 락 → 박람회 삭제 확인 → 참가자 배타 락 → 등록 ID 배타 락 순서다(#167). 락 대기 지표는 기록하지 않는다. */
     private fun <T> locked(
         expoId: String,
         participantId: Long,
         registrationId: UUID,
         block: () -> T,
-    ): T {
-        try {
-            return requireNotNull(
-                transaction.execute {
-                    locks.setLockTimeout(CancellationGuardGate.LOCK_TIMEOUT)
-                    deletedExpos.lockExpo(expoId)
-                    if (deletedExpos.existsById(expoId)) throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
-                    locks.lockExclusive(CancellationGuardGate.participantKey(expoId, participantId))
-                    locks.lockExclusive(CancellationGuardGate.fieldVisitKey(registrationId))
-                    block()
-                },
-            )
-        } catch (_: CannotAcquireLockException) {
-            throw unavailable()
+    ): T =
+        lockExecutor.execute(UNAVAILABLE) {
+            deletedExpos.lockExpo(expoId)
+            if (deletedExpos.existsById(expoId)) throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
+            lockExecutor.lockExclusive(CancellationGuardGate.participantKey(expoId, participantId))
+            lockExecutor.lockExclusive(CancellationGuardGate.fieldVisitKey(registrationId))
+            block()
         }
-    }
 
     private fun conflict() = ExpectedException(HttpStatus.CONFLICT, "등록 또는 취소 작업 상태가 일치하지 않습니다.")
 
-    private fun unavailable() = ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "입장 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.")
+    private fun unavailable() = ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, UNAVAILABLE)
+
+    companion object {
+        private const val UNAVAILABLE = "입장 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요."
+    }
 }
