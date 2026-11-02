@@ -8,19 +8,29 @@ Expo-Attention-Server
 
 | 변수 | 설명 |
 | --- | --- |
-| `INTERNAL_TOKEN` | 이 서비스의 `/internal/**`를 보호하는 `X-Internal-Token` 값. 폼 서비스가 이 값을 `PARTICIPATION_SERVICE_INTERNAL_TOKEN`으로 들고 있다 |
+| `INTERNAL_TOKEN` | 이 서비스의 `/internal/**`를 보호하는 `X-Internal-Token` 값. 이 서비스의 `/internal`을 부르는 박람회·신청·리포트 서비스가 같은 값을 들고 있다 |
 | `USER_INTERNAL_TOKEN`, `EXPO_INTERNAL_TOKEN`, `APPLICATION_INTERNAL_TOKEN` | 유저·박람회·신청 서비스를 호출할 때 보내는 토큰. 각 서비스의 `INTERNAL_TOKEN`과 같은 값 |
+| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | PostgreSQL 접속 정보. `DB_URL` 기본값은 `jdbc:postgresql://localhost:5432/expo_attention`, `DB_USERNAME` 기본값은 `expo_attention`이고 `DB_PASSWORD`는 기본값이 없다 |
+| `EUREKA_CLIENT_ENABLED` | `false`면 Eureka에 등록하지 않고 찾지도 않는다(로컬 개발용, `eureka.client.enabled`). 이때는 `USER_URL` 등으로 직접 지정한다 |
 | `USER_URL`, `EXPO_URL`, `APPLICATION_URL` | 비우면 Eureka로 찾는다. Gateway·Eureka 없이 로컬에서 직접 부를 때만 지정한다 |
 | `QR_ENTRY_REVIEW_ENABLED`, `QR_ENTRY_REVIEW_INTERVAL_MS` | 박람회 서비스 장애 때 기간 확인 없이 기록한 종이 QR 입장을 다시 확인하는 작업을 켜고 끄는 값(기본 `true`)과 주기(기본 5분) |
 | `ENTRY_REPLAY_WINDOW_SECONDS` | 입장이 기록된 뒤 이 시간(초, 기본 `30`, `0`이면 끔) 안에 같은 스캐너가 같은 QR을 퇴장 없이 다시 찍으면 400 대신 직전 입장 결과를 다시 돌려준다(타임아웃 뒤 재시도, #176) |
 | `EXPO_PERIOD_CACHE_TTL_SECONDS` | 박람회 서비스에서 읽은 박람회 기간을 다시 부르지 않고 쓰는 시간(초, 기본 `30`, `0`이면 끔). 박람회 기간을 고친 직후 최대 이 시간만큼 이전 기간으로 판단될 수 있다 |
 | `KAFKA_EXPO_PROJECTION_ENABLED` | 켜면 `expo.expo.changed`를 받아 박람회 기간·일반/연수 프로그램·사전등록 회차 시간을 로컬 프로젝션(`tb_expo_projection*`)에 담고, 이 값들을 박람회 서비스 대신 프로젝션에서 읽는다 (기본 `false` = 지금처럼 항상 동기 호출). 프로젝션에 없으면(아직 받지 못함, 삭제 중, 프로그램 조회에서 박람회 서비스의 프로그램 변경 진행 중) 동기 호출로 넘어가고 박람회·조회 종류마다 한 번 로그를 남긴다. `KAFKA_BOOTSTRAP_SERVERS`가 있어야 하며 없으면 기동이 실패한다. consumer group은 `KAFKA_EXPO_PROJECTION_GROUP_ID`(기본 `expo-attention-server.expo-changed`), 처리하지 못한 메시지는 `expo.expo.changed.dlt`. 켠 뒤 박람회 서비스의 `POST /internal/expo-events/republish`로 전체 상태를 한 번 받는다 |
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka 브로커 주소(기본 빈 값). `KAFKA_EXPO_PROJECTION_ENABLED`를 켤 때만 필요하다 |
+| `SHUTDOWN_TIMEOUT` | 종료할 때 처리 중인 요청을 기다리는 시간(기본 `20s`, graceful shutdown). 스캔 한 번보다 길게 둔다 |
+| `METRICS_PORT` | `/actuator/prometheus`와 헬스 경로를 서비스 포트와 다른 내부 포트에서 제공한다(기본 서비스 포트). Eureka 메타데이터의 `prometheus.port`에도 실린다 |
+| `DB_POOL_SIZE`, `DB_POOL_CONNECTION_TIMEOUT_MS` | DB 커넥션 풀 크기(기본 `30`)와 빈 커넥션을 기다리는 시간(ms, 기본 `3000`). 넘으면 503으로 답한다. 입장 스캔은 다른 서비스를 부르는 동안 커넥션을 하나 잡고 있다(`load-test/README.md`) |
+| `TRANSACTION_TIMEOUT` | 트랜잭션 기본 제한 시간(기본 `15s`). 넘으면 503으로 답한다 |
 | `CANCELLATION_ABORTED_RETENTION_DAYS` | 중단된 취소 작업 기록(`tb_cancellation_aborted`)을 이 일수가 지나면 지운다(기본 `0` = 지우지 않음). 신청 서비스가 중단 뒤 늦게 보낼 수 있는 재시도 기간보다 충분히 길게 둔다. 다른 데이터는 기간으로 지우지 않는다(`docs/data-retention.md`) |
 | `PREREGISTER_ENTRY_LEAD_MINUTES` | 사전등록 입장을 회차 시작 몇 분 전부터 허용할지 (기본 `30`) |
 | `PROGRAM_ATTENDANCE_REQUIRE_CODE` | 켜면 일반 프로그램 출석 스캔에 참가자 `code`가 필수 (기본 `false`) |
 | `PROGRAM_ATTENDANCE_LEAD_MINUTES` | 일반 프로그램 입실(첫 스캔)을 시작 몇 분 전부터 받을지 (기본 `10`). 종료 시각까지 받고, 이미 입실한 사람의 퇴실은 시각을 보지 않는다 |
 | `ATTENDANCE_ADMIN_EVENTS_ENABLED` | 켜면 실시간 입·퇴장 현황 변경 SSE(`GET /attendance/summary/{expoId}/events`)와 DB LISTEN 연결을 연다 (기본 `false`). 한도·수명·heartbeat·병합 간격(`..._MAX_CONNECTIONS` `500`, `..._MAX_CONNECTIONS_PER_EXPO` `50`, `..._CONNECTION_LIFETIME` `PT30M`, `..._HEARTBEAT_INTERVAL` `PT25S`, `..._COALESCE_INTERVAL` `PT1S`)은 `docs/admin-data-change-events.md` |
 | `LOGGING_HTTP_ACCESS_ENABLED` | 요청마다 접근 로그를 한 줄(`module`=`HttpAccess`, 메시지 `<METHOD> <경로 템플릿> status: <상태> (<ms>ms)`, 4xx는 WARN·5xx와 클라이언트 끊김 499는 ERROR) 남길지 (기본 `true`). `/actuator/**`와 API 문서 경로는 남기지 않고, 쿼리·헤더·본문은 싣지 않는다 |
+| `LOG_LEVEL_ROOT` | 전체 로그 레벨(기본 `info`) |
+| `LOG_LEVEL_CLIENT` | 다른 서비스 호출(`team.startup.expo.global.client`) 로그 레벨(기본 `info`). 임시로 `debug`로 올리면 회로가 열려 차단된 호출도 호출마다 남는다 |
+| `LOG_LEVEL_SCAN_REJECTION` | 스캔 거절 로그(`ScanRejection`) 레벨(기본 `info`). 입구에서 시끄러우면 `warn`으로 올려 끈다 |
 | `SWAGGER_ENABLED` | 켜면 API 문서를 `/attendance/swagger-ui.html`, `/attendance/v3/api-docs`로 제공 (기본 `false`). 밖에서 보려면 게이트웨이 `publicPaths`에도 이 경로를 열어야 한다 |
 | `SWAGGER_INCLUDE_INTERNAL` | 켜면 문서에 `/internal/**` 엔드포인트도 싣고 `X-Internal-Token` 헤더를 안내 (기본 `false`, `SWAGGER_ENABLED`가 켜져 있을 때만 의미가 있다) |
 
@@ -53,5 +63,6 @@ Expo-Attention-Server
 
 확인하지 못한 것:
 
+- V13 이후 마이그레이션(V13~V25)은 롤백 관점에서 검토하지 않았다. 위 판단은 V9~V12에만 해당한다.
 - 이전 태그의 빌드를 새 스키마의 데이터베이스에 실제로 띄워 보지는 않았다. 이전 빌드가 Flyway의 "적용됐지만 이 빌드에 없는 마이그레이션"을 무시하고 기동하는지는 Flyway 설정 기본값에 기대는 것이며 직접 확인하지 않았다. 롤백 전에 개발 서버에서 먼저 확인한다.
 - `ddl-auto: validate`가 추가 컬럼·테이블을 허용한다는 점은 Hibernate의 일반 동작(매핑한 컬럼이 있는지만 검사)이며 이전 태그에서 직접 돌려 보지 않았다.

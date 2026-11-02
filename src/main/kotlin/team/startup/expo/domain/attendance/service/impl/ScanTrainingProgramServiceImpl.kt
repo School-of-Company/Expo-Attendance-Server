@@ -26,7 +26,10 @@ import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 
-/** v1 `ScanTrainingProByQrCodeServiceImpl`의 연수 프로그램 출석. 동작은 일반 프로그램과 같다. */
+/**
+ * v1 `ScanTrainingProByQrCodeServiceImpl`의 연수 프로그램 출석. 신청 확인과 출석 기록은 일반 프로그램과 같지만,
+ * 입실 시간대 검사(#198)와 선택 `code` 검증(`program-attendance.require-code`)은 없다.
+ */
 @Service
 class ScanTrainingProgramServiceImpl(
     private val userClient: UserClient,

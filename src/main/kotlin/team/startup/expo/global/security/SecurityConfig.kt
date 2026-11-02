@@ -16,14 +16,15 @@ import team.startup.expo.global.swagger.SwaggerProperties
 import tools.jackson.databind.ObjectMapper
 
 /**
- * 게이트웨이가 JWT를 검증하고 `X-User-Id`만 넘기므로 이 서비스는 사용자 토큰을 직접 파싱하지 않는다.
- * 서비스 간 호출(폼 서비스의 토큰 확인 등)은 게이트웨이를 거치지 않으므로 `/internal` 하위 경로에서
- * `X-Internal-Token`으로 인증한다(`InternalTokenAuthenticationFilter`). 명시하지 않은 경로는 전부 막아 두고,
+ * 게이트웨이가 JWT를 검증하고 `X-User-Id`와(토큰에 역할이 있으면) `X-User-Role`을 넘기므로 이 서비스는 사용자 토큰을 직접
+ * 파싱하지 않는다. 서비스 간 호출(박람회·신청·리포트 서비스가 부르는 내부 API)은 게이트웨이를 거치지 않으므로 `/internal` 하위
+ * 경로에서 `X-Internal-Token`으로 인증한다(`InternalTokenAuthenticationFilter`). 명시하지 않은 경로는 전부 막아 두고,
  * 엔드포인트가 생기면 경로별 규칙을 여기에 더한다. API 문서 경로는 `swagger.enabled`가 켜져 있을 때만 `GET`을 연다.
  *
- * 박람회 입장 스캔, 프로그램 출석 스캔, 종이 QR 입구 스캔은 게이트웨이를 거쳐 오는 요청이다. 토큰 검증은 게이트웨이가
- * 맡으므로 여기서는 경로만 열어 둔다. 종이 QR 발급은 관리자 전용이라 게이트웨이가 넘기는 `X-User-Role`이
- * `ROLE_ADMIN`일 때만 허용한다(`GatewayRoleAuthenticationFilter`). 이 경로들은 게이트웨이 라우팅으로만 외부에 닿아야 한다.
+ * 박람회 입장·퇴장 스캔, 프로그램 출석 스캔, 종이 QR 입구 스캔은 게이트웨이를 거쳐 오는 요청이다. 토큰 검증은 게이트웨이가
+ * 맡으므로 여기서는 경로만 열어 둔다. 관리자 전용 경로(`/qr-tokens/**`, `/walk-in-counts/**`, `/attendance/summary/**`)는
+ * 게이트웨이가 넘기는 `X-User-Role`이 `ROLE_ADMIN`일 때만 허용한다(`GatewayRoleAuthenticationFilter`).
+ * 이 경로들은 게이트웨이 라우팅으로만 외부에 닿아야 한다.
  */
 @Configuration
 @EnableWebSecurity
