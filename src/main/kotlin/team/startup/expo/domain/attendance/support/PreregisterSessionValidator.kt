@@ -150,7 +150,7 @@ class PreregisterSessionValidator(
     private fun todaySessions(
         expoId: String,
         records: List<PreregisterSession>,
-        attendanceDate: LocalDate = LocalDate.now(clock),
+        attendanceDate: LocalDate,
     ) = activeSessionIds(records)
         .map { sessionId -> session(expoId, sessionId) }
         .filter { it.startedAt.atZone(clock.zone).toLocalDate() == attendanceDate }
