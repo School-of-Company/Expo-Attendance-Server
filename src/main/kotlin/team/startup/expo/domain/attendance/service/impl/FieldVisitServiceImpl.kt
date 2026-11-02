@@ -246,7 +246,7 @@ class FieldVisitServiceImpl(
                     deletedExpos.lockExpo(expoId)
                     if (deletedExpos.existsById(expoId)) throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
                     locks.lockExclusive(CancellationGuardGate.participantKey(expoId, participantId))
-                    locks.lockExclusive("field-visit:$registrationId")
+                    locks.lockExclusive(CancellationGuardGate.fieldVisitKey(registrationId))
                     block()
                 },
             )

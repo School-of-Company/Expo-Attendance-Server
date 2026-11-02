@@ -13,6 +13,7 @@ import team.startup.expo.global.exception.ExpectedException
 import team.startup.expo.global.metrics.AttendanceMetrics
 import java.time.Clock
 import java.time.LocalDate
+import java.util.UUID
 
 /**
  * 입장·프로그램 스캔이 취소 보호와 겹치지 않게 하는 관문이다. 스캔은 참가자(연수는 연수자) 단위 공유 락을 잡은 채 취소 보호를 확인하고
@@ -108,5 +109,8 @@ class CancellationGuardGate(
             expoId: String,
             traineeId: Long,
         ) = "guard:$expoId:t:$traineeId"
+
+        /** 날짜별 현장 방문 등록 하나(#204)의 배타 락 키. 참가자 락 다음에 잡는다. */
+        fun fieldVisitKey(registrationId: UUID) = "field-visit:$registrationId"
     }
 }
