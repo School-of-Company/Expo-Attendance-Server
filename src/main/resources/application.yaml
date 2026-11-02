@@ -137,7 +137,8 @@ eureka:
     # 공용 Prometheus(Expo-Monitoring)가 Eureka로 이 인스턴스를 찾아 긁는다. 게이트웨이는 /actuator를 라우팅하지 않는다(#101)
     metadata-map:
       "[prometheus.scrape]": "true"
-      "[prometheus.port]": ${METRICS_PORT:${server.port:8080}}
+      # management.server.port와 같은 값(METRICS_PORT, 없으면 서비스 포트)
+      "[prometheus.port]": ${management.server.port}
       "[prometheus.path]": /actuator/prometheus
 logging:
   # 형식은 logback-spring.xml(JSON 한 줄). 요청 상관 ID(X-Request-Id, #104)는 MDC requestId 키로 붙는다
