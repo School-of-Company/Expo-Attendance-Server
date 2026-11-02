@@ -3,6 +3,7 @@ package team.startup.expo.domain.attendance.service.impl
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import team.startup.expo.domain.attendance.entity.WalkInCategory
 import team.startup.expo.domain.attendance.presentation.dto.request.RecordWalkInReqDto
@@ -62,6 +63,7 @@ class WalkInServiceImpl(
         return counts(expoId, today, today, today)
     }
 
+    @Transactional(readOnly = true)
     override fun get(
         expoId: String,
         date: LocalDate?,
@@ -71,6 +73,7 @@ class WalkInServiceImpl(
         return counts(expoId, day, day, day)
     }
 
+    @Transactional(readOnly = true)
     override fun getBetween(
         expoId: String,
         from: LocalDate,

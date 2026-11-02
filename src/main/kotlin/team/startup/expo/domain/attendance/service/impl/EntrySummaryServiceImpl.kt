@@ -1,6 +1,7 @@
 package team.startup.expo.domain.attendance.service.impl
 
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.presentation.dto.request.EntrySummaryReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.EntrySummaryResDto
@@ -23,6 +24,7 @@ class EntrySummaryServiceImpl(
     private val walkInLogRepository: WalkInLogRepository,
     private val clock: Clock,
 ) : EntrySummaryService {
+    @Transactional(readOnly = true)
     override fun get(
         expoId: String,
         reqDto: EntrySummaryReqDto,

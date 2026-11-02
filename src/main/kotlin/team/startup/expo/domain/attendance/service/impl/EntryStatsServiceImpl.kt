@@ -4,6 +4,7 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.presentation.dto.request.EntrySummaryReqDto
 import team.startup.expo.domain.attendance.presentation.dto.request.RecentEntryRecordsReqDto
@@ -36,6 +37,7 @@ class EntryStatsServiceImpl(
 ) : EntryStatsService {
     private val logger = LoggerFactory.getLogger(javaClass)
 
+    @Transactional(readOnly = true)
     override fun hourly(
         expoId: String,
         reqDto: EntrySummaryReqDto,
@@ -69,6 +71,7 @@ class EntryStatsServiceImpl(
         return RecentEntryRecordsResDto(expoId, scope.date, records)
     }
 
+    @Transactional(readOnly = true)
     override fun scanners(
         expoId: String,
         reqDto: ScannerEntryCountsReqDto,
