@@ -35,17 +35,17 @@ import java.util.UUID
 @Service
 class FieldVisitServiceImpl(
     transactionManager: PlatformTransactionManager,
-    private val visits: FieldVisitRepository,
-    private val locks: CancellationGuardRepository,
-    private val deletedExpos: DeletedExpoRepository,
-    private val entries: EntryLogRepository,
-    private val fence: FieldEntryFence,
-    private val standard: StandardProgramAttendanceRepository,
-    private val training: TrainingProgramAttendanceRepository,
-    private val user: UserClient,
-    @Qualifier("userCircuitBreaker") private val circuit: CircuitBreaker,
+    private val fieldVisitRepository: FieldVisitRepository,
+    private val cancellationGuardRepository: CancellationGuardRepository,
+    private val deletedExpoRepository: DeletedExpoRepository,
+    private val entryLogRepository: EntryLogRepository,
+    private val fieldEntryFence: FieldEntryFence,
+    private val standardProgramAttendanceRepository: StandardProgramAttendanceRepository,
+    private val trainingProgramAttendanceRepository: TrainingProgramAttendanceRepository,
+    private val userClient: UserClient,
+    @Qualifier("userCircuitBreaker") private val userCircuitBreaker: CircuitBreaker,
 ) : FieldVisitService {
-    private val lockExecutor = GuardLockExecutor(transactionManager, locks)
+    private val lockExecutor = GuardLockExecutor(transactionManager, cancellationGuardRepository)
 
     override fun project(
         expoId: String,
@@ -54,7 +54,7 @@ class FieldVisitServiceImpl(
         request: ProjectFieldVisitReqDto,
     ) {
         locked(expoId, participantId, registrationId) {
-            val old = visits.find(registrationId)
+            val old = fieldVisitRepository.find(registrationId)
             if (old != null) {
                 checkIdentity(old, expoId, participantId, request.visitDate)
                 // 이전 세대 요청은 아무것도 바꾸지 않는다
@@ -66,13 +66,13 @@ class FieldVisitServiceImpl(
                     if (old.operationId == request.operationId && old.status != request.status) throw conflict()
                     // 취소 보호가 HELD인 동안 온 취소 projection은 commit보다 먼저 온 것이라 충돌이다(acquire → commit → projection 순서)
                     if (request.status == FieldVisitStatus.CANCELLED &&
-                        visits.guards(registrationId, old.generation).any { it.state == FieldVisitGuardState.HELD }
+                        fieldVisitRepository.guards(registrationId, old.generation).any { it.state == FieldVisitGuardState.HELD }
                     ) {
                         throw conflict()
                     }
                 }
             }
-            visits.save(
+            fieldVisitRepository.save(
                 FieldVisit(
                     registrationId,
                     expoId,
@@ -110,7 +110,7 @@ class FieldVisitServiceImpl(
             val visit = target(expoId, participantId, registrationId, request.visitDate)
             if (request.generation < visit.generation) return@locked
             if (request.generation != visit.generation) throw conflict()
-            val guards = visits.guards(registrationId, visit.generation)
+            val guards = fieldVisitRepository.guards(registrationId, visit.generation)
             val same = guards.find { it.operationId == operationId }
             if (same?.state == FieldVisitGuardState.ABORTED) throw conflict()
             if (guards.any { it.operationId != operationId && it.state != FieldVisitGuardState.ABORTED }) throw conflict()
@@ -119,7 +119,7 @@ class FieldVisitServiceImpl(
             if (trainee != null) lockExecutor.lockExclusive(CancellationGuardGate.traineeKey(expoId, trainee))
             val status = statusOf(visit, trainee)
             if (status.enteredOnVisitDate || status.programAttended || visit.status != FieldVisitStatus.ACTIVE) throw conflict()
-            visits.saveGuard(visit, operationId, FieldVisitGuardState.HELD, trainee)
+            fieldVisitRepository.saveGuard(visit, operationId, FieldVisitGuardState.HELD, trainee)
         }
     }
 
@@ -133,8 +133,8 @@ class FieldVisitServiceImpl(
         finishGuard(expoId, participantId, registrationId, operationId, request) { visit, guard ->
             if (guard == null || guard.state == FieldVisitGuardState.ABORTED) throw conflict()
             if (guard.state == FieldVisitGuardState.COMMITTED) return@finishGuard
-            visits.save(visit.copy(status = FieldVisitStatus.CANCELLED, operationId = operationId))
-            visits.saveGuard(visit, operationId, FieldVisitGuardState.COMMITTED, null)
+            fieldVisitRepository.save(visit.copy(status = FieldVisitStatus.CANCELLED, operationId = operationId))
+            fieldVisitRepository.saveGuard(visit, operationId, FieldVisitGuardState.COMMITTED, null)
         }
 
     override fun abort(
@@ -146,7 +146,7 @@ class FieldVisitServiceImpl(
     ) =
         finishGuard(expoId, participantId, registrationId, operationId, request) { visit, guard ->
             if (guard?.state == FieldVisitGuardState.COMMITTED) throw conflict()
-            visits.saveGuard(visit, operationId, FieldVisitGuardState.ABORTED, null)
+            fieldVisitRepository.saveGuard(visit, operationId, FieldVisitGuardState.ABORTED, null)
         }
 
     /**
@@ -165,7 +165,7 @@ class FieldVisitServiceImpl(
             val visit = target(expoId, participantId, registrationId, request.visitDate)
             if (request.generation < visit.generation) return@locked
             if (request.generation != visit.generation) throw conflict()
-            finish(visit, visits.guards(registrationId, request.generation).find { it.operationId == operationId })
+            finish(visit, fieldVisitRepository.guards(registrationId, request.generation).find { it.operationId == operationId })
         }
     }
 
@@ -175,8 +175,8 @@ class FieldVisitServiceImpl(
         phoneNumber: String,
     ): Long? {
         val status =
-            circuit.callService("유저", ExpectedException(HttpStatus.NOT_FOUND, "참가자를 찾지 못 했습니다.")) {
-                user.getCancellationStatus(CancellationStatusReqDto(expoId, phoneNumber, participantId))
+            userCircuitBreaker.callService("유저", ExpectedException(HttpStatus.NOT_FOUND, "참가자를 찾지 못 했습니다.")) {
+                userClient.getCancellationStatus(CancellationStatusReqDto(expoId, phoneNumber, participantId))
             }
         if (status.participantId != participantId) throw unavailable()
         return status.linkedTraineeId
@@ -187,23 +187,23 @@ class FieldVisitServiceImpl(
         trainee: Long?,
     ): FieldVisitCancellationResDto {
         val remote =
-            circuit.callService("유저") {
-                user.getEntryStatus(ParticipantEntryStatusReqDto(visit.expoId, visit.participantId, visit.visitDate))
+            userCircuitBreaker.callService("유저") {
+                userClient.getEntryStatus(ParticipantEntryStatusReqDto(visit.expoId, visit.participantId, visit.visitDate))
             }
         if (remote.participantId != visit.participantId || remote.attendanceDate != visit.visitDate) throw unavailable()
         val entered =
-            remote.entered || fence.entered(visit.expoId, visit.participantId, visit.visitDate) ||
-                entries.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(
+            remote.entered || fieldEntryFence.entered(visit.expoId, visit.participantId, visit.visitDate) ||
+                entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(
                     visit.expoId,
                     EntrySubjectType.STANDARD,
                     visit.participantId.toString(),
                     visit.visitDate,
                 ) != null
-        if (!entered && fence.pending(visit.expoId, visit.participantId, visit.visitDate)) throw unavailable()
+        if (!entered && fieldEntryFence.pending(visit.expoId, visit.participantId, visit.visitDate)) throw unavailable()
         val attended =
-            standard.existsByParticipantIdAndAttendanceDate(visit.participantId, visit.visitDate) ||
-                (trainee != null && training.existsByTraineeIdAndAttendanceDate(trainee, visit.visitDate))
-        val guards = visits.guards(visit.registrationId, visit.generation)
+            standardProgramAttendanceRepository.existsByParticipantIdAndAttendanceDate(visit.participantId, visit.visitDate) ||
+                (trainee != null && trainingProgramAttendanceRepository.existsByTraineeIdAndAttendanceDate(trainee, visit.visitDate))
+        val guards = fieldVisitRepository.guards(visit.registrationId, visit.generation)
         val state =
             when {
                 guards.any { it.state == FieldVisitGuardState.HELD } -> FieldVisitGuardState.HELD
@@ -228,7 +228,7 @@ class FieldVisitServiceImpl(
         registrationId: UUID,
         date: LocalDate,
     ): FieldVisit {
-        val visit = visits.find(registrationId) ?: throw ExpectedException(HttpStatus.NOT_FOUND, "등록을 찾지 못 했습니다.")
+        val visit = fieldVisitRepository.find(registrationId) ?: throw ExpectedException(HttpStatus.NOT_FOUND, "등록을 찾지 못 했습니다.")
         checkIdentity(visit, expoId, participantId, date)
         return visit
     }
@@ -250,8 +250,8 @@ class FieldVisitServiceImpl(
         block: () -> T,
     ): T =
         lockExecutor.execute(UNAVAILABLE) {
-            deletedExpos.lockExpo(expoId)
-            if (deletedExpos.existsById(expoId)) throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
+            deletedExpoRepository.lockExpo(expoId)
+            if (deletedExpoRepository.existsById(expoId)) throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
             lockExecutor.lockExclusive(CancellationGuardGate.participantKey(expoId, participantId))
             lockExecutor.lockExclusive(CancellationGuardGate.fieldVisitKey(registrationId))
             block()
