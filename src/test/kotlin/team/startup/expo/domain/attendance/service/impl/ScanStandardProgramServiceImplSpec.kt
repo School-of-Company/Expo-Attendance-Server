@@ -93,7 +93,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
     private fun givenHappyPath(result: ProgramAttendanceResult = ProgramAttendanceResult.ENTERED) {
         every { userClient.verifyStandardParticipant(any()) } just Runs
         every { userClient.getStandardParticipantNames(any()) } returns emptyList()
-        every { expoClient.getStandardProgram(expoId, programId) } returns StandardProgramResDto(programId, "프로그램")
+        every { expoClient.getStandardProgram(expoId, programId) } returns StandardProgramResDto(programId)
         every { expoClient.getPeriod(expoId) } returns ExpoPeriodResDto("2026-05-10", "2026-05-12")
         every { guardRepository.findByExpoIdAndParticipantId(any(), any()) } returns null
         every { applicationClient.checkStandardApplication(programId, participantId) } returns ProgramApplicationResDto(true)
@@ -309,7 +309,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
                 givenHappyPath()
                 // 시계는 한국 시간 12:07이다
                 every { expoClient.getStandardProgram(expoId, programId) } returns
-                    StandardProgramResDto(programId, "프로그램", "2026-05-10T14:00", "2026-05-10T15:00")
+                    StandardProgramResDto(programId, startedAt = "2026-05-10T14:00", endedAt = "2026-05-10T15:00")
                 every { recordService.record(any(), any(), any(), any(), any(), false) } returns ProgramAttendanceResult.ENTRY_NOT_ALLOWED
 
                 then("입실을 막도록 넘기고 400을 던진다") {
@@ -321,7 +321,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
             `when`("프로그램 일정 시간대 안이면") {
                 givenHappyPath()
                 every { expoClient.getStandardProgram(expoId, programId) } returns
-                    StandardProgramResDto(programId, "프로그램", "2026-05-10T12:00", "2026-05-10T13:00")
+                    StandardProgramResDto(programId, startedAt = "2026-05-10T12:00", endedAt = "2026-05-10T13:00")
 
                 then("입실을 허용하도록 넘긴다") {
                     shouldNotThrowAny { service().scan(programId, withCode) }

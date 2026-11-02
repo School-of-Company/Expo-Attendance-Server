@@ -303,7 +303,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
             }
 
             `when`("연수자가 스캔하면") {
-                every { userClient.resolveParticipant(any()) } returns ResolveParticipantResDto(77L, "TRAINEE")
+                every { userClient.resolveParticipant(any()) } returns ResolveParticipantResDto(77L)
                 every { userClient.getTraineeNames(any()) } returns listOf(TraineeNameResDto(77L, "김연수"))
                 every {
                     entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(

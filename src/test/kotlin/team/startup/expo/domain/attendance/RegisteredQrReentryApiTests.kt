@@ -106,7 +106,7 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
             .doThrow(feign(409))
             .`when`(userClient)
             .recordEntry(RecordEntryReqDto(EXPO, "TRAINEE", phoneNumber = PHONE))
-        doReturn(ResolveParticipantResDto(TRAINEE, "TRAINEE"))
+        doReturn(ResolveParticipantResDto(TRAINEE))
             .`when`(userClient)
             .resolveParticipant(ResolveParticipantReqDto(EXPO, PHONE, "TRAINEE"))
         doReturn(listOf(TraineeNameResDto(TRAINEE, "김연수")))
