@@ -12,6 +12,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.EntryRecord
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.repository.WalkInLogRepository
 import team.startup.expo.domain.attendance.service.EntryRecordsService
+import team.startup.expo.domain.attendance.support.EntryScope
 import team.startup.expo.domain.attendance.support.ExpoIdFormat
 import team.startup.expo.global.exception.ExpectedException
 import java.time.LocalDate
@@ -54,7 +55,7 @@ class EntryRecordsServiceImpl(
         val from = reqDto.from
         val to = reqDto.to
         if ((from == null) != (to == null)) throw ExpectedException(HttpStatus.BAD_REQUEST, "from과 to는 함께 보내야 합니다.")
-        if (from == null || to == null) return EARLIEST to LATEST
+        if (from == null || to == null) return EntryScope.EARLIEST to EntryScope.LATEST
         if (from.isAfter(to)) throw ExpectedException(HttpStatus.BAD_REQUEST, "from은 to보다 늦을 수 없습니다.")
         return from to to
     }
@@ -72,10 +73,5 @@ class EntryRecordsServiceImpl(
             paperCode = if (paper) row[5] as String? else null,
             scanner = row[6] as String?,
         )
-    }
-
-    private companion object {
-        val EARLIEST: LocalDate = LocalDate.of(2000, 1, 1)
-        val LATEST: LocalDate = LocalDate.of(2999, 12, 31)
     }
 }
