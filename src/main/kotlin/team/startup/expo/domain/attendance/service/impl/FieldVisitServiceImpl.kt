@@ -129,13 +129,12 @@ class FieldVisitServiceImpl(
         registrationId: UUID,
         operationId: UUID,
         request: FinishFieldVisitGuardReqDto,
-    ) =
-        finishGuard(expoId, participantId, registrationId, operationId, request) { visit, guard ->
-            if (guard == null || guard.state == FieldVisitGuardState.ABORTED) throw conflict()
-            if (guard.state == FieldVisitGuardState.COMMITTED) return@finishGuard
-            fieldVisitRepository.save(visit.copy(status = FieldVisitStatus.CANCELLED, operationId = operationId))
-            fieldVisitRepository.saveGuard(visit, operationId, FieldVisitGuardState.COMMITTED, null)
-        }
+    ) = finishGuard(expoId, participantId, registrationId, operationId, request) { visit, guard ->
+        if (guard == null || guard.state == FieldVisitGuardState.ABORTED) throw conflict()
+        if (guard.state == FieldVisitGuardState.COMMITTED) return@finishGuard
+        fieldVisitRepository.save(visit.copy(status = FieldVisitStatus.CANCELLED, operationId = operationId))
+        fieldVisitRepository.saveGuard(visit, operationId, FieldVisitGuardState.COMMITTED, null)
+    }
 
     override fun abort(
         expoId: String,
@@ -143,11 +142,10 @@ class FieldVisitServiceImpl(
         registrationId: UUID,
         operationId: UUID,
         request: FinishFieldVisitGuardReqDto,
-    ) =
-        finishGuard(expoId, participantId, registrationId, operationId, request) { visit, guard ->
-            if (guard?.state == FieldVisitGuardState.COMMITTED) throw conflict()
-            fieldVisitRepository.saveGuard(visit, operationId, FieldVisitGuardState.ABORTED, null)
-        }
+    ) = finishGuard(expoId, participantId, registrationId, operationId, request) { visit, guard ->
+        if (guard?.state == FieldVisitGuardState.COMMITTED) throw conflict()
+        fieldVisitRepository.saveGuard(visit, operationId, FieldVisitGuardState.ABORTED, null)
+    }
 
     /**
      * commit·abort의 공통 앞부분이다. 등록을 확인하고, 이전 세대 요청이면 아무것도 하지 않으며, 같은 세대면 이 작업의 보호(없으면 null)를
