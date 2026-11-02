@@ -17,6 +17,11 @@ import java.util.UUID
  * 기록을 마친다. 취소 검사는 같은 키의 배타 락을 잡아 진행 중인 스캔이 끝난 뒤에 보호를 걸고, 그 뒤의 스캔은 거절된다.
  * 서로 다른 사람의 스캔은 막지 않는다. 락을 기다리는 시간과 원격 호출 시간에 상한이 있어 DB 커넥션을 오래 쥐지 않는다.
  *
+ * [scanning]은 같은 트랜잭션에서 차례로 확인한 뒤 블록을 실행한다.
+ * 1. 참가자·연수자 취소 보호([checkGuard]): HELD면 409, COMMITTED는 그 날짜의 ACTIVE FIELD가 없으면 400이다.
+ * 2. 날짜별 현장 방문 취소 보류(`fieldVisits.held`, #204): 그 날짜의 참가자나 연결 연수자에 HELD 보호가 있으면 409다.
+ * 3. 오늘 입장 자격(`preregisterSessionValidator.checkToday`): 그 날짜의 ACTIVE FIELD나 ACTIVE PRE 회차가 없으면 400이다.
+ *
  * 다른 서비스를 부르는 동안 트랜잭션을 잡지 않는다는 이 서비스의 원칙의 예외이고, 이 관문 안에서만 그렇게 한다(#79).
  */
 @Component
@@ -39,35 +44,77 @@ class CancellationGuardGate(
         val date = attendanceDate ?: LocalDate.now(clock)
         return lockExecutor.execute("취소 처리와 겹쳐 잠시 후 다시 시도해 주세요.") {
             if (participantId != null) {
-                lockExecutor.lockShared(participantKey(expoId, participantId), GuardLockExecutor.WAIT_SCAN)
-                cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId)?.let {
-                    if (it.state == CancellationGuardState.HELD ||
-                        preregisterSessionValidator.activeField(expoId, participantId, date) == null
-                    ) {
-                        reject(it)
-                    }
-                }
+                checkGuard(
+                    expoId,
+                    participantKey(expoId, participantId),
+                    date,
+                    findGuard = { cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId) },
+                    guardedParticipantId = { participantId },
+                )
             }
             if (traineeId != null) {
-                lockExecutor.lockShared(traineeKey(expoId, traineeId), GuardLockExecutor.WAIT_SCAN)
-                cancellationGuardRepository.findByExpoIdAndTraineeId(expoId, traineeId)?.let {
-                    if (it.state == CancellationGuardState.HELD ||
-                        preregisterSessionValidator.activeField(expoId, it.participantId, date) == null
-                    ) {
-                        reject(it)
-                    }
-                }
+                checkGuard(
+                    expoId,
+                    traineeKey(expoId, traineeId),
+                    date,
+                    findGuard = { cancellationGuardRepository.findByExpoIdAndTraineeId(expoId, traineeId) },
+                    guardedParticipantId = { it.participantId },
+                )
             }
-            if (fieldVisits.held(expoId, participantId, traineeId, date)) {
-                throw ExpectedException(HttpStatus.CONFLICT, "신청 취소를 처리 중입니다.")
-            }
-            if (participantId != null) preregisterSessionValidator.checkToday(expoId, participantId, date)
-            if (participantId == null && traineeId != null) {
-                fieldVisits.linkedParticipants(expoId, traineeId, date).forEach {
-                    preregisterSessionValidator.checkToday(expoId, it, date)
-                }
-            }
+            checkFieldVisitHold(expoId, participantId, traineeId, date)
+            checkTodaySessions(expoId, participantId, traineeId, date)
             block()
+        }
+    }
+
+    /**
+     * [lockKey]의 공유 락을 잡은 뒤 취소 보호를 확인한다. 보호가 HELD이면 거절하고, COMMITTED여도 [date]의 ACTIVE FIELD가 없으면 거절한다.
+     * FIELD 확인 대상은 [guardedParticipantId]가 정한다(참가자 스캔은 그 참가자, 연수자 스캔은 보호를 건 참가자).
+     */
+    private fun checkGuard(
+        expoId: String,
+        lockKey: String,
+        date: LocalDate,
+        findGuard: () -> CancellationGuard?,
+        guardedParticipantId: (CancellationGuard) -> Long,
+    ) {
+        lockExecutor.lockShared(lockKey, GuardLockExecutor.WAIT_SCAN)
+        findGuard()?.let {
+            if (it.state == CancellationGuardState.HELD ||
+                preregisterSessionValidator.activeField(expoId, guardedParticipantId(it), date) == null
+            ) {
+                reject(it)
+            }
+        }
+    }
+
+    /** 날짜별 현장 방문 취소(#204)가 [date]의 참가자나 연결 연수자에 보호를 걸어 두었으면 거절한다. */
+    private fun checkFieldVisitHold(
+        expoId: String,
+        participantId: Long?,
+        traineeId: Long?,
+        date: LocalDate,
+    ) {
+        if (fieldVisits.held(expoId, participantId, traineeId, date)) {
+            throw ExpectedException(HttpStatus.CONFLICT, "신청 취소를 처리 중입니다.")
+        }
+    }
+
+    /**
+     * [date]의 입장 자격(그날 ACTIVE FIELD나 그날 시작하는 ACTIVE PRE 회차)을 확인하고, 없으면 400 "취소된 신청입니다."다(#204).
+     * 참가자 스캔은 그 참가자를, 참가자 없이 연수자만 스캔하면 그 날짜의 현장 방문 보호에 연결된 참가자들을 확인한다.
+     */
+    private fun checkTodaySessions(
+        expoId: String,
+        participantId: Long?,
+        traineeId: Long?,
+        date: LocalDate,
+    ) {
+        if (participantId != null) preregisterSessionValidator.checkToday(expoId, participantId, date)
+        if (participantId == null && traineeId != null) {
+            fieldVisits.linkedParticipants(expoId, traineeId, date).forEach {
+                preregisterSessionValidator.checkToday(expoId, it, date)
+            }
         }
     }
 
