@@ -3,6 +3,7 @@ package team.startup.expo.domain.qr.service.impl
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import team.startup.expo.domain.attendance.support.ExpoIdFormat
 import team.startup.expo.domain.qr.entity.QrToken
 import team.startup.expo.domain.qr.entity.QrTokenCode
 import team.startup.expo.domain.qr.presentation.dto.request.IssueQrTokensReqDto
@@ -31,11 +32,8 @@ class IssueQrTokensServiceImpl(
         expoId: String,
         reqDto: IssueQrTokensReqDto,
     ): IssueQrTokensResDto {
-        // 박람회 ID는 소문자 UUID다. 폼 서비스가 `resolve` 응답의 `expoId`를 UUID 모양으로 검증하므로 다른 값으로 발급하면
-        // 설문 단계에서 장애로 처리된다.
-        if (!EXPO_ID_PATTERN.matches(expoId)) {
-            throw ExpectedException(HttpStatus.BAD_REQUEST, "박람회 ID가 올바르지 않습니다.")
-        }
+        // 박람회 ID 형식(소문자 UUID)을 다른 관리 API와 같은 규칙으로 맞춘다
+        ExpoIdFormat.requireValid(expoId)
 
         // 삭제와 같은 락을 잡은 뒤에 삭제 기록을 확인해, 삭제된 박람회의 토큰이 되살아나지 않게 한다
         deletedExpoRepository.lockExpo(expoId)
@@ -76,6 +74,5 @@ class IssueQrTokensServiceImpl(
 
     private companion object {
         const val TOKEN_BYTES = 16
-        val EXPO_ID_PATTERN = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     }
 }

@@ -10,6 +10,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.WalkInCount
 import team.startup.expo.domain.attendance.presentation.dto.response.WalkInCountsResDto
 import team.startup.expo.domain.attendance.repository.WalkInLogRepository
 import team.startup.expo.domain.attendance.service.WalkInService
+import team.startup.expo.domain.attendance.support.ExpoIdFormat
 import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.support.ScannerName
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
@@ -33,7 +34,7 @@ class WalkInServiceImpl(
         reqDto: RecordWalkInReqDto,
         scannerName: String?,
     ): WalkInCountsResDto {
-        checkExpoId(expoId)
+        ExpoIdFormat.requireValid(expoId)
         val now = LocalDateTime.now(clock)
         val today = now.toLocalDate()
         checkPeriod(expoId, today)
@@ -64,7 +65,7 @@ class WalkInServiceImpl(
         expoId: String,
         date: LocalDate?,
     ): WalkInCountsResDto {
-        checkExpoId(expoId)
+        ExpoIdFormat.requireValid(expoId)
         val day = date ?: LocalDate.now(clock)
         return counts(expoId, day, day, day)
     }
@@ -74,7 +75,7 @@ class WalkInServiceImpl(
         from: LocalDate,
         to: LocalDate,
     ): WalkInCountsResDto {
-        checkExpoId(expoId)
+        ExpoIdFormat.requireValid(expoId)
         return counts(expoId, from, to, null)
     }
 
@@ -89,10 +90,6 @@ class WalkInServiceImpl(
         return WalkInCountsResDto(expoId, date, counts, counts.sumOf { it.count })
     }
 
-    private fun checkExpoId(expoId: String) {
-        if (!EXPO_ID_PATTERN.matches(expoId)) throw ExpectedException(HttpStatus.BAD_REQUEST, "박람회 ID가 올바르지 않습니다.")
-    }
-
     /** 박람회 서비스가 응답하지 못한 경우(503)에만 기간 확인을 건너뛰고, 박람회가 없거나(404) 진행 중이 아니면(400) 그대로 거부한다. */
     private fun checkPeriod(
         expoId: String,
@@ -103,9 +100,5 @@ class WalkInServiceImpl(
         } catch (e: ExpectedException) {
             if (e.status != HttpStatus.SERVICE_UNAVAILABLE) throw e
         }
-    }
-
-    private companion object {
-        val EXPO_ID_PATTERN = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     }
 }

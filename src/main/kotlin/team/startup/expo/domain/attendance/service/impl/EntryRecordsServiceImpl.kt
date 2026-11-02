@@ -12,6 +12,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.EntryRecord
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.repository.WalkInLogRepository
 import team.startup.expo.domain.attendance.service.EntryRecordsService
+import team.startup.expo.domain.attendance.support.ExpoIdFormat
 import team.startup.expo.global.exception.ExpectedException
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -26,7 +27,7 @@ class EntryRecordsServiceImpl(
         expoId: String,
         reqDto: EntryRecordsReqDto,
     ): EntryRecordsResDto {
-        if (!EXPO_ID_PATTERN.matches(expoId)) throw ExpectedException(HttpStatus.BAD_REQUEST, "박람회 ID가 올바르지 않습니다.")
+        ExpoIdFormat.requireValid(expoId)
         val (from, to) = resolveRange(reqDto)
         val total = entryLogRepository.countEvents(expoId, from, to)
         val records =
@@ -74,7 +75,6 @@ class EntryRecordsServiceImpl(
     }
 
     private companion object {
-        val EXPO_ID_PATTERN = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
         val EARLIEST: LocalDate = LocalDate.of(2000, 1, 1)
         val LATEST: LocalDate = LocalDate.of(2999, 12, 31)
     }
