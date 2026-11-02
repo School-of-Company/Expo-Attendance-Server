@@ -22,7 +22,7 @@ import tools.jackson.databind.ObjectMapper
  * 엔드포인트가 생기면 경로별 규칙을 여기에 더한다. API 문서 경로는 `swagger.enabled`가 켜져 있을 때만 `GET`을 연다.
  *
  * 박람회 입장·퇴장 스캔, 프로그램 출석 스캔, 종이 QR 입구 스캔은 게이트웨이를 거쳐 오는 요청이다. 토큰 검증은 게이트웨이가
- * 맡으므로 여기서는 경로만 열어 둔다. 관리자 전용 경로(`/qr-tokens/**`, `/walk-in-counts/**`, `/attendance/summary/**`)는
+ * 맡으므로 여기서는 경로만 열어 둔다. 관리자 전용 경로(`/qr-tokens`, `/walk-in-counts`, `/attendance/summary` 하위)는
  * 게이트웨이가 넘기는 `X-User-Role`이 `ROLE_ADMIN`일 때만 허용한다(`GatewayRoleAuthenticationFilter`).
  * 이 경로들은 게이트웨이 라우팅으로만 외부에 닿아야 한다.
  */
