@@ -51,8 +51,7 @@ class ScanExitServiceImpl(
             return toResponse(log, now)
         }
         // 갱신이 0건이면 오늘 입장 기록이 없거나 이미 퇴장한 것이다
-        val existing = findLog(expoId, type, subjectId, now) ?: throw ExpectedException(HttpStatus.BAD_REQUEST, "오늘 입장 기록이 없습니다.")
-        if (existing.exitedAt != null) throw ExpectedException(HttpStatus.BAD_REQUEST, "오늘 이미 퇴장 처리된 QR입니다.")
+        if (findLog(expoId, type, subjectId, now)?.exitedAt != null) throw ExpectedException(HttpStatus.BAD_REQUEST, "오늘 이미 퇴장 처리된 QR입니다.")
         throw ExpectedException(HttpStatus.BAD_REQUEST, "오늘 입장 기록이 없습니다.")
     }
 

@@ -74,13 +74,7 @@ class ScanQrTokenServiceImpl(
         }
         // 방금 같은 스캐너가 찍은 입장이면 타임아웃 뒤 재시도로 보고 직전 결과를 다시 돌려준다(#176). 아무것도 기록하지 않는다.
         // 없는 토큰과 무효화한 토큰은 위에서 이미 거절했다
-        val log =
-            entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(
-                expoId,
-                EntrySubjectType.PAPER_QR,
-                token,
-                today,
-            )
+        val log = todayLog(expoId, token, today)
         if (entryReplayPolicy.allows(log, now, scanner)) {
             return ScanQrTokenResDto(EntryStatus.FIRST, log!!.enteredAt.format(TimeFormat.HOUR_MINUTE))
         }
@@ -91,11 +85,13 @@ class ScanQrTokenServiceImpl(
         expoId: String,
         token: String,
         today: LocalDate,
-    ): String? =
-        entryLogRepository
-            .findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(expoId, EntrySubjectType.PAPER_QR, token, today)
-            ?.enteredAt
-            ?.format(TimeFormat.HOUR_MINUTE)
+    ): String? = todayLog(expoId, token, today)?.enteredAt?.format(TimeFormat.HOUR_MINUTE)
+
+    private fun todayLog(
+        expoId: String,
+        token: String,
+        today: LocalDate,
+    ) = entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(expoId, EntrySubjectType.PAPER_QR, token, today)
 
     /** 박람회 서비스가 응답하지 못한 경우(503)에만 확인을 미루고, 없음(404)이나 기간 밖(400)은 그대로 던진다. */
     private fun checkPeriod(
