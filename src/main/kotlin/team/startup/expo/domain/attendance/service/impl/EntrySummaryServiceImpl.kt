@@ -1,6 +1,5 @@
 package team.startup.expo.domain.attendance.service.impl
 
-import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.presentation.dto.request.EntrySummaryReqDto
@@ -14,7 +13,6 @@ import team.startup.expo.domain.attendance.service.EntrySummaryService
 import team.startup.expo.domain.attendance.service.WalkInService
 import team.startup.expo.domain.attendance.support.EntryScope
 import team.startup.expo.domain.attendance.support.NativeRows
-import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDateTime
 

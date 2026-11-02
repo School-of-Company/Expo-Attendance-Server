@@ -5,10 +5,6 @@ import org.springframework.http.HttpStatus
 import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResult
-import team.startup.expo.domain.attendance.support.CancellationGuardGate
-import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
-import team.startup.expo.domain.attendance.support.ProgramAttendanceResult
-import team.startup.expo.domain.attendance.support.RecordProgramAttendanceService
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
