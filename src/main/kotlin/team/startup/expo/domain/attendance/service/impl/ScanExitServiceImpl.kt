@@ -12,6 +12,7 @@ import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.ScanExitService
 import team.startup.expo.domain.attendance.support.EntryLogWriter
 import team.startup.expo.domain.attendance.support.ScannerName
+import team.startup.expo.domain.attendance.support.TimeFormat
 import team.startup.expo.domain.qr.repository.QrTokenRepository
 import team.startup.expo.domain.qr.support.FieldQrCode
 import team.startup.expo.global.client.callService
@@ -22,7 +23,6 @@ import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 /**
  * 퇴장 스캔. 입장과 달리 기간이나 회차를 확인하지 않는다(입장 때 이미 확인했고, 퇴장은 박람회 서비스가 응답하지 못해도 입구를 막지 않는다).
@@ -51,8 +51,7 @@ class ScanExitServiceImpl(
             return toResponse(log, now)
         }
         // 갱신이 0건이면 오늘 입장 기록이 없거나 이미 퇴장한 것이다
-        val existing = findLog(expoId, type, subjectId, now) ?: throw ExpectedException(HttpStatus.BAD_REQUEST, "오늘 입장 기록이 없습니다.")
-        if (existing.exitedAt != null) throw ExpectedException(HttpStatus.BAD_REQUEST, "오늘 이미 퇴장 처리된 QR입니다.")
+        if (findLog(expoId, type, subjectId, now)?.exitedAt != null) throw ExpectedException(HttpStatus.BAD_REQUEST, "오늘 이미 퇴장 처리된 QR입니다.")
         throw ExpectedException(HttpStatus.BAD_REQUEST, "오늘 입장 기록이 없습니다.")
     }
 
@@ -106,13 +105,9 @@ class ScanExitServiceImpl(
         val exited = log.exitedAt ?: now
         return ScanExitResDto(
             subjectType = log.subjectType,
-            enteredTime = log.enteredAt.format(TIME),
-            exitedTime = exited.format(TIME),
+            enteredTime = log.enteredAt.format(TimeFormat.HOUR_MINUTE),
+            exitedTime = exited.format(TimeFormat.HOUR_MINUTE),
             stayedMinutes = Duration.between(log.enteredAt, exited).toMinutes(),
         )
-    }
-
-    private companion object {
-        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }

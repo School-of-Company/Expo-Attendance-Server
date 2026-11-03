@@ -5,16 +5,11 @@ import org.springframework.http.HttpStatus
 import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResult
-import team.startup.expo.domain.attendance.support.CancellationGuardGate
-import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
-import team.startup.expo.domain.attendance.support.ProgramAttendanceResult
-import team.startup.expo.domain.attendance.support.RecordProgramAttendanceService
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 /**
@@ -113,11 +108,7 @@ abstract class AbstractProgramScanService<P>(
         return ProgramScanResDto(
             result = scanResult,
             name = resolveName(expoId, personId),
-            time = if (scanResult == ProgramScanResult.UNCHANGED) null else now.format(TIME),
+            time = if (scanResult == ProgramScanResult.UNCHANGED) null else now.format(TimeFormat.HOUR_MINUTE),
         )
-    }
-
-    private companion object {
-        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }

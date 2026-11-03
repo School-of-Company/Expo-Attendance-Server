@@ -11,6 +11,7 @@ import team.startup.expo.domain.attendance.repository.PreregisterSessionReposito
 import team.startup.expo.domain.attendance.service.CancellationGuardService
 import team.startup.expo.domain.attendance.service.PreregisterSessionService
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
+import team.startup.expo.domain.qr.support.lockAndRequireAlive
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDateTime
@@ -29,10 +30,7 @@ class PreregisterSessionServiceImpl(
         reqDto: AssignPreregisterSessionReqDto,
     ) {
         // 삭제와 같은 락을 잡은 뒤에 삭제 기록을 확인해, 삭제된 박람회의 기록이 되살아나지 않게 한다
-        deletedExpoRepository.lockExpo(expoId)
-        if (deletedExpoRepository.existsById(expoId)) {
-            throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
-        }
+        deletedExpoRepository.lockAndRequireAlive(expoId)
         val now = LocalDateTime.now(clock)
         val sessionId = reqDto.sessionId
         val revision = reqDto.revision
@@ -62,10 +60,7 @@ class PreregisterSessionServiceImpl(
         participantId: Long,
         reqDto: FieldRegisterPreregisterSessionReqDto,
     ) {
-        deletedExpoRepository.lockExpo(expoId)
-        if (deletedExpoRepository.existsById(expoId)) {
-            throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
-        }
+        deletedExpoRepository.lockAndRequireAlive(expoId)
         preregisterSessionRepository.fieldRegisterIfNewer(expoId, participantId, reqDto.revision, LocalDateTime.now(clock))
         cancellationGuardService.releaseCommitted(expoId, participantId, reqDto.revision)
     }

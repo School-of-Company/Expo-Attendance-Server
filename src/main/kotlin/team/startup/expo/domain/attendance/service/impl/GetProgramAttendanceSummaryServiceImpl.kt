@@ -8,8 +8,8 @@ import team.startup.expo.domain.attendance.presentation.dto.response.ProgramAtte
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
 import team.startup.expo.domain.attendance.service.GetProgramAttendanceSummaryService
+import team.startup.expo.domain.attendance.support.TimeFormat
 import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 
 @Service
 class GetProgramAttendanceSummaryServiceImpl(
@@ -27,8 +27,8 @@ class GetProgramAttendanceSummaryServiceImpl(
                 programType = ref.programType,
                 programId = ref.programId,
                 attendeeCount = row?.count ?: 0,
-                firstEntryTime = row?.first?.format(TIME_FORMAT),
-                lastEntryTime = row?.last?.format(TIME_FORMAT),
+                firstEntryTime = row?.first?.format(TimeFormat.HOUR_MINUTE),
+                lastEntryTime = row?.last?.format(TimeFormat.HOUR_MINUTE),
             )
         }
     }
@@ -45,9 +45,5 @@ class GetProgramAttendanceSummaryServiceImpl(
     ): Map<Long, Row> {
         if (programIds.isEmpty()) return emptyMap()
         return query(programIds).associate { Pair(it[0] as Long, Row(it[1] as Long, it[2] as LocalTime, it[3] as LocalTime)) }
-    }
-
-    private companion object {
-        val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }

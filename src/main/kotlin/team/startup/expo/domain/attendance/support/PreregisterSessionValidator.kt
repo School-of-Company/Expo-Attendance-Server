@@ -101,7 +101,7 @@ class PreregisterSessionValidator(
 
         val today = LocalDate.now(clock)
         val todaySessions = sessions.filter { it.startedAt.atZone(clock.zone).toLocalDate() == today }
-        if (todaySessions.isNotEmpty() && occupation() in ALL_DAY_OCCUPATIONS) {
+        if (todaySessions.isNotEmpty() && TeacherOccupation.matches(occupation())) {
             return todaySessions.minWith(compareBy<Window>({ it.startedAt }, { it.sessionId })).sessionId
         }
 
@@ -150,7 +150,7 @@ class PreregisterSessionValidator(
     private fun todaySessions(
         expoId: String,
         records: List<PreregisterSession>,
-        attendanceDate: LocalDate = LocalDate.now(clock),
+        attendanceDate: LocalDate,
     ) = activeSessionIds(records)
         .map { sessionId -> session(expoId, sessionId) }
         .filter { it.startedAt.atZone(clock.zone).toLocalDate() == attendanceDate }
@@ -162,11 +162,6 @@ class PreregisterSessionValidator(
     ): PreregisterSessionResDto =
         expoProjection.preregisterSession(expoId, sessionId)
             ?: expoCircuitBreaker.callService("박람회") { expoClient.getPreregisterSession(expoId, sessionId) }
-
-    private companion object {
-        // 신청 회차 시간과 관계없이 당일 입장하는 직업(#283)
-        val ALL_DAY_OCCUPATIONS = setOf("TEACHER", "PRE_SERVICE_TEACHER")
-    }
 
     private data class Window(
         val sessionId: Long,
