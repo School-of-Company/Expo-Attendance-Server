@@ -293,7 +293,11 @@ class InternalEntryRecordsApiTests : IntegrationTestSupport() {
             .andExpect(status().isUnauthorized)
     }
 
-    private fun json(result: ResultActions): String = result.andExpect(status().isOk).andReturn().response.contentAsString
+    private fun json(result: ResultActions): String =
+        result
+            .andExpect(status().isOk)
+            .andReturn()
+            .response.contentAsString
 
     private fun subjectIds(json: String): List<Int> =
         Regex("\"subjectId\":(\\d+)")
