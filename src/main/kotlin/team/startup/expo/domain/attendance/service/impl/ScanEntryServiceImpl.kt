@@ -113,8 +113,12 @@ class ScanEntryServiceImpl(
             val subjectType = if (it.participationType == TRAINEE) EntrySubjectType.TRAINEE else EntrySubjectType.STANDARD
             recordEntryLog(expoId, subjectType, it.id, scannerName, now)
         }
-        // 기록 응답을 잃었지만 유저 서비스에 입장이 확인된 참가자도 정상 첫 입장처럼 로그를 남긴다(#287)
-        scanned.recoveredParticipantId?.let { recordEntryLog(expoId, EntrySubjectType.STANDARD, it, scannerName, now) }
+        // 기록 응답을 잃었지만 유저 서비스에 입장이 확인된 참가자도 정상 첫 입장처럼 로그를 남긴다(#287).
+        // 이름 조회는 락 밖에서 한다. User가 느린 바로 그때 락 트랜잭션이 커넥션을 더 오래 쥐지 않게 한다.
+        scanned.recoveredParticipantId?.let {
+            recordEntryLog(expoId, EntrySubjectType.STANDARD, it, scannerName, now)
+            return restoredResponse(reqDto, it, lookupName(expoId, reqDto, it, isTrainee = false), now)
+        }
         return scanned.response ?: toResponse(requireNotNull(scanned.entry), now.format(TIME))
     }
 
@@ -162,14 +166,16 @@ class ScanEntryServiceImpl(
             attempt?.let { fieldEntryFence.finish(it, true) }
             Scanned(response = reenterResponse(expoId, reqDto, participantId, now, scanner))
         } catch (_: EntryOutcomeUnknown) {
-            // 유저 서비스가 기록했는지 모른다. 오늘 입장이 기록돼 있지 않거나 확인하지 못하면 지금처럼 503이고 fence는 PENDING으로 남는다
+            // 유저 서비스가 기록했는지 모른다. 오늘 입장이 기록돼 있지 않거나 확인하지 못하면 지금처럼 503이고 fence는 PENDING으로 남는다.
+            // entry-status는 회차를 구분하지 않으므로, 오늘 입장 로그가 이미 있으면(다른 회차로 먼저 입장) 이번 회차가 기록됐는지 알 수 없어
+            // 묻지 않고 503이다. 다시 찍으면 기록되었으면 409 경로, 아니면 새로 기록된다.
             val id = requireNotNull(participantId)
-            if (!enteredToday(expoId, id, now.toLocalDate())) {
+            val today = now.toLocalDate()
+            if (findTodayLog(expoId, EntrySubjectType.STANDARD, id, today) != null || !enteredToday(expoId, id, today)) {
                 throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.")
             }
             attempt?.let { fieldEntryFence.finish(it, true) }
-            val response = restoredResponse(reqDto, id, lookupName(expoId, reqDto, id, isTrainee = false), now)
-            Scanned(response = response, recoveredParticipantId = id)
+            Scanned(recoveredParticipantId = id)
         } catch (e: ExpectedException) {
             if (e.status == HttpStatus.NOT_FOUND || e.status == HttpStatus.BAD_REQUEST) {
                 attempt?.let { fieldEntryFence.finish(it, false) }
@@ -422,7 +428,8 @@ class ScanEntryServiceImpl(
 
     /**
      * 스캔 한 번의 결과. 처음 입장은 유저 서비스의 [entry]가, 재입장은 이 서비스가 만든 [response]가 있다.
-     * [recoveredParticipantId]는 결과를 모르던 기록을 유저 서비스에서 확인한 참가자로, 처음 입장처럼 입장 로그를 남긴다(#287).
+     * [recoveredParticipantId]는 결과를 모르던 기록을 유저 서비스에서 확인한 참가자로, 처음 입장처럼 입장 로그를 남기고
+     * 락 밖에서 이름을 읽어 응답을 만든다(#287).
      */
     private class Scanned(
         val entry: RecordEntryResDto? = null,
