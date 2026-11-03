@@ -204,16 +204,17 @@ class EntryStatsApiTests : IntegrationTestSupport() {
             listOf("23:04", "23:03", "23:02", "23:01", "23:00", "22:53", "22:52")
     }
 
-    private fun recentTimes(query: String): List<String> =
-        Regex("\"at\":\"([^\"]+)\"")
-            .findAll(
-                recent(query)
-                    .andExpect(status().isOk)
-                    .andReturn()
-                    .response.contentAsString,
-            )
+    private fun recentTimes(query: String): List<String> {
+        val body =
+            recent(query)
+                .andExpect(status().isOk)
+                .andReturn()
+                .response.contentAsString
+        return Regex("\"at\":\"([^\"]+)\"")
+            .findAll(body)
             .map { it.groupValues[1] }
             .toList()
+    }
 
     @Test
     fun `간편입장 취소는 최근 기록에 CANCEL로 남는다`() {
