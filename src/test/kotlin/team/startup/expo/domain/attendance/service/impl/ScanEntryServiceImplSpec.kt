@@ -27,9 +27,11 @@ import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.support.CancellationGuardGate
 import team.startup.expo.domain.attendance.support.EntryLogWriter
 import team.startup.expo.domain.attendance.support.EntryReplayPolicy
+import team.startup.expo.domain.attendance.support.EntryUserGateway
 import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
 import team.startup.expo.domain.attendance.support.FieldEntryFence
 import team.startup.expo.domain.attendance.support.PreregisterSessionValidator
+import team.startup.expo.domain.attendance.support.RepeatEntryResolver
 import team.startup.expo.global.client.user.EntryCardsReqDto
 import team.startup.expo.global.client.user.EntryCardsResDto
 import team.startup.expo.global.client.user.ParticipantEntryStatusResDto
@@ -55,6 +57,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
     override fun isolationMode() = IsolationMode.InstancePerLeaf
 
     private val userClient = mockk<UserClient>()
+    private val users = EntryUserGateway(userClient, UnitTestSupport.circuitBreaker("user"))
     private val expoPeriodValidator = mockk<ExpoPeriodValidator>()
     private val preregisterSessionValidator = mockk<PreregisterSessionValidator>()
     private val guardRepository = mockk<CancellationGuardRepository>(relaxed = true)
@@ -67,8 +70,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
 
     private val service =
         ScanEntryServiceImpl(
-            userClient,
-            UnitTestSupport.circuitBreaker("user"),
+            users,
             expoPeriodValidator,
             preregisterSessionValidator,
             CancellationGuardGate(
@@ -80,9 +82,12 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 UnitTestSupport.scanLimiter(),
             ),
             entryLogService,
-            entryLogRepository,
-            EntryLogWriter(entryLogRepository),
-            EntryReplayPolicy(EntryReplayProperties(windowSeconds = 30)),
+            RepeatEntryResolver(
+                entryLogRepository,
+                EntryLogWriter(entryLogRepository),
+                EntryReplayPolicy(EntryReplayProperties(windowSeconds = 30)),
+                users,
+            ),
             clock,
             fieldFence,
         )
