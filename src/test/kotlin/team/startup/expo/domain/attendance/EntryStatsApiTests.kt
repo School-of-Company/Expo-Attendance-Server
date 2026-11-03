@@ -206,7 +206,12 @@ class EntryStatsApiTests : IntegrationTestSupport() {
 
     private fun recentTimes(query: String): List<String> =
         Regex("\"at\":\"([^\"]+)\"")
-            .findAll(recent(query).andExpect(status().isOk).andReturn().response.contentAsString)
+            .findAll(
+                recent(query)
+                    .andExpect(status().isOk)
+                    .andReturn()
+                    .response.contentAsString,
+            )
             .map { it.groupValues[1] }
             .toList()
 
