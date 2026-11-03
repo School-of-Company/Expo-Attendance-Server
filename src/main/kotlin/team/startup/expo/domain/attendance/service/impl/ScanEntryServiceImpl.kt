@@ -111,20 +111,40 @@ class ScanEntryServiceImpl(
         // 재입장은 입장 로그가 이미 있다. 처음 입장만, 퇴장 기록과 집계를 위한 입장 로그를 남긴다. 입장은 이미 기록되었으므로 로그 실패가 입장을 막지 않는다(#120)
         scanned.entry?.let {
             val subjectType = if (it.participationType == TRAINEE) EntrySubjectType.TRAINEE else EntrySubjectType.STANDARD
-            entryLogService.recordEntry(
-                expoId,
-                subjectType,
-                it.id.toString(),
-                scannerName = scannerName,
-                enteredAt = now.takeIf { subjectType == EntrySubjectType.STANDARD },
-            )
+            recordEntryLog(expoId, subjectType, it.id, scannerName, now)
+        }
+        // 기록 응답을 잃었지만 유저 서비스에 입장이 확인된 참가자도 정상 첫 입장처럼 로그를 남긴다(#287).
+        // 이름 조회는 락 밖에서 한다. User가 느린 바로 그때 락 트랜잭션이 커넥션을 더 오래 쥐지 않게 한다.
+        scanned.recoveredParticipantId?.let {
+            recordEntryLog(expoId, EntrySubjectType.STANDARD, it, scannerName, now)
+            return restoredResponse(reqDto, it, lookupName(expoId, reqDto, it, isTrainee = false), now)
         }
         return scanned.response ?: toResponse(requireNotNull(scanned.entry), now.format(TIME))
     }
 
+    private fun recordEntryLog(
+        expoId: String,
+        subjectType: EntrySubjectType,
+        subjectId: Long,
+        scannerName: String?,
+        now: LocalDateTime,
+    ) {
+        entryLogService.recordEntry(
+            expoId,
+            subjectType,
+            subjectId.toString(),
+            scannerName = scannerName,
+            enteredAt = now.takeIf { subjectType == EntrySubjectType.STANDARD },
+        )
+    }
+
     /**
      * 유저 서비스에 입장을 기록한다. 오늘 이미 입장했다고(409) 답하면, 오늘 입장 로그에 퇴장 기록이 있을 때만 재입장으로 처리하고
-     * 퇴장 없이 다시 찍은 것은 400이다(#148). 유저 서비스의 409는 참가자 정보를 주지 않으므로 재입장 응답은 [reenterResponse]가 만든다.
+     * 퇴장 없이 다시 찍은 것은 400이다(#148). 오늘 입장 로그가 없으면 빠진 로그를 채우고 첫 입장으로 응답한다(#287).
+     * 유저 서비스의 409는 참가자 정보를 주지 않으므로 이 응답들은 [reenterResponse]가 만든다.
+     *
+     * 일반 참가자의 기록 호출이 타임아웃처럼 결과를 모르게 끝나면 유저 서비스에 오늘 입장 여부를 한 번 묻고, 기록돼 있으면 첫 입장으로
+     * 마무리한다(#287). 연수자는 입장 여부를 물을 계약이 없어 지금처럼 503이다.
      */
     private fun recordOrReenter(
         expoId: String,
@@ -140,17 +160,22 @@ class ScanEntryServiceImpl(
             attempt?.let { fieldEntryFence.finish(it, true) }
             Scanned(entry = entry, response = toResponse(entry, now.format(TIME)))
         } catch (_: AlreadyEnteredToday) {
-            if (participantId != null) {
-                val status =
-                    userCircuitBreaker.callService("유저") {
-                        userClient.getEntryStatus(ParticipantEntryStatusReqDto(expoId, participantId, now.toLocalDate()))
-                    }
-                if (status.participantId != participantId || status.attendanceDate != now.toLocalDate() || !status.entered) {
-                    throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "입장 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.")
-                }
+            if (participantId != null && !enteredToday(expoId, participantId, now.toLocalDate())) {
+                throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "입장 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.")
             }
             attempt?.let { fieldEntryFence.finish(it, true) }
             Scanned(response = reenterResponse(expoId, reqDto, participantId, now, scanner))
+        } catch (_: EntryOutcomeUnknown) {
+            // 유저 서비스가 기록했는지 모른다. 오늘 입장이 기록돼 있지 않거나 확인하지 못하면 지금처럼 503이고 fence는 PENDING으로 남는다.
+            // entry-status는 회차를 구분하지 않으므로, 오늘 입장 로그가 이미 있으면(다른 회차로 먼저 입장) 이번 회차가 기록됐는지 알 수 없어
+            // 묻지 않고 503이다. 다시 찍으면 기록되었으면 409 경로, 아니면 새로 기록된다.
+            val id = requireNotNull(participantId)
+            val today = now.toLocalDate()
+            if (findTodayLog(expoId, EntrySubjectType.STANDARD, id, today) != null || !enteredToday(expoId, id, today)) {
+                throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.")
+            }
+            attempt?.let { fieldEntryFence.finish(it, true) }
+            Scanned(recoveredParticipantId = id)
         } catch (e: ExpectedException) {
             if (e.status == HttpStatus.NOT_FOUND || e.status == HttpStatus.BAD_REQUEST) {
                 attempt?.let { fieldEntryFence.finish(it, false) }
@@ -176,12 +201,18 @@ class ScanEntryServiceImpl(
                     ).participantId
             }
         val today = now.toLocalDate()
-        val log =
-            entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(expoId, subjectType, subjectId.toString(), today)
-        // 입장 로그가 없거나(로그 도입 전 입장, 로그 유실) 퇴장하지 않았으면 재입장이 아니다
-        if (log?.exitedAt == null) {
+        var log = findTodayLog(expoId, subjectType, subjectId, today)
+        if (log == null) {
+            fillMissingLog(expoId, reqDto, subjectType, subjectId, isTrainee, now, scanner)?.let { return it }
+            // 같은 사람을 동시에 찍은 다른 스캔이 먼저 채웠다. 그 로그로 아래 규칙을 따른다
+            log = findTodayLog(expoId, subjectType, subjectId, today) ?: throw alreadyEntered()
+        }
+        // 퇴장하지 않았으면 재입장이 아니다
+        if (log.exitedAt == null) {
             // 방금 같은 스캐너가 찍은 입장이면 타임아웃 뒤 재시도로 보고 직전 결과를 다시 돌려준다(#176). 아무것도 기록하지 않는다
-            if (entryReplayPolicy.allows(log, now, scanner)) return replayResponse(expoId, reqDto, subjectId, isTrainee, log!!)
+            if (entryReplayPolicy.allows(log, now, scanner)) {
+                return restoredResponse(reqDto, subjectId, lookupName(expoId, reqDto, subjectId, isTrainee), log.enteredAt)
+            }
             throw alreadyEntered()
         }
 
@@ -201,26 +232,66 @@ class ScanEntryServiceImpl(
         )
     }
 
+    private fun findTodayLog(
+        expoId: String,
+        subjectType: EntrySubjectType,
+        subjectId: Long,
+        today: LocalDate,
+    ): EntryLog? =
+        entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(expoId, subjectType, subjectId.toString(), today)
+
     /**
-     * 재생 응답. 입장 응답처럼 `FIRST`와 최초 입장 시각을 돌려주지만, 유저 서비스의 409는 참가자 정보를 주지 않으므로 재입장 응답처럼
-     * 이름 외 정보(개인정보 동의 상태, 명찰)는 비어 있다.
+     * 유저 서비스는 오늘 입장을 기록했는데(409) 오늘 입장 로그가 없으면(기록 응답을 잃었거나 로그를 남기지 못함, 로그 도입 전 입장)
+     * 빠진 로그와 입장 이력(`ENTER`)을 지금 시각으로 채우고 첫 입장 응답을 돌려준다(#287). 유저 서비스는 입장 시각을 주지 않는다.
+     * 같은 사람을 동시에 찍어 다른 스캔이 먼저 채웠으면 `null`이고, 호출하는 쪽이 그 로그로 기존 규칙(재생, 400)을 따른다.
+     * 이름을 먼저 읽어, 조회가 실패하면 로그를 남기지 않고 실패한다(다시 찍으면 다시 채운다).
      */
-    private fun replayResponse(
+    private fun fillMissingLog(
         expoId: String,
         reqDto: ScanEntryReqDto,
+        subjectType: EntrySubjectType,
         subjectId: Long,
         isTrainee: Boolean,
-        log: EntryLog,
+        now: LocalDateTime,
+        scanner: String?,
+    ): ScanEntryResDto? {
+        val name = lookupName(expoId, reqDto, subjectId, isTrainee)
+        val inserted = entryLogWriter.insertIfAbsent(expoId, subjectType.name, subjectId.toString(), now.toLocalDate(), now, null, scanner)
+        return if (inserted == 1) restoredResponse(reqDto, subjectId, name, now) else null
+    }
+
+    /**
+     * 유저 서비스가 참가자 정보를 주지 않은 첫 입장 응답(재생, 빠진 로그 채움, 결과를 모르던 기록의 복구). 입장 응답처럼 `FIRST`와
+     * 최초 입장 시각을 돌려주지만, 재입장 응답처럼 이름 외 정보(개인정보 동의 상태, 명찰, 명찰 출력)는 비어 있다.
+     */
+    private fun restoredResponse(
+        reqDto: ScanEntryReqDto,
+        subjectId: Long,
+        name: String,
+        firstEnteredAt: LocalDateTime,
     ) = ScanEntryResDto(
         id = subjectId,
-        name = lookupName(expoId, reqDto, subjectId, isTrainee),
+        name = name,
         phoneNumber = reqDto.phoneNumber?.takeIf { reqDto.participantId == null },
         personalInformationStatus = null,
         participationType = reqDto.authority.participationType,
         badge = null,
         entryStatus = EntryStatus.FIRST,
-        firstEnteredTime = log.enteredAt.format(TIME),
+        firstEnteredTime = firstEnteredAt.format(TIME),
     )
+
+    /** 유저 서비스에 이 참가자의 그날 입장이 기록돼 있는지 묻는다. 응답이 다른 참가자·날짜를 가리키면 기록되지 않은 것으로 본다. */
+    private fun enteredToday(
+        expoId: String,
+        participantId: Long,
+        date: LocalDate,
+    ): Boolean {
+        val status =
+            userCircuitBreaker.callService("유저") {
+                userClient.getEntryStatus(ParticipantEntryStatusReqDto(expoId, participantId, date))
+            }
+        return status.participantId == participantId && status.attendanceDate == date && status.entered
+    }
 
     private fun lookupName(
         expoId: String,
@@ -285,6 +356,7 @@ class ScanEntryServiceImpl(
             "유저",
             participantNotFound(reqDto),
             onConflict = { throw AlreadyEnteredToday() },
+            onOutcomeUnknown = OUTCOME_UNKNOWN.takeIf { participantId != null },
         ) { userClient.recordEntry(request) }
     }
 
@@ -354,17 +426,26 @@ class ScanEntryServiceImpl(
         )
     }
 
-    /** 스캔 한 번의 결과. 처음 입장은 유저 서비스의 [entry]가, 재입장은 이 서비스가 만든 [response]가 있다. */
+    /**
+     * 스캔 한 번의 결과. 처음 입장은 유저 서비스의 [entry]가, 재입장은 이 서비스가 만든 [response]가 있다.
+     * [recoveredParticipantId]는 결과를 모르던 기록을 유저 서비스에서 확인한 참가자로, 처음 입장처럼 입장 로그를 남기고
+     * 락 밖에서 이름을 읽어 응답을 만든다(#287).
+     */
     private class Scanned(
         val entry: RecordEntryResDto? = null,
         val response: ScanEntryResDto? = null,
+        val recoveredParticipantId: Long? = null,
     )
 
     /** 유저 서비스가 409로 답한 것을 재입장 판정으로 넘기는 내부 신호다. 밖으로 나가지 않는다. */
     private class AlreadyEnteredToday : RuntimeException(null, null, false, false)
 
+    /** 입장 기록 호출이 타임아웃처럼 결과를 모르게 끝난 것을 확인 조회로 넘기는 내부 신호다(#287). 밖으로 나가지 않는다. */
+    private class EntryOutcomeUnknown : RuntimeException(null, null, false, false)
+
     private companion object {
         const val TRAINEE = "TRAINEE"
+        val OUTCOME_UNKNOWN: () -> Nothing = { throw EntryOutcomeUnknown() }
         val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }

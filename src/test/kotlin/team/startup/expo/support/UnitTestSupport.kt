@@ -3,6 +3,8 @@ package team.startup.expo.support
 import feign.FeignException
 import feign.Request
 import feign.RequestTemplate
+import feign.RetryableException
+import feign.codec.DecodeException
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
@@ -19,6 +21,8 @@ import team.startup.expo.global.config.ExpoProjectionProperties
 import team.startup.expo.global.config.PreregisterSessionCacheProperties
 import team.startup.expo.global.config.ScanConcurrencyProperties
 import team.startup.expo.global.exception.ExpectedException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -59,6 +63,20 @@ object UnitTestSupport {
     fun feignConflict(): FeignException = FeignException.Conflict("conflict", request(), null, emptyMap())
 
     fun feignServerError(): FeignException = FeignException.InternalServerError("error", request(), null, emptyMap())
+
+    /** 응답을 받기 전에 끊긴 호출(읽기 타임아웃). Feign은 입출력 오류를 상태 없는 [RetryableException]으로 던진다. */
+    fun feignReadTimeout(): FeignException = retryable(SocketTimeoutException("Read timed out"))
+
+    /** 연결이 거부되어 요청이 나가지 않은 호출. */
+    fun feignConnectRefused(): FeignException = retryable(ConnectException("Connection refused"))
+
+    /** 응답(200)은 받았지만 해석하지 못한 호출. */
+    fun feignDecodeError(): FeignException = DecodeException(200, "decode", request())
+
+    private fun retryable(cause: Throwable): FeignException {
+        val retryAfter: Long? = null
+        return RetryableException(-1, "io", Request.HttpMethod.POST, cause, retryAfter, request())
+    }
 }
 
 /** [block]이 [status]와 [message]의 [ExpectedException]을 던지는지 확인한다. */

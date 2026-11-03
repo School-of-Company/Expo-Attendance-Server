@@ -1,5 +1,6 @@
 package team.startup.expo.domain.attendance.service.impl
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.kotest.core.spec.IsolationMode
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -100,6 +101,19 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
         badgePrintJobId: Long? = null,
     ) = RecordEntryResDto(id, "홍길동", phone, true, type, occupation, "한빛중", badgePrint, badgePrintJobId)
 
+    private fun stubTodayLog() =
+        every { entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(expoId, EntrySubjectType.STANDARD, "55", today) }
+
+    /** 재생 구간을 한참 지난, 퇴장하지 않은 오늘 입장 로그. */
+    private fun oldLog() =
+        EntryLog(
+            expoId = expoId,
+            subjectType = EntrySubjectType.STANDARD,
+            subjectId = "55",
+            attendanceDate = today,
+            enteredAt = today.atTime(1, 0),
+        )
+
     private fun givenPeriodOk() {
         every { userClient.getEntryStatus(any()) } answers { ParticipantEntryStatusResDto(55L, today, true) }
         every { expoPeriodValidator.checkInProgress(expoId, today) } just Runs
@@ -196,14 +210,16 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                     }
                 }
             }
-            `when`("User 409 뒤 entry-status가 오늘 첫입장을 확인하면 오늘 로그가 없어도") {
+            `when`("User 409 뒤 entry-status가 오늘 첫입장을 확인하고 오늘 로그가 없으면(#287)") {
                 every { userClient.recordEntry(any()) } throws UnitTestSupport.feignConflict()
-                then("이미 기록된 첫입장은 취소 권위로 남기고 중복 입장 응답은 거절한다") {
-                    io.kotest.assertions.throwables
-                        .shouldThrow<ExpectedException> { service.scan(expoId, codeReq) }
-                        .status shouldBe
-                        HttpStatus.BAD_REQUEST
+                every { userClient.getStandardParticipantNames(any()) } returns listOf(StandardParticipantNameResDto(55L, "홍길동"))
+                every { entryLogRepository.insertIfAbsent(any(), any(), any(), any(), any(), any(), any()) } returns 1
+                then("이미 기록된 첫입장은 취소 권위로 남기고 빠진 로그를 채워 첫 입장으로 응답한다") {
+                    service.scan(expoId, codeReq).entryStatus shouldBe EntryStatus.FIRST
                     verify { fieldFence.finish(attemptId, true) }
+                    verify(exactly = 1) {
+                        entryLogRepository.insertIfAbsent(expoId, "STANDARD", "55", today, LocalDateTime.now(clock), null, null)
+                    }
                 }
             }
         }
@@ -271,7 +287,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 }
             }
 
-            `when`("퇴장 없이 찍었거나(퇴장 시각 없음) 입장 로그가 없으면") {
+            `when`("퇴장 없이 찍었으면(퇴장 시각 없음)") {
                 every {
                     entryLogRepository.findByExpoIdAndSubjectTypeAndSubjectIdAndAttendanceDate(
                         expoId,
@@ -402,9 +418,175 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 }
             }
 
-            `when`("입장 로그가 없으면") {
-                then("400을 던진다") {
+            `when`("입장 로그가 없으면(#287)") {
+                every { entryLogRepository.insertIfAbsent(any(), any(), any(), any(), any(), any(), any()) } returns 1
+
+                then("빠진 로그와 입장 이력을 지금 시각으로 채우고 재생과 같은 FIRST 응답을 준다") {
+                    val res = service.scan(expoId, codeReq, "door-1")
+                    res.entryStatus shouldBe EntryStatus.FIRST
+                    res.firstEnteredTime shouldBe "03:00"
+                    res.id shouldBe 55L
+                    res.name shouldBe "홍길동"
+                    res.personalInformationStatus shouldBe null
+                    res.badge shouldBe null
+                    res.badgePrint shouldBe null
+                    res.badgePrintJobId shouldBe null
+                    verify(exactly = 1) {
+                        entryLogRepository.insertIfAbsent(expoId, "STANDARD", "55", today, LocalDateTime.now(clock), null, "door-1")
+                    }
+                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any(), any()) }
+                    verify(exactly = 0) { entryLogRepository.reenter(any(), any(), any(), any(), any(), any()) }
+                }
+            }
+
+            `when`("입장 로그가 없는데 동시에 찍은 다른 스캔이 먼저 채웠으면") {
+                every { entryLogRepository.insertIfAbsent(any(), any(), any(), any(), any(), any(), any()) } returns 0
+
+                then("그 로그가 재생 구간 안이면 재생한다") {
+                    stubTodayLog() returnsMany listOf(null, enteredLog(enteredAt = LocalDateTime.now(clock)))
+                    val res = service.scan(expoId, codeReq, "door-1")
+                    res.entryStatus shouldBe EntryStatus.FIRST
+                    res.firstEnteredTime shouldBe "03:00"
+                }
+                then("그 로그가 재생 구간 밖이면 400이다") {
+                    stubTodayLog() returnsMany listOf(null, enteredLog(scanner = "door-2"))
                     shouldFailWith(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.") { service.scan(expoId, codeReq, "door-1") }
+                }
+            }
+
+            `when`("이름을 읽지 못하면") {
+                every { userClient.getStandardParticipantNames(any()) } throws UnitTestSupport.feignServerError()
+
+                then("빠진 로그를 채우지 않고 503이다") {
+                    shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.") {
+                        service.scan(expoId, codeReq, "door-1")
+                    }
+                    verify(exactly = 0) { entryLogRepository.insertIfAbsent(any(), any(), any(), any(), any(), any(), any()) }
+                }
+            }
+        }
+
+        given("User 입장 기록 호출의 결과를 모르면(#287)") {
+            givenPeriodOk()
+            every { userClient.getStandardParticipantNames(any()) } returns listOf(StandardParticipantNameResDto(55L, "홍길동"))
+
+            `when`("타임아웃 뒤 User에 오늘 입장이 기록돼 있으면") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignReadTimeout()
+
+                then("정상 첫 입장처럼 입장 로그를 남기고 이름만 채운 FIRST로 응답한다") {
+                    val res = service.scan(expoId, codeReq, "door-1")
+                    res.entryStatus shouldBe EntryStatus.FIRST
+                    res.firstEnteredTime shouldBe "03:00"
+                    res.id shouldBe 55L
+                    res.name shouldBe "홍길동"
+                    res.phoneNumber shouldBe null
+                    res.personalInformationStatus shouldBe null
+                    res.badge shouldBe null
+                    res.badgePrint shouldBe null
+                    res.badgePrintJobId shouldBe null
+                    verify(exactly = 1) { userClient.getEntryStatus(any()) }
+                    verify(exactly = 1) {
+                        entryLogService.recordEntry(
+                            expoId,
+                            EntrySubjectType.STANDARD,
+                            "55",
+                            scannerName = "door-1",
+                            enteredAt = LocalDateTime.now(clock),
+                        )
+                    }
+                    verify { fieldFence.finish(attemptId, true) }
+                }
+            }
+
+            `when`("응답을 해석하지 못했고 User에 기록돼 있으면") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignDecodeError()
+
+                then("첫 입장으로 마무리한다") {
+                    service.scan(expoId, codeReq).entryStatus shouldBe EntryStatus.FIRST
+                    verify(exactly = 1) { entryLogService.recordEntry(expoId, EntrySubjectType.STANDARD, "55", any(), any(), any()) }
+                }
+            }
+
+            `when`("전화번호 입장이 타임아웃 뒤 User에 기록돼 있으면") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignReadTimeout()
+
+                then("조회한 참가자 ID로 확인하고 스캔한 번호를 돌려준다") {
+                    val res = service.scan(expoId, phoneReq)
+                    res.entryStatus shouldBe EntryStatus.FIRST
+                    res.id shouldBe 55L
+                    res.phoneNumber shouldBe phoneReq.phoneNumber
+                    verify(exactly = 1) { entryLogService.recordEntry(expoId, EntrySubjectType.STANDARD, "55", any(), any(), any()) }
+                }
+            }
+
+            `when`("타임아웃 뒤 User에 기록돼 있지 않으면") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignReadTimeout()
+                every { userClient.getEntryStatus(any()) } returns ParticipantEntryStatusResDto(55L, today, false)
+
+                then("지금처럼 503이고 입장 로그를 남기지 않으며 fence는 PENDING이다") {
+                    shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.") { service.scan(expoId, codeReq) }
+                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any(), any()) }
+                    verify(exactly = 0) { entryLogRepository.insertIfAbsent(any(), any(), any(), any(), any(), any(), any()) }
+                    verify(exactly = 0) { fieldFence.finish(any(), any()) }
+                }
+            }
+
+            `when`("타임아웃 뒤 입장 여부 조회도 실패하면") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignReadTimeout()
+                every { userClient.getEntryStatus(any()) } throws UnitTestSupport.feignReadTimeout()
+
+                then("503이고 입장 로그를 남기지 않는다") {
+                    shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.") { service.scan(expoId, codeReq) }
+                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any(), any()) }
+                }
+            }
+
+            `when`("타임아웃인데 오늘 입장 로그가 이미 있으면(다른 회차로 먼저 입장)") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignReadTimeout()
+                stubTodayLog() returns oldLog()
+
+                then("entry-status는 회차를 구분하지 않으므로 묻지 않고 503이며 fence는 PENDING이다") {
+                    shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.") { service.scan(expoId, codeReq) }
+                    verify(exactly = 0) { userClient.getEntryStatus(any()) }
+                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any(), any()) }
+                    verify(exactly = 0) { fieldFence.finish(any(), any()) }
+                }
+            }
+
+            `when`("타임아웃 뒤 User에 기록돼 있는데 이름을 읽지 못하면") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignReadTimeout()
+                every { userClient.getStandardParticipantNames(any()) } throws UnitTestSupport.feignServerError()
+
+                then("이름은 락 밖에서 읽으므로 입장 로그와 fence는 먼저 마무리되고 503이다") {
+                    shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.") { service.scan(expoId, codeReq) }
+                    verify(exactly = 1) { entryLogService.recordEntry(expoId, EntrySubjectType.STANDARD, "55", any(), any(), any()) }
+                    verify { fieldFence.finish(attemptId, true) }
+                }
+            }
+
+            val circuitOpen = CallNotPermittedException.createCallNotPermittedException(UnitTestSupport.circuitBreaker("open"))
+            listOf(
+                "연결 거부" to UnitTestSupport.feignConnectRefused(),
+                "5xx" to UnitTestSupport.feignServerError(),
+                "회로 열림" to circuitOpen,
+            ).forEach { (name, failure) ->
+                `when`("결과를 아는 실패($name)이면") {
+                    every { userClient.recordEntry(any()) } throws failure
+
+                    then("입장 여부를 묻지 않고 503이다") {
+                        shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.") { service.scan(expoId, codeReq) }
+                        verify(exactly = 0) { userClient.getEntryStatus(any()) }
+                        verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any(), any()) }
+                    }
+                }
+            }
+
+            `when`("연수자가 타임아웃이면") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignReadTimeout()
+
+                then("입장 여부를 물을 계약이 없어 지금처럼 503이다") {
+                    shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.") { service.scan(expoId, traineeReq) }
+                    verify(exactly = 0) { userClient.getEntryStatus(any()) }
                 }
             }
         }
@@ -526,12 +708,27 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 }
             }
 
-            `when`("유저 서비스가 오늘 이미 입장했다고(409) 답하면") {
+            `when`("유저 서비스가 오늘 이미 입장했다고(409) 답하고 오늘 입장 로그가 있으면") {
                 givenPeriodOk()
                 every { userClient.recordEntry(any()) } throws UnitTestSupport.feignConflict()
+                stubTodayLog() returns oldLog()
 
                 then("400 이미 입장 메시지로 바꾼다") {
                     shouldFailWith(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.") { service.scan(expoId, phoneReq) }
+                }
+            }
+
+            `when`("유저 서비스가 409로 답했는데 오늘 입장 로그가 없으면(#287)") {
+                givenPeriodOk()
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignConflict()
+                every { userClient.getStandardParticipantNames(any()) } returns listOf(StandardParticipantNameResDto(55L, "홍길동"))
+                every { entryLogRepository.insertIfAbsent(any(), any(), any(), any(), any(), any(), any()) } returns 1
+
+                then("빠진 로그를 채우고 스캔한 번호와 함께 FIRST로 응답한다") {
+                    val res = service.scan(expoId, phoneReq)
+                    res.entryStatus shouldBe EntryStatus.FIRST
+                    res.phoneNumber shouldBe phoneReq.phoneNumber
+                    verify(exactly = 1) { entryLogRepository.insertIfAbsent(expoId, "STANDARD", "55", today, any(), null, null) }
                 }
             }
 
@@ -699,6 +896,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 every { preregisterSessionValidator.check(expoId, 55L, any(), any()) } returns 11L
                 every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, 11L, today) } returns 11L
                 every { userClient.recordEntry(any()) } throws UnitTestSupport.feignConflict()
+                stubTodayLog() returns oldLog()
 
                 then("기존과 같이 400 이미 입장 메시지로 바꾸고 입장 로그를 남기지 않는다") {
                     shouldFailWith(HttpStatus.BAD_REQUEST, "이미 박람회에 입장한 유저입니다.") { service.scan(expoId, codeReq) }
