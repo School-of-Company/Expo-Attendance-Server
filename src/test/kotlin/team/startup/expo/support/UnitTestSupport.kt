@@ -34,8 +34,7 @@ object UnitTestSupport {
     fun scanLimiter(): ScanConcurrencyLimiter = ScanConcurrencyLimiter(ScanConcurrencyProperties(), 30)
 
     /** 캐시를 끈(TTL 0) 회차 캐시. 기존 테스트가 호출마다 원격 응답을 바꿔도 그대로 보게 한다. */
-    fun noSessionCache(clock: Clock = fixedClock()): PreregisterSessionCache =
-        PreregisterSessionCache(PreregisterSessionCacheProperties(ttlSeconds = 0), clock)
+    fun noSessionCache(): PreregisterSessionCache = PreregisterSessionCache(PreregisterSessionCacheProperties(ttlSeconds = 0))
 
     fun preregisterValidator(): PreregisterSessionValidator =
         mockk<PreregisterSessionValidator>(relaxed = true).also {

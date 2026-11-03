@@ -1,5 +1,6 @@
 package team.startup.expo.domain.attendance.support
 
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
@@ -21,9 +22,23 @@ class ScanConcurrencyLimiter(
     properties: ScanConcurrencyProperties,
     @Value("\${spring.datasource.hikari.maximum-pool-size:30}") poolSize: Int,
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
     private val waitMs = properties.waitMs
     val permits = permitsFor(poolSize, properties.reserve)
     private val semaphore = Semaphore(permits)
+
+    init {
+        // reserve가 0 이하이면 허용 수가 풀 크기 이상이 되어 막으려던 교착이 다시 생긴다
+        require(properties.reserve >= 1) { "scan-concurrency.reserve는 1 이상이어야 합니다: ${properties.reserve}" }
+        if (poolSize - properties.reserve < 2) {
+            log.warn(
+                "동시 스캔 허용 수가 {}개뿐입니다(DB 풀 {}, reserve {}). DB_POOL_SIZE를 늘리거나 SCAN_CONCURRENCY_RESERVE를 줄이세요.",
+                permits,
+                poolSize,
+                properties.reserve,
+            )
+        }
+    }
 
     fun <T> limited(block: () -> T): T {
         if (!semaphore.tryAcquire(waitMs, TimeUnit.MILLISECONDS)) {
