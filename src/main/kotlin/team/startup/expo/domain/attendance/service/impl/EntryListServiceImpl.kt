@@ -5,20 +5,21 @@ import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.presentation.dto.request.EntryListReqDto
+import team.startup.expo.domain.attendance.presentation.dto.response.BadgeResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.EntryListItemResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.EntryListResDto
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.service.EntryListService
 import team.startup.expo.domain.attendance.support.EntryBadge
+import team.startup.expo.domain.attendance.support.NativeRows
 import team.startup.expo.domain.attendance.support.PhoneNumberMask
+import team.startup.expo.domain.attendance.support.TimeFormat
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.EntryCardsReqDto
 import team.startup.expo.global.client.user.UserClient
-import java.sql.Timestamp
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 /**
  * 이 서비스는 이름·연락처를 저장하지 않으므로, 입장 로그 한 페이지를 읽은 뒤 그 페이지의 사람만 유저 서비스에서 한 번에 가져온다.
@@ -63,39 +64,41 @@ class EntryListServiceImpl(
         val participants = cards.standardParticipants.associateBy { it.participantId }
         val trainees = cards.trainees.associateBy { it.traineeId }
         return rows.map { row ->
-            val time = row.enteredAt.format(TIME)
-            val inside = row.exitedAt == null
-            when (row.type) {
-                EntrySubjectType.TRAINEE -> {
-                    val card = trainees[row.id]
-                    EntryListItemResDto(
-                        id = row.id,
-                        participationType = row.type.name,
-                        name = card?.name,
-                        phoneNumber = PhoneNumberMask.mask(card?.phoneNumber),
-                        personalInformationStatus = card?.personalInformationStatus,
-                        badge = card?.let { EntryBadge.of(true, null, it.name, it.school) },
-                        firstEnteredTime = time,
-                        inside = inside,
-                    )
-                }
+            val card =
+                when (row.type) {
+                    EntrySubjectType.TRAINEE -> {
+                        trainees[row.id]?.let {
+                            Card(it.name, it.phoneNumber, it.personalInformationStatus, EntryBadge.of(true, null, it.name, it.school))
+                        }
+                    }
 
-                else -> {
-                    val card = participants[row.id]
-                    EntryListItemResDto(
-                        id = row.id,
-                        participationType = row.type.name,
-                        name = card?.name,
-                        phoneNumber = PhoneNumberMask.mask(card?.phoneNumber),
-                        personalInformationStatus = card?.personalInformationStatus,
-                        badge = card?.let { EntryBadge.of(false, it.occupation, it.name, it.school) },
-                        firstEnteredTime = time,
-                        inside = inside,
-                    )
+                    else -> {
+                        participants[row.id]?.let {
+                            val badge = EntryBadge.of(false, it.occupation, it.name, it.school)
+                            Card(it.name, it.phoneNumber, it.personalInformationStatus, badge)
+                        }
+                    }
                 }
-            }
+            EntryListItemResDto(
+                id = row.id,
+                participationType = row.type.name,
+                name = card?.name,
+                phoneNumber = PhoneNumberMask.mask(card?.phoneNumber),
+                personalInformationStatus = card?.personalInformationStatus,
+                badge = card?.badge,
+                firstEnteredTime = row.enteredAt.format(TimeFormat.HOUR_MINUTE),
+                inside = row.exitedAt == null,
+            )
         }
     }
+
+    /** 유저 서비스 명함 중 목록 한 행에 필요한 값. 일반 참가자와 연수자의 명함 타입이 달라 여기서 맞춘다. */
+    private data class Card(
+        val name: String,
+        val phoneNumber: String?,
+        val personalInformationStatus: Boolean,
+        val badge: BadgeResDto?,
+    )
 
     /** `findRegisteredEntries`의 한 행. 등록 QR만 읽으므로 대상 ID는 참가자(연수자) ID다. */
     private data class Row(
@@ -109,21 +112,9 @@ class EntryListServiceImpl(
                 Row(
                     type = EntrySubjectType.valueOf(columns[0] as String),
                     id = (columns[1] as String).toLong(),
-                    enteredAt = toDateTime(columns[2])!!,
-                    exitedAt = toDateTime(columns[3]),
+                    enteredAt = NativeRows.dateTimeOrNull(columns[2])!!,
+                    exitedAt = NativeRows.dateTimeOrNull(columns[3]),
                 )
-
-            private fun toDateTime(value: Any?): LocalDateTime? =
-                when (value) {
-                    null -> null
-                    is LocalDateTime -> value
-                    is Timestamp -> value.toLocalDateTime()
-                    else -> throw IllegalStateException("시각 열의 타입을 알 수 없습니다: ${value.javaClass}")
-                }
         }
-    }
-
-    private companion object {
-        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }

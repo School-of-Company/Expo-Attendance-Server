@@ -15,6 +15,7 @@ import team.startup.expo.domain.attendance.entity.CancellationGuardState
 import team.startup.expo.domain.attendance.presentation.dto.request.FieldVisitStatus
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
 import team.startup.expo.domain.attendance.repository.FieldVisit
+import team.startup.expo.global.exception.ExpectedException
 import team.startup.expo.support.UnitTestSupport
 import team.startup.expo.support.shouldFailWith
 import java.time.LocalDate
@@ -33,6 +34,7 @@ class CancellationGuardGateSpec : BehaviorSpec() {
             mockk(relaxed = true),
             validator,
             UnitTestSupport.fixedClock(),
+            UnitTestSupport.scanLimiter(),
         )
     private val expoId = "expo-1"
 
@@ -194,6 +196,27 @@ class CancellationGuardGateSpec : BehaviorSpec() {
                 then("서로 다른 형식으로 구분된다") {
                     CancellationGuardGate.participantKey("e", 1L) shouldBe "guard:e:p:1"
                     CancellationGuardGate.traineeKey("e", 1L) shouldBe "guard:e:t:1"
+                }
+            }
+        }
+
+        given("동시 스캔 자리를 얻지 못하면(#247)") {
+            val transactionManager = UnitTestSupport.transactionManager()
+            val busy = mockk<ScanConcurrencyLimiter>()
+            every { busy.limited<Any?>(any()) } throws
+                ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "요청이 몰려 잠시 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.")
+            val limitedGate =
+                CancellationGuardGate(transactionManager, repository, mockk(relaxed = true), validator, UnitTestSupport.fixedClock(), busy)
+
+            `when`("스캔하면") {
+                then("트랜잭션을 열지 않고(커넥션을 잡지 않고) 503이며 블록도 실행하지 않는다") {
+                    var ran = false
+                    shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "요청이 몰려 잠시 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.") {
+                        limitedGate.scanning(expoId, participantId = 7L) { ran = true }
+                    }
+                    ran shouldBe false
+                    verify(exactly = 0) { transactionManager.getTransaction(any()) }
+                    verify(exactly = 0) { repository.lockShared(any()) }
                 }
             }
         }

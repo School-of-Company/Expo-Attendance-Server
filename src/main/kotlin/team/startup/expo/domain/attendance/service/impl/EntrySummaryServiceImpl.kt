@@ -1,7 +1,7 @@
 package team.startup.expo.domain.attendance.service.impl
 
-import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.presentation.dto.request.EntrySummaryReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.EntrySummaryResDto
@@ -13,7 +13,7 @@ import team.startup.expo.domain.attendance.repository.WalkInLogRepository
 import team.startup.expo.domain.attendance.service.EntrySummaryService
 import team.startup.expo.domain.attendance.service.WalkInService
 import team.startup.expo.domain.attendance.support.EntryScope
-import team.startup.expo.global.exception.ExpectedException
+import team.startup.expo.domain.attendance.support.NativeRows
 import java.time.Clock
 import java.time.LocalDateTime
 
@@ -24,6 +24,7 @@ class EntrySummaryServiceImpl(
     private val walkInLogRepository: WalkInLogRepository,
     private val clock: Clock,
 ) : EntrySummaryService {
+    @Transactional(readOnly = true)
     override fun get(
         expoId: String,
         reqDto: EntrySummaryReqDto,
@@ -37,9 +38,9 @@ class EntrySummaryServiceImpl(
                 Row(
                     EntrySubjectType.valueOf(it[0] as String),
                     it[1] as String?,
-                    (it[2] as Number).toLong(),
-                    (it[3] as Number).toLong(),
-                    (it[4] as Number).toLong(),
+                    NativeRows.long(it[2]),
+                    NativeRows.long(it[3]),
+                    NativeRows.long(it[4]),
                 )
             }
 

@@ -61,7 +61,7 @@ class AdminDataChangeListener(
                             .getNotifications(POLL_MS)
                             .orEmpty()
                             .map { it.parameter }
-                            .filter { EXPO_ID_PATTERN.matches(it) }
+                            .filter { ExpoIdFormat.isValid(it) }
                             .distinct()
                             .forEach(stream::changed)
                     }
@@ -87,6 +87,5 @@ class AdminDataChangeListener(
         const val POLL_MS = 1_000
         const val INITIAL_BACKOFF_MS = 1_000L
         const val MAX_BACKOFF_MS = 30_000L
-        val EXPO_ID_PATTERN = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     }
 }

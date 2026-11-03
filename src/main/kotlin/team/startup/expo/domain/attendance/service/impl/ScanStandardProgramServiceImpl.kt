@@ -7,12 +7,10 @@ import org.springframework.stereotype.Service
 import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.presentation.dto.request.ScanStandardProgramReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResDto
-import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResult
 import team.startup.expo.domain.attendance.service.ScanStandardProgramService
 import team.startup.expo.domain.attendance.support.AbstractProgramScanService
 import team.startup.expo.domain.attendance.support.CancellationGuardGate
 import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
-import team.startup.expo.domain.attendance.support.ProgramAttendanceResult
 import team.startup.expo.domain.attendance.support.ProgramEntryWindow
 import team.startup.expo.domain.attendance.support.ProgramScanNameResolver
 import team.startup.expo.domain.attendance.support.RecordProgramAttendanceService

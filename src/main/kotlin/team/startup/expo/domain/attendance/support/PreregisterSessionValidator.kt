@@ -36,6 +36,7 @@ class PreregisterSessionValidator(
     private val clock: Clock,
     private val fieldVisits: FieldVisitRepository,
     private val expoProjection: ExpoProjectionReader,
+    private val sessionCache: PreregisterSessionCache,
 ) {
     /**
      * 취소된 신청을 거절한다. 회차 기록이 있는데 확정 상태인 회차가 하나도 없으면 취소된 신청이다.
@@ -101,7 +102,7 @@ class PreregisterSessionValidator(
 
         val today = LocalDate.now(clock)
         val todaySessions = sessions.filter { it.startedAt.atZone(clock.zone).toLocalDate() == today }
-        if (todaySessions.isNotEmpty() && occupation() in ALL_DAY_OCCUPATIONS) {
+        if (todaySessions.isNotEmpty() && TeacherOccupation.matches(occupation())) {
             return todaySessions.minWith(compareBy<Window>({ it.startedAt }, { it.sessionId })).sessionId
         }
 
@@ -150,23 +151,20 @@ class PreregisterSessionValidator(
     private fun todaySessions(
         expoId: String,
         records: List<PreregisterSession>,
-        attendanceDate: LocalDate = LocalDate.now(clock),
+        attendanceDate: LocalDate,
     ) = activeSessionIds(records)
         .map { sessionId -> session(expoId, sessionId) }
         .filter { it.startedAt.atZone(clock.zone).toLocalDate() == attendanceDate }
 
-    /** 회차 시간. 프로젝션이 꺼져 있거나 없으면 박람회 서비스를 부른다(#240). */
+    /** 회차 시간. 프로젝션이 꺼져 있거나 없으면 박람회 서비스를 부르고, 그 결과만 잠시 기억한다(#240, #249). */
     private fun session(
         expoId: String,
         sessionId: Long,
     ): PreregisterSessionResDto =
         expoProjection.preregisterSession(expoId, sessionId)
-            ?: expoCircuitBreaker.callService("박람회") { expoClient.getPreregisterSession(expoId, sessionId) }
-
-    private companion object {
-        // 신청 회차 시간과 관계없이 당일 입장하는 직업(#283)
-        val ALL_DAY_OCCUPATIONS = setOf("TEACHER", "PRE_SERVICE_TEACHER")
-    }
+            ?: sessionCache.get(expoId, sessionId) {
+                expoCircuitBreaker.callService("박람회") { expoClient.getPreregisterSession(expoId, sessionId) }
+            }
 
     private data class Window(
         val sessionId: Long,

@@ -27,6 +27,8 @@
 | `QR_ENTRY_REVIEW_ENABLED` (`true`), `QR_ENTRY_REVIEW_INTERVAL_MS` (5분) | 박람회 서비스 장애 때 기간 확인 없이 기록한 종이 QR 입장을 다시 확인하는 작업과 그 주기 |
 | `ENTRY_REPLAY_WINDOW_SECONDS` (`30`, `0`=끔) | 입장 뒤 이 시간 안에 같은 스캐너가 같은 QR을 퇴장 없이 다시 찍으면 400 대신 직전 결과를 돌려준다(타임아웃 뒤 재시도, #176) |
 | `EXPO_PERIOD_CACHE_TTL_SECONDS` (`30`, `0`=끔) | 박람회 기간 캐시 시간. 기간을 고친 직후 최대 이 시간만큼 이전 기간으로 판단될 수 있다 |
+| `PREREGISTER_SESSION_CACHE_TTL_SECONDS` (`30`, `0`=끔) | 박람회 서비스에서 읽은 사전등록 회차 시간 캐시 시간(#249). 회차 시간을 고친 직후 최대 이 시간만큼 이전 시간으로 판정될 수 있다. 프로젝션에서 읽은 값은 캐시하지 않는다 |
+| `SCAN_CONCURRENCY_RESERVE` (`6`), `SCAN_CONCURRENCY_WAIT_MS` (`500`) | 동시 스캔 수를 `DB_POOL_SIZE - reserve`로 제한한다(#247: 스캔이 게이트 트랜잭션 안에서 커넥션을 하나 더 요구해 풀에 닿으면 교착). 대기 시간 안에 자리를 못 얻으면 커넥션 없이 503. reserve가 1보다 작으면 기동하지 않고, 허용 수가 2보다 작으면 경고를 남긴다 |
 | `KAFKA_EXPO_PROJECTION_ENABLED` (`false`) | 켜면 `expo.expo.changed`로 받은 박람회 기간·프로그램·회차 시간을 로컬 프로젝션에서 먼저 읽고, 없으면 동기 호출로 넘어간다. `KAFKA_BOOTSTRAP_SERVERS`가 없으면 기동 실패. consumer group `KAFKA_EXPO_PROJECTION_GROUP_ID`(`expo-attention-server.expo-changed`), 실패 메시지는 `expo.expo.changed.dlt`. 켠 뒤 박람회 서비스 `POST /internal/expo-events/republish`로 전체 상태를 한 번 받는다. 자세한 동작은 `docs/service-contracts.md` |
 | `KAFKA_BOOTSTRAP_SERVERS` (빈 값) | Kafka 브로커 주소. 프로젝션을 켤 때만 필요 |
 | `PREREGISTER_ENTRY_LEAD_MINUTES` (`30`) | 사전등록 입장을 회차 시작 몇 분 전부터 허용할지 |

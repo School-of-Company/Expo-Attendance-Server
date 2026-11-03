@@ -2,12 +2,11 @@ package team.startup.expo.domain.attendance.service.impl
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.dao.CannotAcquireLockException
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.support.TransactionTemplate
 import team.startup.expo.domain.attendance.entity.CancellationGuardState
+import team.startup.expo.domain.attendance.entity.PreregisterSession
 import team.startup.expo.domain.attendance.entity.PreregisterSessionStatus
 import team.startup.expo.domain.attendance.presentation.dto.request.AcquireCancellationGuardReqDto
 import team.startup.expo.domain.attendance.presentation.dto.request.CommitCancellationGuardReqDto
@@ -18,13 +17,13 @@ import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceR
 import team.startup.expo.domain.attendance.service.AcquireCancellationGuardResult
 import team.startup.expo.domain.attendance.service.CancellationGuardService
 import team.startup.expo.domain.attendance.support.CancellationGuardGate
+import team.startup.expo.domain.attendance.support.GuardLockExecutor
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.user.AdminCancellationStatusReqDto
 import team.startup.expo.global.client.user.CancellationStatusReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.exception.ExpectedException
-import team.startup.expo.global.metrics.AttendanceMetrics
 import java.time.Clock
 import java.time.LocalDateTime
 
@@ -40,7 +39,7 @@ class CancellationGuardServiceImpl(
     @Qualifier("userCircuitBreaker") private val userCircuitBreaker: CircuitBreaker,
     private val clock: Clock,
 ) : CancellationGuardService {
-    private val transaction = TransactionTemplate(transactionManager)
+    private val lockExecutor = GuardLockExecutor(transactionManager, cancellationGuardRepository)
 
     override fun acquire(
         expoId: String,
@@ -137,29 +136,31 @@ class CancellationGuardServiceImpl(
             if (existing == null || existing.operationId != operationId) {
                 throw ExpectedException(HttpStatus.CONFLICT, "이 작업의 취소 보호가 없습니다. 먼저 보호를 걸어야 합니다.")
             }
-            if (existing.state == CancellationGuardState.HELD) {
-                val revision = reqDto?.revision
-                val sessionId = reqDto?.sessionId
-                val now = LocalDateTime.now(clock)
-                if (sessionId != null) {
-                    // 회차 하나의 취소다. 회차 취소 통지보다 먼저 와도 그 회차로는 바로 입장할 수 없게 여기서 취소로 표시한다(같은 revision이라 통지는 멱등이다)
-                    preregisterSessionRepository.cancelExistingSession(expoId, participantId, sessionId, revision, now)
-                }
-                val records = preregisterSessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId)
-                val active = records.filter { it.status == PreregisterSessionStatus.ACTIVE }
-                // 보호가 걸려 있는 동안 이 취소보다 새로운 신청의 회차 PUT이나 현장 재등록(#249)이 먼저 적용되었으면 이 취소는 밀려났다.
-                val superseded =
-                    revision != null && records.any { it.status != PreregisterSessionStatus.CANCELLED && it.revision > revision }
-                // 회차 하나만 취소했고 확정 상태인 다른 회차가 남아 있으면, 참가자는 남은 회차로 계속 입장·출석할 수 있어야 한다(#160).
-                val otherSessionsRemain = sessionId != null && active.any { it.sessionId != sessionId }
-                if (superseded || otherSessionsRemain) {
-                    // 보호를 확정하지 않고 끝난 작업으로 기록해 입장·출석을 다시 허용한다
-                    cancellationGuardRepository.insertReleasedByCommit(expoId, participantId, operationId, now)
-                    cancellationGuardRepository.deleteHeld(expoId, participantId, operationId)
-                } else {
-                    cancellationGuardRepository.commit(expoId, participantId, operationId, revision, now)
-                }
-            }
+            if (existing.state == CancellationGuardState.HELD) commitHeld(expoId, participantId, operationId, reqDto)
+        }
+    }
+
+    /** HELD 보호의 commit. 참가자 배타 락 안에서만 부른다. */
+    private fun commitHeld(
+        expoId: String,
+        participantId: Long,
+        operationId: String,
+        reqDto: CommitCancellationGuardReqDto?,
+    ) {
+        val revision = reqDto?.revision
+        val sessionId = reqDto?.sessionId
+        val now = LocalDateTime.now(clock)
+        if (sessionId != null) {
+            // 회차 하나의 취소다. 회차 취소 통지보다 먼저 와도 그 회차로는 바로 입장할 수 없게 여기서 취소로 표시한다(같은 revision이라 통지는 멱등이다)
+            preregisterSessionRepository.cancelExistingSession(expoId, participantId, sessionId, revision, now)
+        }
+        val records = preregisterSessionRepository.findAllByExpoIdAndParticipantId(expoId, participantId)
+        if (releasesHeldCommit(records, revision, sessionId)) {
+            // 보호를 확정하지 않고 끝난 작업으로 기록해 입장·출석을 다시 허용한다
+            cancellationGuardRepository.insertReleasedByCommit(expoId, participantId, operationId, now)
+            cancellationGuardRepository.deleteHeld(expoId, participantId, operationId)
+        } else {
+            cancellationGuardRepository.commit(expoId, participantId, operationId, revision, now)
         }
     }
 
@@ -228,23 +229,31 @@ class CancellationGuardServiceImpl(
         key: String,
         expoIdToLock: String?,
         block: () -> T,
-    ): T {
-        try {
-            return requireNotNull(
-                transaction.execute {
-                    cancellationGuardRepository.setLockTimeout(CancellationGuardGate.LOCK_TIMEOUT)
-                    if (expoIdToLock != null) deletedExpoRepository.lockExpo(expoIdToLock)
-                    val start = System.nanoTime()
-                    try {
-                        cancellationGuardRepository.lockExclusive(key)
-                    } finally {
-                        AttendanceMetrics.recordLockWait("cancel", System.nanoTime() - start)
-                    }
-                    block()
-                },
-            )
-        } catch (e: CannotAcquireLockException) {
-            throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "진행 중인 스캔이 끝나지 않아 잠시 후 다시 시도해 주세요.")
+    ): T =
+        lockExecutor.execute("진행 중인 스캔이 끝나지 않아 잠시 후 다시 시도해 주세요.") {
+            if (expoIdToLock != null) deletedExpoRepository.lockExpo(expoIdToLock)
+            lockExecutor.lockExclusive(key, GuardLockExecutor.WAIT_CANCEL)
+            block()
+        }
+
+    companion object {
+        /**
+         * HELD 보호의 commit을 확정하지 않고 해제로 끝낼지 정한다. 부작용이 없다. [records]는 이 commit이 지정 회차를 취소로 표시한 뒤에 읽은
+         * 참가자의 회차 기록 전부다.
+         * - 밀려난 취소: [revision]이 있고, 보호가 걸려 있는 동안 이 취소보다 새로운 신청의 회차 PUT이나 현장 재등록(#249)이 먼저 적용되었다
+         *   (취소되지 않은 기록 중 revision이 더 큰 것이 있다).
+         * - 남은 회차: 회차 하나([sessionId])만 취소했고 확정 상태인 다른 회차가 남아 있어, 참가자가 남은 회차로 계속 입장·출석할 수 있어야 한다(#160).
+         */
+        internal fun releasesHeldCommit(
+            records: List<PreregisterSession>,
+            revision: Long?,
+            sessionId: Long?,
+        ): Boolean {
+            val superseded =
+                revision != null && records.any { it.status != PreregisterSessionStatus.CANCELLED && it.revision > revision }
+            val otherSessionsRemain =
+                sessionId != null && records.any { it.status == PreregisterSessionStatus.ACTIVE && it.sessionId != sessionId }
+            return superseded || otherSessionsRemain
         }
     }
 }
