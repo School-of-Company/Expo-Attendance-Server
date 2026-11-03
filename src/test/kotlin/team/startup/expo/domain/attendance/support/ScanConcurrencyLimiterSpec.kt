@@ -98,7 +98,7 @@ class ScanConcurrencyLimiterSpec : BehaviorSpec() {
                 }
             }
         }
-    
+
         given("reserve 설정") {
             then("0 이하이면 허용 수가 풀 크기 이상이 되므로 기동을 막는다") {
                 shouldThrow<IllegalArgumentException> { limiter(poolSize = 30, reserve = 0) }

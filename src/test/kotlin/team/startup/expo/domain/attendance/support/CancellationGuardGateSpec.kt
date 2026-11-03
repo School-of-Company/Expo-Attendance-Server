@@ -199,7 +199,7 @@ class CancellationGuardGateSpec : BehaviorSpec() {
                 }
             }
         }
-    
+
         given("동시 스캔 자리를 얻지 못하면(#247)") {
             val transactionManager = UnitTestSupport.transactionManager()
             val busy = mockk<ScanConcurrencyLimiter>()

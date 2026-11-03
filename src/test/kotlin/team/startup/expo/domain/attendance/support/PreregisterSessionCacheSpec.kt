@@ -28,7 +28,11 @@ class PreregisterSessionCacheSpec : BehaviorSpec() {
         nanos.addAndGet(TimeUnit.SECONDS.toNanos(seconds))
     }
 
-    private fun newCache(ttlSeconds: Long = 30) = PreregisterSessionCache(PreregisterSessionCacheProperties(ttlSeconds = ttlSeconds), ticker)
+    private fun newCache(ttlSeconds: Long = 30) =
+        PreregisterSessionCache(
+            PreregisterSessionCacheProperties(ttlSeconds = ttlSeconds),
+            ticker,
+        )
 
     private val cache = newCache()
     private val calls = AtomicInteger()
