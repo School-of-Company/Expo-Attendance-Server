@@ -7,12 +7,15 @@ import java.time.LocalDateTime
 
 @Schema(description = "입장 기록 목록(Report 엑셀 원천). 이름·연락처와 종이 QR 토큰은 담지 않는다")
 data class EntryRecordsResDto(
+    @field:Schema(description = "박람회 ID")
     val expoId: String,
     @field:Schema(description = "요청한 범위의 시작. 박람회 전체를 요청했으면 비어 있다", nullable = true)
     val from: LocalDate?,
     @field:Schema(description = "요청한 범위의 끝. 박람회 전체를 요청했으면 비어 있다", nullable = true)
     val to: LocalDate?,
+    @field:Schema(description = "페이지 번호(0부터)")
     val page: Int,
+    @field:Schema(description = "페이지 크기")
     val size: Int,
     @field:Schema(description = "범위 안 전체 이벤트 수(페이지와 상관없음)")
     val totalElements: Long,
@@ -40,6 +43,7 @@ data class EntryRecordItemResDto(
 )
 
 data class EntryRecordWalkInResDto(
+    @field:Schema(description = "날짜")
     val date: LocalDate,
     @field:Schema(description = "간편입장 구분")
     val category: String,

@@ -14,7 +14,9 @@ import java.time.Clock
 import java.time.LocalDateTime
 
 /**
- * 박람회가 삭제되면 그 박람회에 묶인 종이 QR 토큰(입장 기록 포함)과 사전등록 회차 기록을 지우고 삭제 기록을 남긴다.
+ * 박람회가 삭제되면 삭제 기록(`tb_deleted_expo`)을 남기고 그 박람회의 다음 표를 지운다: `tb_qr_token`(`tb_qr_entry`는 외래키
+ * `ON DELETE CASCADE`로 함께), `tb_preregister_session`, `tb_cancellation_guard`, `tb_cancellation_aborted`, `tb_entry_event`,
+ * `tb_entry_log`, `tb_walk_in_log`, `tb_field_visit_guard`, `tb_field_visit`, `tb_entry_scan_fence`.
  * 삭제 기록은 발급이 지운 데이터를 되살리지 못하게 막는다. 발급과 같은 락을 잡아 두 요청을 한 줄로 세우므로
  * 삭제와 겹친 발급은 삭제 전에 끝나 함께 지워지거나 삭제 뒤에 거부된다. 여러 번 불러도 결과는 같다.
  */

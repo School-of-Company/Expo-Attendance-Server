@@ -37,6 +37,7 @@ interface QrEntryRepository : JpaRepository<QrEntry, Long> {
      * [insertIfAbsent]와 같은 규칙으로 입장을 기록하면서, 같은 문장 안에서 입장 로그(`tb_entry_log`, 토큰 구분 포함)와 입장 이력(`tb_entry_event`)도 남긴다.
      * 한 문장이라 둘이 함께 커밋되거나 함께 빠지므로, 입장은 됐는데 로그만 없어 퇴장 스캔이 막히는 일이 없다.
      * 반환값은 새로 기록한 입장 수다(1이면 입장, 0이면 이미 입장했거나 없는 토큰이거나 무효화한 토큰).
+     * SELECT로 끝나는 쓰기 CTE라 `@Modifying` 없이 호출하고, 쓰기 트랜잭션 안에서만 부른다.
      */
     @Query(
         nativeQuery = true,
@@ -73,6 +74,7 @@ interface QrEntryRepository : JpaRepository<QrEntry, Long> {
     /**
      * 오늘 퇴장한 종이 QR이 다시 입장하면 재입장으로 기록한다(#148). 이 박람회의 무효화하지 않은 토큰만 해당하고, 퇴장 시각을 비워
      * 다시 "안에 있는" 상태로 되돌리면서 재입장 이력을 남긴다. 반환값이 0이면 퇴장한 상태가 아니다(퇴장 없이 다시 찍은 것은 재입장이 아니다).
+     * SELECT로 끝나는 쓰기 CTE라 `@Modifying` 없이 호출하고, 쓰기 트랜잭션 안에서만 부른다.
      */
     @Query(
         nativeQuery = true,

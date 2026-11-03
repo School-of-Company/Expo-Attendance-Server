@@ -20,9 +20,9 @@ data class ScanEntryResDto(
     val personalInformationStatus: Boolean?,
     @field:Schema(description = "참가 유형(유저 서비스의 `participationType`)", example = "STANDARD")
     val participationType: String,
-    /** 명찰 출력 대상(연수자 전원, 교사인 일반 참가자)이 아니면 `null`이다. */
+    /** 명찰 출력 대상(연수자 전원, 교사·예비교사인 일반 참가자)이 아니면 `null`이다. */
     @field:Schema(
-        description = "명찰 정보. 명찰 출력 대상(연수자 전원, 교사인 일반 참가자)이 아니거나 재입장이면 `null`이다",
+        description = "명찰 정보. 명찰 출력 대상(연수자 전원, 교사·예비교사인 일반 참가자)이 아니거나 재입장이면 `null`이다",
         nullable = true,
     )
     val badge: BadgeResDto?,
