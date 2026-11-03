@@ -19,6 +19,7 @@ import javax.sql.DataSource
 class AdminDataChangeListener(
     private val dataSource: DataSource,
     private val stream: AdminDataChangeStream,
+    private val statsCache: AdminStatsCache,
 ) : SmartLifecycle {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -54,7 +55,10 @@ class AdminDataChangeListener(
                     connection.createStatement().use { it.execute("LISTEN $CHANNEL") }
                     val notifications = connection.unwrap(PGConnection::class.java)
                     listening = true
-                    if (interrupted) stream.resyncAll()
+                    if (interrupted) {
+                        statsCache.invalidateAll()
+                        stream.resyncAll()
+                    }
                     backoff = INITIAL_BACKOFF_MS
                     while (running) {
                         notifications
@@ -63,7 +67,11 @@ class AdminDataChangeListener(
                             .map { it.parameter }
                             .filter { ExpoIdFormat.isValid(it) }
                             .distinct()
-                            .forEach(stream::changed)
+                            .forEach {
+                                // 재조회가 변경 전 결과를 받지 않게 공유 결과를 먼저 버리고 신호를 보낸다(#255)
+                                statsCache.invalidate(it)
+                                stream.changed(it)
+                            }
                     }
                 }
             } catch (exception: Exception) {

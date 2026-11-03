@@ -20,6 +20,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.ScannerEntr
 import team.startup.expo.domain.attendance.service.EntryListService
 import team.startup.expo.domain.attendance.service.EntryStatsService
 import team.startup.expo.domain.attendance.service.EntrySummaryService
+import team.startup.expo.domain.attendance.support.AdminStatsCache
 import team.startup.expo.global.swagger.ApiError
 
 /** 입구 화면의 "오늘 입장 처리 건수"(#119). 관리자(`ROLE_ADMIN`) 전용이다. */
@@ -29,6 +30,7 @@ class EntrySummaryController(
     private val entrySummaryService: EntrySummaryService,
     private val entryStatsService: EntryStatsService,
     private val entryListService: EntryListService,
+    private val statsCache: AdminStatsCache,
 ) {
     @Operation(
         summary = "오늘 입장 처리 건수 조회",
@@ -45,7 +47,7 @@ class EntrySummaryController(
     fun get(
         @PathVariable expoId: String,
         @Valid @ParameterObject @ModelAttribute reqDto: EntrySummaryReqDto,
-    ): EntrySummaryResDto = entrySummaryService.get(expoId, reqDto)
+    ): EntrySummaryResDto = statsCache.get("summary", expoId, reqDto) { entrySummaryService.get(expoId, reqDto) }
 
     @Operation(
         summary = "시간대별 입·퇴장 건수",
@@ -61,7 +63,7 @@ class EntrySummaryController(
     fun hourly(
         @PathVariable expoId: String,
         @Valid @ParameterObject @ModelAttribute reqDto: EntrySummaryReqDto,
-    ): HourlyEntryResDto = entryStatsService.hourly(expoId, reqDto)
+    ): HourlyEntryResDto = statsCache.get("hourly", expoId, reqDto) { entryStatsService.hourly(expoId, reqDto) }
 
     @Operation(
         summary = "최근 입·퇴장 기록",
@@ -77,7 +79,7 @@ class EntrySummaryController(
     fun recent(
         @PathVariable expoId: String,
         @Valid @ParameterObject @ModelAttribute reqDto: RecentEntryRecordsReqDto,
-    ): RecentEntryRecordsResDto = entryStatsService.recent(expoId, reqDto)
+    ): RecentEntryRecordsResDto = statsCache.get("recent", expoId, reqDto) { entryStatsService.recent(expoId, reqDto) }
 
     @Operation(
         summary = "하루 입장자 목록",
@@ -111,5 +113,5 @@ class EntrySummaryController(
     fun scanners(
         @PathVariable expoId: String,
         @Valid @ParameterObject @ModelAttribute reqDto: ScannerEntryCountsReqDto,
-    ): ScannerEntryCountsResDto = entryStatsService.scanners(expoId, reqDto)
+    ): ScannerEntryCountsResDto = statsCache.get("scanners", expoId, reqDto) { entryStatsService.scanners(expoId, reqDto) }
 }

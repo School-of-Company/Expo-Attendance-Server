@@ -195,22 +195,30 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
     /**
      * 최신 입·퇴장 기록 [시각, 종류(ENTER·EXIT·CANCEL), 입장 종류, 구분, 입장 대상 ID, 스캐너]. 종이 QR의 입장 대상 ID는 토큰이라 응답에 싣지 않는다.
      * 간편입장은 입장 대상이 없고, 취소(`delta < 0`)는 `CANCEL`이다.
+     *
+     * 입장 날짜, 시각의 역순이다(기록은 그 입장 날짜에 일어나므로 시각 역순과 같다). 세 갈래가 각자 이 순서로 앞 [limit]개만 읽고 합친다(#255).
+     * 입장 로그는 `ix_entry_log_expo_day_entered`, 퇴장은 입장 이벤트의 (박람회, 날짜, 시각) 인덱스를 거꾸로 읽어 그날 행을 모두 읽고 정렬하지 않는다.
      */
     @Query(
         nativeQuery = true,
         value = """
-            SELECT * FROM (
-                SELECT entered_at AS occurred_at, 'ENTER' AS kind, subject_type, category, subject_id, scanner
-                FROM tb_entry_log WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to
+            SELECT occurred_at, kind, subject_type, category, subject_id, scanner FROM (
+                (SELECT attendance_date, entered_at AS occurred_at, 'ENTER' AS kind, subject_type, category, subject_id, scanner
+                 FROM tb_entry_log WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to
+                 ORDER BY attendance_date DESC, entered_at DESC LIMIT :limit)
                 UNION ALL
-                SELECT v.occurred_at, 'EXIT', v.subject_type, l.category, v.subject_id, v.scanner
-                FROM tb_entry_event v JOIN tb_entry_log l
-                  ON l.expo_id = v.expo_id AND l.subject_type = v.subject_type AND l.subject_id = v.subject_id AND l.attendance_date = v.attendance_date
-                WHERE v.expo_id = :expoId AND v.attendance_date BETWEEN :from AND :to AND v.event_type = 'EXIT'
+                (SELECT v.attendance_date, v.occurred_at, 'EXIT', v.subject_type, l.category, v.subject_id, v.scanner
+                 FROM (
+                     SELECT expo_id, subject_type, subject_id, attendance_date, occurred_at, scanner FROM tb_entry_event
+                     WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to AND event_type = 'EXIT'
+                     ORDER BY attendance_date DESC, occurred_at DESC LIMIT :limit
+                 ) v JOIN tb_entry_log l
+                   ON l.expo_id = v.expo_id AND l.subject_type = v.subject_type AND l.subject_id = v.subject_id AND l.attendance_date = v.attendance_date)
                 UNION ALL
-                SELECT created_at, CASE WHEN delta > 0 THEN 'ENTER' ELSE 'CANCEL' END, 'WALK_IN', category, CAST(NULL AS VARCHAR), scanner
-                FROM tb_walk_in_log WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to
-            ) r ORDER BY occurred_at DESC LIMIT :limit
+                (SELECT attendance_date, created_at, CASE WHEN delta > 0 THEN 'ENTER' ELSE 'CANCEL' END, 'WALK_IN', category, CAST(NULL AS VARCHAR), scanner
+                 FROM tb_walk_in_log WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to
+                 ORDER BY attendance_date DESC, created_at DESC LIMIT :limit)
+            ) r ORDER BY attendance_date DESC, occurred_at DESC LIMIT :limit
         """,
     )
     fun recent(

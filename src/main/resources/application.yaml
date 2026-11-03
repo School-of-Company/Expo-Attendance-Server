@@ -88,6 +88,9 @@ expo-period-cache:
 # #249 회차 시간 조회 캐시. 회차 시간을 고친 직후 최대 이 시간만큼 이전 시간으로 입장이 판정된다. 0이면 끈다
 preregister-session-cache:
   ttl-seconds: ${PREREGISTER_SESSION_CACHE_TTL_SECONDS:30}
+# #255 입·퇴장 현황 조회 결과를 대시보드끼리 이 시간(ms) 동안 함께 쓴다. 관리자 변경 신호를 받으면 그 박람회 결과를 바로 버린다. 0이면 끈다
+admin-stats-cache:
+  ttl-millis: ${ADMIN_STATS_CACHE_TTL_MILLIS:1000}
 # #240 박람회 변경 이벤트(expo.expo.changed)로 채우는 로컬 프로젝션. 켜면 기간·프로그램·회차를 프로젝션에서 먼저 읽고, 없으면 박람회 서비스를 부른다
 expo-projection:
   enabled: ${KAFKA_EXPO_PROJECTION_ENABLED:false}
