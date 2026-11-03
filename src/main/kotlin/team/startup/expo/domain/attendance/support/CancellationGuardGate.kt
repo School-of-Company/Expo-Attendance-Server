@@ -1,23 +1,26 @@
 package team.startup.expo.domain.attendance.support
 
-import org.springframework.dao.CannotAcquireLockException
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.support.TransactionTemplate
 import team.startup.expo.domain.attendance.entity.CancellationGuard
 import team.startup.expo.domain.attendance.entity.CancellationGuardState
 import team.startup.expo.domain.attendance.repository.CancellationGuardRepository
 import team.startup.expo.domain.attendance.repository.FieldVisitRepository
 import team.startup.expo.global.exception.ExpectedException
-import team.startup.expo.global.metrics.AttendanceMetrics
 import java.time.Clock
 import java.time.LocalDate
+import java.util.UUID
 
 /**
  * 입장·프로그램 스캔이 취소 보호와 겹치지 않게 하는 관문이다. 스캔은 참가자(연수는 연수자) 단위 공유 락을 잡은 채 취소 보호를 확인하고
  * 기록을 마친다. 취소 검사는 같은 키의 배타 락을 잡아 진행 중인 스캔이 끝난 뒤에 보호를 걸고, 그 뒤의 스캔은 거절된다.
  * 서로 다른 사람의 스캔은 막지 않는다. 락을 기다리는 시간과 원격 호출 시간에 상한이 있어 DB 커넥션을 오래 쥐지 않는다.
+ *
+ * [scanning]은 같은 트랜잭션에서 차례로 확인한 뒤 블록을 실행한다.
+ * 1. 참가자·연수자 취소 보호([checkGuard]): HELD면 409, COMMITTED는 그 날짜의 ACTIVE FIELD가 없으면 400이다.
+ * 2. 날짜별 현장 방문 취소 보류(`fieldVisits.held`, #204): 그 날짜의 참가자나 연결 연수자에 HELD 보호가 있으면 409다.
+ * 3. 오늘 입장 자격(`preregisterSessionValidator.checkToday`): 그 날짜의 ACTIVE FIELD나 ACTIVE PRE 회차가 없으면 400이다.
  *
  * 다른 서비스를 부르는 동안 트랜잭션을 잡지 않는다는 이 서비스의 원칙의 예외이고, 이 관문 안에서만 그렇게 한다(#79).
  */
@@ -29,7 +32,7 @@ class CancellationGuardGate(
     private val preregisterSessionValidator: PreregisterSessionValidator,
     private val clock: Clock,
 ) {
-    private val transaction = TransactionTemplate(transactionManager)
+    private val lockExecutor = GuardLockExecutor(transactionManager, cancellationGuardRepository)
 
     fun <T> scanning(
         expoId: String,
@@ -39,54 +42,79 @@ class CancellationGuardGate(
         block: () -> T,
     ): T {
         val date = attendanceDate ?: LocalDate.now(clock)
-        try {
-            return requireNotNull(
-                transaction.execute {
-                    cancellationGuardRepository.setLockTimeout(LOCK_TIMEOUT)
-                    if (participantId != null) {
-                        timedLock { cancellationGuardRepository.lockShared(participantKey(expoId, participantId)) }
-                        cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId)?.let {
-                            if (it.state == CancellationGuardState.HELD ||
-                                preregisterSessionValidator.activeField(expoId, participantId, date) == null
-                            ) {
-                                reject(it)
-                            }
-                        }
-                    }
-                    if (traineeId != null) {
-                        timedLock { cancellationGuardRepository.lockShared(traineeKey(expoId, traineeId)) }
-                        cancellationGuardRepository.findByExpoIdAndTraineeId(expoId, traineeId)?.let {
-                            if (it.state == CancellationGuardState.HELD ||
-                                preregisterSessionValidator.activeField(expoId, it.participantId, date) == null
-                            ) {
-                                reject(it)
-                            }
-                        }
-                    }
-                    if (fieldVisits.held(expoId, participantId, traineeId, date)) {
-                        throw ExpectedException(HttpStatus.CONFLICT, "신청 취소를 처리 중입니다.")
-                    }
-                    if (participantId != null) preregisterSessionValidator.checkToday(expoId, participantId, date)
-                    if (participantId == null && traineeId != null) {
-                        fieldVisits.linkedParticipants(expoId, traineeId, date).forEach {
-                            preregisterSessionValidator.checkToday(expoId, it, date)
-                        }
-                    }
-                    block()
-                },
-            )
-        } catch (e: CannotAcquireLockException) {
-            throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "취소 처리와 겹쳐 잠시 후 다시 시도해 주세요.")
+        return lockExecutor.execute("취소 처리와 겹쳐 잠시 후 다시 시도해 주세요.") {
+            if (participantId != null) {
+                checkGuard(
+                    expoId,
+                    participantKey(expoId, participantId),
+                    date,
+                    findGuard = { cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId) },
+                    guardedParticipantId = { participantId },
+                )
+            }
+            if (traineeId != null) {
+                checkGuard(
+                    expoId,
+                    traineeKey(expoId, traineeId),
+                    date,
+                    findGuard = { cancellationGuardRepository.findByExpoIdAndTraineeId(expoId, traineeId) },
+                    guardedParticipantId = { it.participantId },
+                )
+            }
+            checkFieldVisitHold(expoId, participantId, traineeId, date)
+            checkTodaySessions(expoId, participantId, traineeId, date)
+            block()
         }
     }
 
-    /** 락을 얻기까지 기다린 시간을 `attendance.guard.lock.wait{kind=scan}`으로 기록한다. 락을 못 얻어 실패해도 기다린 시간은 남는다. */
-    private fun timedLock(acquire: () -> Unit) {
-        val start = System.nanoTime()
-        try {
-            acquire()
-        } finally {
-            AttendanceMetrics.recordLockWait("scan", System.nanoTime() - start)
+    /**
+     * [lockKey]의 공유 락을 잡은 뒤 취소 보호를 확인한다. 보호가 HELD이면 거절하고, COMMITTED여도 [date]의 ACTIVE FIELD가 없으면 거절한다.
+     * FIELD 확인 대상은 [guardedParticipantId]가 정한다(참가자 스캔은 그 참가자, 연수자 스캔은 보호를 건 참가자).
+     */
+    private fun checkGuard(
+        expoId: String,
+        lockKey: String,
+        date: LocalDate,
+        findGuard: () -> CancellationGuard?,
+        guardedParticipantId: (CancellationGuard) -> Long,
+    ) {
+        lockExecutor.lockShared(lockKey, GuardLockExecutor.WAIT_SCAN)
+        findGuard()?.let {
+            if (it.state == CancellationGuardState.HELD ||
+                preregisterSessionValidator.activeField(expoId, guardedParticipantId(it), date) == null
+            ) {
+                reject(it)
+            }
+        }
+    }
+
+    /** 날짜별 현장 방문 취소(#204)가 [date]의 참가자나 연결 연수자에 보호를 걸어 두었으면 거절한다. */
+    private fun checkFieldVisitHold(
+        expoId: String,
+        participantId: Long?,
+        traineeId: Long?,
+        date: LocalDate,
+    ) {
+        if (fieldVisits.held(expoId, participantId, traineeId, date)) {
+            throw ExpectedException(HttpStatus.CONFLICT, "신청 취소를 처리 중입니다.")
+        }
+    }
+
+    /**
+     * [date]의 입장 자격(그날 ACTIVE FIELD나 그날 시작하는 ACTIVE PRE 회차)을 확인하고, 없으면 400 "취소된 신청입니다."다(#204).
+     * 참가자 스캔은 그 참가자를, 참가자 없이 연수자만 스캔하면 그 날짜의 현장 방문 보호에 연결된 참가자들을 확인한다.
+     */
+    private fun checkTodaySessions(
+        expoId: String,
+        participantId: Long?,
+        traineeId: Long?,
+        date: LocalDate,
+    ) {
+        if (participantId != null) preregisterSessionValidator.checkToday(expoId, participantId, date)
+        if (participantId == null && traineeId != null) {
+            fieldVisits.linkedParticipants(expoId, traineeId, date).forEach {
+                preregisterSessionValidator.checkToday(expoId, it, date)
+            }
         }
     }
 
@@ -108,5 +136,8 @@ class CancellationGuardGate(
             expoId: String,
             traineeId: Long,
         ) = "guard:$expoId:t:$traineeId"
+
+        /** 날짜별 현장 방문 등록 하나(#204)의 배타 락 키. 참가자 락 다음에 잡는다. */
+        fun fieldVisitKey(registrationId: UUID) = "field-visit:$registrationId"
     }
 }
