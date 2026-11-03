@@ -93,9 +93,9 @@ class ClientContractTests : IntegrationTestSupport() {
             """[{"id":5,"title":"연수","startedAt":"2026-10-07 09:00","endedAt":"2026-10-07 10:00","category":"AI"}]""",
         )
 
-        expoClient.getStandardProgram("expo-1", 3) shouldBe StandardProgramResDto(3, "체험")
+        expoClient.getStandardProgram("expo-1", 3) shouldBe StandardProgramResDto(3)
         expoClient.getTrainingPrograms("expo-1", TrainingProgramBatchReqDto(listOf(5))) shouldBe
-            listOf(TrainingProgramResDto(5, "연수"))
+            listOf(TrainingProgramResDto(5))
 
         received[0].let { it.method to it.path } shouldBe ("GET" to "/internal/expo/expo-1/standard-programs/3")
         received[1].method shouldBe "POST"

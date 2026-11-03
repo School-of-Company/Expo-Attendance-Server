@@ -517,7 +517,7 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
         doReturn(listOf(StandardParticipantNameResDto(participantId, "홍길동")))
             .`when`(userClient)
             .getStandardParticipantNames(StandardParticipantNamesReqDto(expoId, listOf(participantId)))
-        doReturn(StandardProgramResDto(programId, "프로그램")).`when`(expoClient).getStandardProgram(expoId, programId)
+        doReturn(StandardProgramResDto(programId)).`when`(expoClient).getStandardProgram(expoId, programId)
         doReturn(ProgramApplicationResDto(true)).`when`(applicationClient).checkStandardApplication(programId, participantId)
     }
 
@@ -529,7 +529,7 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
         doReturn(listOf(TraineeNameResDto(traineeId, "김연수")))
             .`when`(userClient)
             .getTraineeNames(TraineeNamesReqDto(expoId, listOf(traineeId)))
-        doReturn(listOf(TrainingProgramResDto(programId, "연수")))
+        doReturn(listOf(TrainingProgramResDto(programId)))
             .`when`(expoClient)
             .getTrainingPrograms(expoId, TrainingProgramBatchReqDto(listOf(programId)))
         doReturn(ProgramApplicationResDto(true)).`when`(applicationClient).checkTrainingApplication(programId, traineeId)
