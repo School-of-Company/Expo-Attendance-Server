@@ -28,6 +28,7 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     implementation("org.postgresql:postgresql")
+    implementation("com.github.ben-manes.caffeine:caffeine")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     testImplementation("io.kotest:kotest-runner-junit5:5.9.1")
     testImplementation("io.kotest:kotest-assertions-core:5.9.1")

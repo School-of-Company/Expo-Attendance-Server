@@ -39,6 +39,7 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
             clock,
             mockk(relaxed = true),
             expoProjection,
+            UnitTestSupport.noSessionCache(),
         )
 
     private val expoId = "expo-1"

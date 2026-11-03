@@ -76,6 +76,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
                 mockk(relaxed = true),
                 UnitTestSupport.preregisterValidator(),
                 clock,
+                UnitTestSupport.scanLimiter(),
             ),
             ProgramAttendanceProperties(requireCode),
             nameResolver,

@@ -15,7 +15,7 @@ import java.util.UUID
 /**
  * 입장·프로그램 스캔이 취소 보호와 겹치지 않게 하는 관문이다. 스캔은 참가자(연수는 연수자) 단위 공유 락을 잡은 채 취소 보호를 확인하고
  * 기록을 마친다. 취소 검사는 같은 키의 배타 락을 잡아 진행 중인 스캔이 끝난 뒤에 보호를 걸고, 그 뒤의 스캔은 거절된다.
- * 서로 다른 사람의 스캔은 막지 않는다. 락을 기다리는 시간과 원격 호출 시간에 상한이 있어 DB 커넥션을 오래 쥐지 않는다.
+ * 서로 다른 사람의 스캔은 막지 않는다(동시에 들어오는 수만 [ScanConcurrencyLimiter]가 커넥션 풀 크기 아래로 제한한다, #247). 락을 기다리는 시간과 원격 호출 시간에 상한이 있어 DB 커넥션을 오래 쥐지 않는다.
  *
  * [scanning]은 같은 트랜잭션에서 차례로 확인한 뒤 블록을 실행한다.
  * 1. 참가자·연수자 취소 보호([checkGuard]): HELD면 409, COMMITTED는 그 날짜의 ACTIVE FIELD가 없으면 400이다.
@@ -31,6 +31,7 @@ class CancellationGuardGate(
     private val fieldVisits: FieldVisitRepository,
     private val preregisterSessionValidator: PreregisterSessionValidator,
     private val clock: Clock,
+    private val scanLimiter: ScanConcurrencyLimiter,
 ) {
     private val lockExecutor = GuardLockExecutor(transactionManager, cancellationGuardRepository)
 
@@ -39,6 +40,14 @@ class CancellationGuardGate(
         participantId: Long? = null,
         traineeId: Long? = null,
         attendanceDate: LocalDate? = null,
+        block: () -> T,
+    ): T = scanLimiter.limited { scanningInTransaction(expoId, participantId, traineeId, attendanceDate, block) }
+
+    private fun <T> scanningInTransaction(
+        expoId: String,
+        participantId: Long?,
+        traineeId: Long?,
+        attendanceDate: LocalDate?,
         block: () -> T,
     ): T {
         val date = attendanceDate ?: LocalDate.now(clock)

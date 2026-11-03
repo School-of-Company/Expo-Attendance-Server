@@ -61,5 +61,11 @@ class AttendanceMetrics(
                 .register(target)
                 .record(nanos, TimeUnit.NANOSECONDS)
         }
+
+        /** 동시 스캔 허용 수가 차서 커넥션을 잡기 전에 거절한 횟수(#247). */
+        fun recordScanRejected() {
+            val target = registry ?: return
+            target.counter("attendance.scan.concurrency.rejected").increment()
+        }
     }
 }
