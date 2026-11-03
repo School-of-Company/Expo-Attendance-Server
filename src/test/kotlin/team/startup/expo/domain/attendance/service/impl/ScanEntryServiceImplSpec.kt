@@ -126,6 +126,7 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
         every { preregisterSessionValidator.checkNotCancelled(any(), any(), any(), any()) } answers { thirdArg() }
         every { preregisterSessionValidator.activeField(any(), any(), any()) } returns null
         every { userClient.resolveStandardParticipant(any()) } returns ResolveStandardParticipantResDto(55L)
+        every { userClient.verifyStandardParticipant(any()) } just Runs
         every { guardRepository.findByExpoIdAndParticipantId(any(), any()) } returns null
     }
 
@@ -491,6 +492,9 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                     res.badgePrintJobId shouldBe null
                     verify(exactly = 1) { userClient.getEntryStatus(any()) }
                     verify(exactly = 1) {
+                        userClient.verifyStandardParticipant(VerifyStandardParticipantReqDto(expoId, 55L, "code-abc"))
+                    }
+                    verify(exactly = 1) {
                         entryLogService.recordEntry(
                             expoId,
                             EntrySubjectType.STANDARD,
@@ -500,6 +504,27 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                         )
                     }
                     verify { fieldFence.finish(attemptId, true) }
+                }
+            }
+
+            `when`("타임아웃 뒤 User에 오늘 입장이 기록돼 있지만 코드가 틀리면(#264)") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignReadTimeout()
+                every { userClient.verifyStandardParticipant(any()) } throws UnitTestSupport.feignNotFound()
+
+                then("이름을 담은 복구 응답 대신 404이고 입장 로그 없이 fence를 실패로 끝낸다") {
+                    shouldFailWith(HttpStatus.NOT_FOUND, "행사 참가자를 찾지 못 했습니다.") { service.scan(expoId, codeReq) }
+                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any(), any()) }
+                    verify(exactly = 0) { userClient.getStandardParticipantNames(any()) }
+                    verify { fieldFence.finish(attemptId, false) }
+                }
+            }
+
+            `when`("전화번호 입장이 타임아웃 뒤 복구되면") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignReadTimeout()
+
+                then("코드가 없으므로 코드 확인을 하지 않는다") {
+                    service.scan(expoId, phoneReq).entryStatus shouldBe EntryStatus.FIRST
+                    verify(exactly = 0) { userClient.verifyStandardParticipant(any()) }
                 }
             }
 
@@ -853,6 +878,9 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 then("사전등록 회차 확인을 요청한다") {
                     verify(exactly = 1) { preregisterSessionValidator.check(expoId, 55L, any(), any()) }
                 }
+                then("통과한 스캔은 코드를 따로 확인하지 않고 입장 기록에 맡긴다(#264)") {
+                    verify(exactly = 0) { userClient.verifyStandardParticipant(any()) }
+                }
                 then("입장 로그를 STANDARD와 참가자 ID로 남기고 코드는 남기지 않는다") {
                     verify(
                         exactly = 1,
@@ -890,8 +918,24 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, 11L, today) } throws
                     ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청입니다.")
 
-                then("입장을 기록하지 않고 거절한다") {
+                then("코드를 확인한 뒤 입장을 기록하지 않고 거절한다") {
                     shouldFailWith(HttpStatus.BAD_REQUEST, "취소된 신청입니다.") { service.scan(expoId, codeReq) }
+                    verify(exactly = 0) { userClient.recordEntry(any()) }
+                    verify(exactly = 1) {
+                        userClient.verifyStandardParticipant(VerifyStandardParticipantReqDto(expoId, 55L, "code-abc"))
+                    }
+                }
+            }
+
+            `when`("락 안에서 취소를 확인했는데 코드가 틀리면(#264)") {
+                givenPeriodOk()
+                every { preregisterSessionValidator.check(expoId, 55L, any(), any()) } returns 11L
+                every { preregisterSessionValidator.checkNotCancelled(expoId, 55L, 11L, today) } throws
+                    ExpectedException(HttpStatus.BAD_REQUEST, "취소된 신청입니다.")
+                every { userClient.verifyStandardParticipant(any()) } throws UnitTestSupport.feignNotFound()
+
+                then("신청 상태 대신 입장 기록과 같은 404로 거절한다") {
+                    shouldFailWith(HttpStatus.NOT_FOUND, "행사 참가자를 찾지 못 했습니다.") { service.scan(expoId, codeReq) }
                     verify(exactly = 0) { userClient.recordEntry(any()) }
                 }
             }

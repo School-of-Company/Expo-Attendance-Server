@@ -67,7 +67,10 @@ class ScanEntryServiceImpl(
         val scanned =
             if (participantId != null) {
                 cancellationGuardGate.scanning(expoId, participantId = participantId, attendanceDate = today) {
-                    val sessionId = preregisterSessionValidator.checkNotCancelled(expoId, participantId, checkedSessionId, today)
+                    val sessionId =
+                        verifyingCodeOnError(expoId, reqDto) {
+                            preregisterSessionValidator.checkNotCancelled(expoId, participantId, checkedSessionId, today)
+                        }
                     recordOrReenter(expoId, reqDto, sessionId, participantId, now, scanner)
                 }
             } else {
@@ -91,7 +94,7 @@ class ScanEntryServiceImpl(
 
     /**
      * 사전등록 QR(참가자 ID와 코드)은 신청한 회차 중 하나의 입장 시간이어야 한다. 입장을 기록하기 전에 지금 회차를 고른다.
-     * 코드가 틀리면 입장 기록과 같은 404여야 해서, 신청 상태를 알리기 전에 먼저 확인한다.
+     * 코드가 틀리면 입장 기록과 같은 404여야 해서, 신청 상태를 알리는 에러를 돌려주기 전에만 코드를 확인한다(#264).
      */
     private fun checkPreregisterSession(
         expoId: String,
@@ -158,6 +161,14 @@ class ScanEntryServiceImpl(
             if (repeatEntryResolver.hasTodayLog(expoId, id, today) || !users.enteredToday(expoId, id, today)) {
                 throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.")
             }
+            // entry-status는 code를 보지 않는다. 복구 응답은 이름을 담으므로 QR이면 code를 확인한다(#264).
+            // 틀린 code는 유저 서비스가 기록하지 않았으므로 fence를 실패로 끝낸다.
+            try {
+                verifyCodeIfQr(expoId, reqDto)
+            } catch (e: ExpectedException) {
+                if (e.status == HttpStatus.NOT_FOUND) attempt?.let { fieldEntryFence.finish(it, false) }
+                throw e
+            }
             attempt?.let { fieldEntryFence.finish(it, true) }
             Scanned(recoveredParticipantId = id)
         } catch (e: ExpectedException) {
@@ -166,6 +177,29 @@ class ScanEntryServiceImpl(
             }
             throw e
         }
+    }
+
+    /** [block]이 에러로 끝나면 QR의 코드를 먼저 확인한다. 틀린 코드에는 신청 상태 대신 404를 돌려준다(#264). */
+    private fun <T> verifyingCodeOnError(
+        expoId: String,
+        reqDto: ScanEntryReqDto,
+        block: () -> T,
+    ): T =
+        try {
+            block()
+        } catch (e: ExpectedException) {
+            verifyCodeIfQr(expoId, reqDto)
+            throw e
+        }
+
+    private fun verifyCodeIfQr(
+        expoId: String,
+        reqDto: ScanEntryReqDto,
+    ) {
+        val participantId = reqDto.participantId
+        val code = reqDto.code
+        if (reqDto.authority != EntryAuthority.ROLE_STANDARD || participantId == null || code.isNullOrBlank()) return
+        users.verifyCode(expoId, participantId, code, reqDto.authority)
     }
 
     /** 일반 참가자는 전화번호 또는 참가자 ID와 코드가 모두 필요하고, 연수자는 전화번호가 필요하다. */
