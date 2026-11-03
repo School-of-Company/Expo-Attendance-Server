@@ -295,7 +295,11 @@ class InternalEntryRecordsApiTests : IntegrationTestSupport() {
 
     private fun json(result: ResultActions): String = result.andExpect(status().isOk).andReturn().response.contentAsString
 
-    private fun subjectIds(json: String): List<Int> = Regex("\"subjectId\":(\\d+)").findAll(json).map { it.groupValues[1].toInt() }.toList()
+    private fun subjectIds(json: String): List<Int> =
+        Regex("\"subjectId\":(\\d+)")
+            .findAll(json)
+            .map { it.groupValues[1].toInt() }
+            .toList()
 
     private fun nextCursor(json: String): String? = Regex("\"nextCursor\":\"([^\"]+)\"").find(json)?.groupValues?.get(1)
 
