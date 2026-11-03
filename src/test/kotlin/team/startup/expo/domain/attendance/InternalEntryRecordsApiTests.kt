@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import team.startup.expo.domain.attendance.support.EntryRecordCursor
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.user.UserClient
@@ -130,6 +131,78 @@ class InternalEntryRecordsApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `cursor로 끝까지 이어 읽으면 겹침과 누락이 없고 마지막 페이지에는 nextCursor가 없다(#250)`() {
+        // 같은 시각 이벤트는 id 순이다
+        repeat(7) { event("STANDARD", (100 + it).toString(), today, "ENTER", "10:00", null) }
+        walkIn(today, "ADULT", 1)
+
+        val first =
+            json(
+                records("size=3")
+                    .andExpect(jsonPath("$.totalElements").value(7))
+                    .andExpect(jsonPath("$.walkIn.length()").value(1)),
+            )
+        val seen = subjectIds(first).toMutableList()
+        var cursor: String? = nextCursor(first)
+        var requests = 1
+        while (cursor != null) {
+            val next =
+                json(
+                    records("size=3&cursor=$cursor")
+                        .andExpect(status().isOk)
+                        .andExpect(jsonPath("$.totalElements").doesNotExist())
+                        .andExpect(jsonPath("$.walkIn.length()").value(0)),
+                )
+            seen += subjectIds(next)
+            cursor = nextCursor(next)
+            requests++
+        }
+        seen shouldBe (100..106).toList()
+        // 3 + 3 + 1건. 마지막 페이지를 안 뒤에 빈 페이지를 한 번 더 부르지 않는다
+        requests shouldBe 3
+    }
+
+    @Test
+    fun `건수가 페이지 크기의 배수여도 마지막 페이지에는 nextCursor가 없다`() {
+        repeat(6) { event("STANDARD", (100 + it).toString(), today, "ENTER", "10:00", null) }
+
+        val cursor = requireNotNull(nextCursor(json(records("size=3"))))
+        records("size=3&cursor=$cursor")
+            .andExpect(jsonPath("$.records.length()").value(3))
+            .andExpect(jsonPath("$.nextCursor").doesNotExist())
+    }
+
+    @Test
+    fun `OFFSET 페이지의 nextCursor로 이어 읽어도 같은 순서다`() {
+        repeat(7) { event("STANDARD", (100 + it).toString(), today, "ENTER", "10:00", null) }
+
+        val second = json(records("page=1&size=3"))
+        subjectIds(second) shouldBe listOf(103, 104, 105)
+        val cursor = requireNotNull(nextCursor(second))
+        subjectIds(json(records("size=3&cursor=$cursor"))) shouldBe listOf(106)
+    }
+
+    @Test
+    fun `cursor는 날짜를 넘어 이어 읽고 범위 밖 날짜는 읽지 않는다`() {
+        val d = LocalDate.of(2026, 10, 19)
+        event("STANDARD", "1", d.minusDays(1), "ENTER", "23:00", null)
+        event("STANDARD", "2", d, "ENTER", "18:00", null)
+        event("STANDARD", "3", d, "EXIT", "19:00", null)
+        event("STANDARD", "4", d.plusDays(1), "ENTER", "09:00", null)
+        event("STANDARD", "5", d.plusDays(2), "ENTER", "09:00", null)
+
+        val range = "from=$d&to=${d.plusDays(1)}"
+        val seen = mutableListOf<Int>()
+        var cursor: String? = null
+        do {
+            val page = json(records("$range&size=1" + (cursor?.let { "&cursor=$it" } ?: "")))
+            seen += subjectIds(page)
+            cursor = nextCursor(page)
+        } while (cursor != null)
+        seen shouldBe listOf(2, 3, 4)
+    }
+
+    @Test
     fun `날짜 범위는 양 끝을 포함하고 범위 밖은 빠진다`() {
         val d = LocalDate.of(2026, 10, 19)
         event("STANDARD", "1", d.minusDays(1), "ENTER", "10:00", null)
@@ -157,6 +230,9 @@ class InternalEntryRecordsApiTests : IntegrationTestSupport() {
             "size=0",
             "page=-1",
             "from=abc&to=2026-10-19",
+            "cursor=not-a-cursor",
+            "cursor=${java.util.Base64.getUrlEncoder().encodeToString("2026-10-19|x|1".toByteArray())}",
+            "page=1&cursor=${EntryRecordCursor(today, today.atTime(10, 0), 1).encode()}",
         ).forEach { records(it).andExpect(status().isBadRequest) }
         records("size=5000").andExpect(status().isOk)
         mockMvc
@@ -206,6 +282,7 @@ class InternalEntryRecordsApiTests : IntegrationTestSupport() {
             .andExpect(jsonPath("$.totalElements").value(0))
             .andExpect(jsonPath("$.records.length()").value(0))
             .andExpect(jsonPath("$.walkIn.length()").value(0))
+            .andExpect(jsonPath("$.nextCursor").doesNotExist())
     }
 
     @Test
@@ -215,6 +292,12 @@ class InternalEntryRecordsApiTests : IntegrationTestSupport() {
             .perform(get("/internal/expos/$EXPO/entry-records").header("X-Internal-Token", "wrong-token"))
             .andExpect(status().isUnauthorized)
     }
+
+    private fun json(result: ResultActions): String = result.andExpect(status().isOk).andReturn().response.contentAsString
+
+    private fun subjectIds(json: String): List<Int> = Regex("\"subjectId\":(\\d+)").findAll(json).map { it.groupValues[1].toInt() }.toList()
+
+    private fun nextCursor(json: String): String? = Regex("\"nextCursor\":\"([^\"]+)\"").find(json)?.groupValues?.get(1)
 
     private fun records(query: String): ResultActions =
         mockMvc.perform(get("/internal/expos/$EXPO/entry-records?$query").header("X-Internal-Token", INTERNAL_TOKEN))
