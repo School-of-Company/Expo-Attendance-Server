@@ -40,12 +40,18 @@ class EntryRecordsServiceImpl(
         // 한 건 더 읽어 다음 페이지가 있는지 안다. 그래서 마지막 페이지에는 nextCursor가 없다
         val rows =
             when {
-                total == 0L -> emptyList()
+                total == 0L -> {
+                    emptyList()
+                }
+
                 cursor != null -> {
                     val (afterDate, afterAt, afterId) = cursor
                     entryLogRepository.findEventsAfter(expoId, from, to, afterDate, afterAt, afterId, reqDto.size + 1)
                 }
-                else -> entryLogRepository.findEvents(expoId, from, to, reqDto.size + 1, reqDto.page.toLong() * reqDto.size)
+
+                else -> {
+                    entryLogRepository.findEvents(expoId, from, to, reqDto.size + 1, reqDto.page.toLong() * reqDto.size)
+                }
             }
         val page = rows.take(reqDto.size)
         val nextCursor =
