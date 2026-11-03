@@ -58,6 +58,13 @@ class RepeatEntryResolver(
         return EntryResponses.reEntry(reqDto, subjectId, name, log.enteredAt)
     }
 
+    /** 일반 참가자의 오늘 입장 로그가 있는지. 결과를 모르는 기록을 User에 확인해도 되는지 가린다(#287). */
+    fun hasTodayLog(
+        expoId: String,
+        participantId: Long,
+        today: LocalDate,
+    ): Boolean = findTodayLog(expoId, EntrySubjectType.STANDARD, participantId, today) != null
+
     private fun findTodayLog(
         expoId: String,
         subjectType: EntrySubjectType,

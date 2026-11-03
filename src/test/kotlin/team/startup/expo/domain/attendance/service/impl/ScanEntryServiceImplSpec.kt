@@ -545,6 +545,29 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                 }
             }
 
+            `when`("타임아웃인데 오늘 입장 로그가 이미 있으면(다른 회차로 먼저 입장)") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignReadTimeout()
+                stubTodayLog() returns oldLog()
+
+                then("entry-status는 회차를 구분하지 않으므로 묻지 않고 503이며 fence는 PENDING이다") {
+                    shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.") { service.scan(expoId, codeReq) }
+                    verify(exactly = 0) { userClient.getEntryStatus(any()) }
+                    verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any(), any()) }
+                    verify(exactly = 0) { fieldFence.finish(any(), any()) }
+                }
+            }
+
+            `when`("타임아웃 뒤 User에 기록돼 있는데 이름을 읽지 못하면") {
+                every { userClient.recordEntry(any()) } throws UnitTestSupport.feignReadTimeout()
+                every { userClient.getStandardParticipantNames(any()) } throws UnitTestSupport.feignServerError()
+
+                then("이름은 락 밖에서 읽으므로 입장 로그와 fence는 먼저 마무리되고 503이다") {
+                    shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.") { service.scan(expoId, codeReq) }
+                    verify(exactly = 1) { entryLogService.recordEntry(expoId, EntrySubjectType.STANDARD, "55", any(), any(), any()) }
+                    verify { fieldFence.finish(attemptId, true) }
+                }
+            }
+
             val circuitOpen = CallNotPermittedException.createCallNotPermittedException(UnitTestSupport.circuitBreaker("open"))
             listOf(
                 "연결 거부" to UnitTestSupport.feignConnectRefused(),
