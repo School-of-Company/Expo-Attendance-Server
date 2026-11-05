@@ -358,8 +358,9 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `유저 서비스가 코드를 확인하지 못하면 신청 상태를 알리지 않고 503이다`() {
+    fun `거절할 때 유저 서비스가 코드를 확인하지 못하면 신청 상태를 알리지 않고 503이다`() {
         assign(SESSION).andExpect(status().isNoContent)
+        sessionAt(start = now.plus(Duration.ofHours(2)), end = now.plus(Duration.ofHours(5)))
         doThrow(feignException(500)).`when`(userClient).verifyStandardParticipant(VerifyStandardParticipantReqDto(EXPO, PARTICIPANT, CODE))
 
         scan().andExpect(status().isServiceUnavailable)

@@ -97,6 +97,10 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
                     check() shouldBe 11L
                     verify(exactly = 1) { expoClient.getPreregisterSession(expoId, 11L) }
                 }
+                then("통과하면 코드를 따로 확인하지 않는다(입장 기록이 확인한다, #264)") {
+                    check() shouldBe 11L
+                    verifyCalls shouldBe 0
+                }
             }
         }
 
@@ -309,20 +313,26 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
                 }
             }
 
-            `when`("코드가 틀리면") {
+            `when`("교원이 아닌데 코드가 틀리면") {
                 givenRecords(listOf(record(sessionId = morning)))
-                var occupationCalls = 0
+                givenSession(morningStart, morningStart.plusSeconds(2 * 3600), morning)
 
-                then("직업을 조회하기 전에 404로 거절한다") {
+                then("회차가 끝났다고 알리지 않고 404로 거절한다") {
                     shouldFailWith(HttpStatus.NOT_FOUND, "행사 참가자를 찾지 못 했습니다.") {
-                        validator.check(expoId, participantId, {
-                            occupationCalls++
-                            "TEACHER"
-                        }) {
+                        validator.check(expoId, participantId, { "PARENT" }) {
                             throw ExpectedException(HttpStatus.NOT_FOUND, "행사 참가자를 찾지 못 했습니다.")
                         }
                     }
-                    occupationCalls shouldBe 0
+                }
+            }
+
+            `when`("교원으로 통과하면") {
+                givenRecords(listOf(record(sessionId = morning)))
+                givenSession(morningStart, morningStart.plusSeconds(2 * 3600), morning)
+
+                then("코드를 따로 확인하지 않고 회차를 돌려준다(틀린 코드는 입장 기록이 404, #264)") {
+                    teacherCheck("TEACHER") shouldBe morning
+                    verifyCalls shouldBe 0
                 }
             }
 
@@ -371,6 +381,17 @@ class PreregisterSessionValidatorSpec : BehaviorSpec() {
 
                 then("503을 던진다") {
                     shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "신청한 회차를 확인할 수 없습니다.") { check() }
+                }
+            }
+
+            `when`("회차 시간이 아니고 코드가 틀리면") {
+                givenRecord(record())
+                givenSession(now.plusSeconds(7200), now.plusSeconds(10800))
+
+                then("입장 시간 대신 404로 거절한다") {
+                    shouldFailWith(HttpStatus.NOT_FOUND, "행사 참가자를 찾지 못 했습니다.") {
+                        validator.check(expoId, participantId) { throw ExpectedException(HttpStatus.NOT_FOUND, "행사 참가자를 찾지 못 했습니다.") }
+                    }
                 }
             }
 
