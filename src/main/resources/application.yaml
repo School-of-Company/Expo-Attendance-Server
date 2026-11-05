@@ -12,6 +12,18 @@ spring:
     banner-mode: "off"
   cloud:
     openfeign:
+      # 풀 기반 Apache HttpClient 5(feign-hc5)를 쓴다. 기본 JDK HttpURLConnection은 같은 호스트의 유휴 연결을 5개까지만 재사용해
+      # 동시 호출이 많으면 응답마다 연결을 닫고 새로 맺는다(#256). 연결 시간·읽기 시간 제한은 아래 client.config가 호출마다 적용한다
+      httpclient:
+        hc5:
+          enabled: true
+          # 풀이 가득 찼을 때 연결을 기다리는 시간. 기본값은 3분이라 느린 서비스 하나가 스캔 스레드를 오래 붙잡는다
+          connection-request-timeout: ${FEIGN_CONNECTION_REQUEST_TIMEOUT_MS:1000}
+          connection-request-timeout-unit: milliseconds
+        max-connections: ${FEIGN_MAX_CONNECTIONS:200}
+        max-connections-per-route: ${FEIGN_MAX_CONNECTIONS_PER_ROUTE:50}
+        time-to-live: ${FEIGN_TIME_TO_LIVE_SECONDS:900}
+        time-to-live-unit: seconds
       client:
         config:
           default:

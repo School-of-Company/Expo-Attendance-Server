@@ -39,6 +39,7 @@
 | `SHUTDOWN_TIMEOUT` (`20s`) | graceful shutdown 때 처리 중인 요청을 기다리는 시간. 스캔 한 번보다 길게 둔다 |
 | `METRICS_PORT` (서비스 포트) | `/actuator/prometheus`와 헬스 경로를 별도 내부 포트에서 제공. Eureka 메타데이터 `prometheus.port`에도 실린다 |
 | `DB_POOL_SIZE` (`30`), `DB_POOL_CONNECTION_TIMEOUT_MS` (`3000`) | 커넥션 풀 크기와 빈 커넥션 대기 시간(ms). 넘으면 503. 입장 스캔은 다른 서비스를 부르는 동안 커넥션을 하나 잡는다(`load-test/README.md`) |
+| `FEIGN_MAX_CONNECTIONS` (`200`), `FEIGN_MAX_CONNECTIONS_PER_ROUTE` (`50`), `FEIGN_TIME_TO_LIVE_SECONDS` (`900`), `FEIGN_CONNECTION_REQUEST_TIMEOUT_MS` (`1000`) | 다른 서비스를 부르는 Feign 클라이언트(Apache HttpClient 5)의 연결 풀 전체·호스트별 상한, 연결 최대 수명(초), 풀이 가득 찼을 때 연결을 기다리는 시간(ms). 넘게 기다리면 호출 실패로 처리되어 503(#256) |
 | `TRANSACTION_TIMEOUT` (`15s`) | 트랜잭션 기본 제한 시간. 넘으면 503 |
 | `LOGGING_HTTP_ACCESS_ENABLED` (`true`) | 요청마다 접근 로그 한 줄(`module`=`HttpAccess`). 형식은 `AGENTS.md`의 Logging |
 | `LOG_LEVEL_ROOT` (`info`) | 전체 로그 레벨 |
