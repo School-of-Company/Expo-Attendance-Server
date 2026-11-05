@@ -223,7 +223,7 @@ class CancellationGuardServiceImpl(
     /**
      * 잠금 순서 규칙(#167): 한 트랜잭션에서 둘 이상 잡을 때는 항상 박람회 락 -> 참가자(연수자) 락 순서다.
      * [PreregisterSessionServiceImpl.assign]이 이 순서로 잡으므로 반대로 잡으면 같은 참가자에서 교착이 난다.
-     * 박람회 락이 필요한 호출은 [expoIdToLock]을 넘겨 참가자 락보다 먼저 잡게 한다.
+     * 박람회 락이 필요한 호출은 [expoIdToLock]을 넘겨 참가자 락보다 먼저 잡게 한다. 박람회 락은 삭제만 막는 공유 락이다(#248).
      */
     private fun <T> locked(
         key: String,
@@ -231,7 +231,7 @@ class CancellationGuardServiceImpl(
         block: () -> T,
     ): T =
         lockExecutor.execute("진행 중인 스캔이 끝나지 않아 잠시 후 다시 시도해 주세요.") {
-            if (expoIdToLock != null) deletedExpoRepository.lockExpo(expoIdToLock)
+            if (expoIdToLock != null) deletedExpoRepository.lockExpoShared(expoIdToLock)
             lockExecutor.lockExclusive(key, GuardLockExecutor.WAIT_CANCEL)
             block()
         }

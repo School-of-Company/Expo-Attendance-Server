@@ -15,21 +15,21 @@ class DeletedExpoLockSpec :
         given("삭제된 박람회 락") {
             `when`("삭제 기록이 없으면") {
                 val repository = mockk<DeletedExpoRepository>()
-                every { repository.lockExpo(expoId) } returns 1
+                every { repository.lockExpoShared(expoId) } returns 1
                 every { repository.existsById(expoId) } returns false
 
                 repository.lockAndRequireAlive(expoId)
 
                 then("락을 먼저 잡은 뒤 삭제 기록을 확인하고 통과한다") {
                     verifyOrder {
-                        repository.lockExpo(expoId)
+                        repository.lockExpoShared(expoId)
                         repository.existsById(expoId)
                     }
                 }
             }
             `when`("삭제 기록이 있으면") {
                 val repository = mockk<DeletedExpoRepository>()
-                every { repository.lockExpo(expoId) } returns 1
+                every { repository.lockExpoShared(expoId) } returns 1
                 every { repository.existsById(expoId) } returns true
 
                 then("404를 던진다") {

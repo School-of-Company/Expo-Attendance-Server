@@ -248,7 +248,7 @@ class FieldVisitServiceImpl(
         block: () -> T,
     ): T =
         lockExecutor.execute(UNAVAILABLE) {
-            deletedExpoRepository.lockExpo(expoId)
+            deletedExpoRepository.lockExpoShared(expoId)
             if (deletedExpoRepository.existsById(expoId)) throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
             lockExecutor.lockExclusive(CancellationGuardGate.participantKey(expoId, participantId))
             lockExecutor.lockExclusive(CancellationGuardGate.fieldVisitKey(registrationId))

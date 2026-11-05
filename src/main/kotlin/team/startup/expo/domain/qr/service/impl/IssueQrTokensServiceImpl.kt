@@ -36,9 +36,11 @@ class IssueQrTokensServiceImpl(
 
         // 삭제와 같은 락을 잡은 뒤에 삭제 기록을 확인해, 삭제된 박람회의 토큰이 되살아나지 않게 한다
         deletedExpoRepository.lockAndRequireAlive(expoId)
+        // 박람회 락은 공유라서 연번은 박람회·구분 락으로 따로 세운다(#248)
+        qrTokenRepository.lockSerial("qr-serial:$expoId:${reqDto.category}")
 
         val now = LocalDateTime.now(clock)
-        // 같은 박람회 락 안이라 구분별 연번이 겹치지 않는다. 무효화한 토큰의 연번도 다시 쓰지 않는다.
+        // 같은 연번 락 안이라 구분별 연번이 겹치지 않는다. 무효화한 토큰의 연번도 다시 쓰지 않는다.
         val firstSerial = qrTokenRepository.findMaxSerial(expoId, reqDto.category) + 1
         val issued =
             List(reqDto.count) { index ->
