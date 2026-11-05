@@ -110,10 +110,14 @@ class AdminDataChangeApiTests : IntegrationTestSupport() {
     @Test
     fun `연속 스캔은 병합 간격 안에서 한 번으로 모이고 중복 입장과 롤백은 신호를 만들지 않는다`() {
         val result = subscribe()
-        repeat(5) { insertEntry(EXPO, "burst-$it") }
+        insertEntry(EXPO, "burst-0")
+        // 첫 변경은 바로 간다(#269)
         eventually { events(result).size == 1 }
+        // 간격 안의 나머지는 간격 끝에 하나로 모인다
+        repeat(4) { insertEntry(EXPO, "burst-${it + 1}") }
+        eventually { events(result).size == 2 }
         Thread.sleep(700)
-        events(result).size shouldBe 1
+        events(result).size shouldBe 2
 
         // 같은 날 두 번째 스캔은 행이 생기지 않는다
         insertEntry(EXPO, "burst-0")
@@ -122,7 +126,7 @@ class AdminDataChangeApiTests : IntegrationTestSupport() {
             it.setRollbackOnly()
         }
         Thread.sleep(1_500)
-        events(result).size shouldBe 1
+        events(result).size shouldBe 2
         close(result)
     }
 
