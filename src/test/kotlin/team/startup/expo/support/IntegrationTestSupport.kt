@@ -20,6 +20,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer
         "qr-entry-review.enabled=false",
         "expo-period-cache.ttl-seconds=0",
         "preregister-session-cache.ttl-seconds=0",
+        "admin-stats-cache.ttl-millis=0",
         "entry-replay.window-seconds=0",
     ],
 )
