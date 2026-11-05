@@ -22,6 +22,14 @@ class EntryRecordCursorSpec :
                 }
             }
 
+            `when`("기간 시작일로 처음 위치를 만들면") {
+                val start = EntryRecordCursor.before(LocalDate.of(2026, 10, 30))
+
+                then("그날 0시의 첫 이벤트보다도 앞이다") {
+                    start shouldBe EntryRecordCursor(LocalDate.of(2026, 10, 29), LocalDateTime.of(2026, 10, 29, 0, 0), 0L)
+                }
+            }
+
             listOf(
                 "base64가 아님" to "!!!",
                 "칸 수가 다름" to Base64.getUrlEncoder().encodeToString("2026-10-30|1".toByteArray()),

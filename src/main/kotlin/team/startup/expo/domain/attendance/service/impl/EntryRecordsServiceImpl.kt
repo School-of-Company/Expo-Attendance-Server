@@ -9,6 +9,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.EntryEventT
 import team.startup.expo.domain.attendance.presentation.dto.response.EntryRecordItemResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.EntryRecordWalkInResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.EntryRecordsResDto
+import team.startup.expo.domain.attendance.repository.EntryEventRow
 import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.repository.WalkInLogRepository
 import team.startup.expo.domain.attendance.service.EntryRecordsService
@@ -18,7 +19,6 @@ import team.startup.expo.domain.attendance.support.ExpoIdFormat
 import team.startup.expo.domain.attendance.support.NativeRows
 import team.startup.expo.global.exception.ExpectedException
 import java.time.LocalDate
-import java.time.LocalDateTime
 
 @Service
 class EntryRecordsServiceImpl(
@@ -39,24 +39,17 @@ class EntryRecordsServiceImpl(
         entryLogRepository.planWithActualValues()
         // 한 건 더 읽어 다음 페이지가 있는지 안다. 그래서 마지막 페이지에는 nextCursor가 없다
         val rows =
-            when {
-                total == 0L -> {
-                    emptyList()
-                }
-
-                cursor != null -> {
-                    val (afterDate, afterAt, afterId) = cursor
-                    entryLogRepository.findEventsAfter(expoId, from, to, afterDate, afterAt, afterId, reqDto.size + 1)
-                }
-
-                else -> {
-                    entryLogRepository.findEvents(expoId, from, to, reqDto.size + 1, reqDto.page.toLong() * reqDto.size)
-                }
+            if (total == 0L) {
+                emptyList()
+            } else {
+                val (afterDate, afterAt, afterId) = cursor ?: EntryRecordCursor.before(from)
+                val offset = if (cursor == null) reqDto.page.toLong() * reqDto.size else 0L
+                entryLogRepository.findEvents(expoId, from, to, afterDate, afterAt, afterId, reqDto.size + 1, offset)
             }
         val page = rows.take(reqDto.size)
         val nextCursor =
             if (rows.size > reqDto.size) {
-                page.last().let { EntryRecordCursor(it[8] as LocalDate, it[0] as LocalDateTime, NativeRows.long(it[7])).encode() }
+                page.last().let { EntryRecordCursor(it.attendanceDate, it.occurredAt, it.id).encode() }
             } else {
                 null
             }
@@ -82,18 +75,18 @@ class EntryRecordsServiceImpl(
         return from to to
     }
 
-    private fun toRecord(row: Array<Any?>): EntryRecordItemResDto {
-        val subjectType = EntrySubjectType.valueOf(row[2] as String)
+    private fun toRecord(row: EntryEventRow): EntryRecordItemResDto {
+        val subjectType = EntrySubjectType.valueOf(row.subjectType)
         val paper = subjectType == EntrySubjectType.PAPER_QR
         return EntryRecordItemResDto(
-            occurredAt = row[0] as LocalDateTime,
-            eventType = EntryEventType.valueOf(row[1] as String),
+            occurredAt = row.occurredAt,
+            eventType = EntryEventType.valueOf(row.eventType),
             subjectType = subjectType,
             // 종이 QR의 subject_id는 토큰이라 응답에 싣지 않는다
-            subjectId = if (paper) null else (row[3] as String).toLongOrNull(),
-            category = if (paper) row[4] as String? else null,
-            paperCode = if (paper) row[5] as String? else null,
-            scanner = row[6] as String?,
+            subjectId = if (paper) null else row.subjectId.toLongOrNull(),
+            category = if (paper) row.category else null,
+            paperCode = if (paper) row.paperCode else null,
+            scanner = row.scanner,
         )
     }
 }

@@ -21,6 +21,9 @@ data class EntryRecordCursor(
         private val ENCODER = Base64.getUrlEncoder().withoutPadding()
         private val DECODER = Base64.getUrlDecoder()
 
+        /** [from]보다 앞이라 기간 안의 모든 이벤트가 뒤에 오는 위치. 처음부터 읽을 때 쓴다. */
+        fun before(from: LocalDate): EntryRecordCursor = from.minusDays(1).let { EntryRecordCursor(it, it.atStartOfDay(), 0) }
+
         fun decode(value: String): EntryRecordCursor =
             runCatching {
                 val (date, at, id) = String(DECODER.decode(value)).split('|').also { require(it.size == 3) }
