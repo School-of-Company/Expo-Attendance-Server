@@ -287,34 +287,49 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
     ): Long
 
     /**
-     * 기간 안의 이벤트 한 페이지 [시각, 종류, 대상 종류, 대상 ID, 종이 QR 구분, 종이 QR 코드, 스캐너](#150). 발생 시각, 같으면 id 순이다.
-     * 먼저 이벤트 표에서 `ix_entry_event_expo_day`로 범위를 거르고 정렬·`LIMIT`/`OFFSET`을 한 뒤, 그 페이지 행에만 구분(`tb_entry_log`)과
-     * 코드(`tb_qr_token`)를 붙인다. 입장 로그는 대상·날짜마다 한 행(유일 키)이고 토큰은 PK라 행이 늘어나지 않는다.
+     * 기간 안에서 (입장 날짜, 발생 시각, id)가 커서(`after*`)보다 뒤인 이벤트를 [offset]만큼 건너뛰고 [size]건 읽는다(#150, #250).
+     * 입장 날짜, 발생 시각, id 순이다(이벤트는 그 입장 날짜에 일어나므로 발생 시각 순과 같다). 먼저 이벤트 표에서 `ix_entry_event_expo_day_id`
+     * 순서대로 커서 위치부터 읽어 `LIMIT`/`OFFSET`을 한 뒤, 그 페이지 행에만 구분(`tb_entry_log`)과 코드(`tb_qr_token`)를 붙인다.
+     * 입장 로그는 대상·날짜마다 한 행(유일 키)이고 토큰은 PK라 행이 늘어나지 않는다. 커서로 이어 읽으면(`offset` 0) 몇 번째 페이지든 비용이 같고,
+     * 처음부터 읽을 때는 [EntryRecordCursor.before]로 기간 앞을 커서로 준다. 같은 순서라 OFFSET 페이지의 마지막 행에서 이어 읽어도 겹침과 누락이 없다.
      */
     @Query(
         nativeQuery = true,
         value = """
-            SELECT e.occurred_at, e.event_type, e.subject_type, e.subject_id, l.category, q.code, e.scanner
+            SELECT e.occurred_at AS "occurredAt", e.event_type AS "eventType", e.subject_type AS "subjectType",
+                   e.subject_id AS "subjectId", l.category AS "category", q.code AS "paperCode", e.scanner AS "scanner",
+                   e.id AS "id", e.attendance_date AS "attendanceDate"
             FROM (
                 SELECT id, expo_id, subject_type, subject_id, attendance_date, event_type, occurred_at, scanner
                 FROM tb_entry_event
                 WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to
-                ORDER BY occurred_at, id LIMIT :size OFFSET :offset
+                  AND (attendance_date, occurred_at, id) > (:afterDate, :afterAt, :afterId)
+                ORDER BY attendance_date, occurred_at, id LIMIT :size OFFSET :offset
             ) e
             LEFT JOIN tb_entry_log l
               ON l.expo_id = e.expo_id AND l.subject_type = e.subject_type AND l.subject_id = e.subject_id AND l.attendance_date = e.attendance_date
             LEFT JOIN tb_qr_token q
               ON e.subject_type = 'PAPER_QR' AND q.expo_id = e.expo_id AND q.token = e.subject_id
-            ORDER BY e.occurred_at, e.id
+            ORDER BY e.attendance_date, e.occurred_at, e.id
         """,
     )
     fun findEvents(
         @Param("expoId") expoId: String,
         @Param("from") from: LocalDate,
         @Param("to") to: LocalDate,
+        @Param("afterDate") afterDate: LocalDate,
+        @Param("afterAt") afterAt: LocalDateTime,
+        @Param("afterId") afterId: Long,
         @Param("size") size: Int,
         @Param("offset") offset: Long,
-    ): List<Array<Any?>>
+    ): List<EntryEventRow>
+
+    /**
+     * 이 트랜잭션의 쿼리를 매번 실제 값으로 계획하게 한다(#250). 같은 SQL이 서버 쪽 준비문으로 바뀌면 PostgreSQL이 값과 무관한 일반 계획을 고를 수 있는데,
+     * 키셋 조회는 그 계획에서 인덱스 순서 읽기 대신 범위 전체를 읽어 정렬한다(측정: 페이지당 0.2ms → 40ms).
+     */
+    @Query(nativeQuery = true, value = "SELECT set_config('plan_cache_mode', 'force_custom_plan', true)")
+    fun planWithActualValues(): String
 
     @Modifying
     @Query(nativeQuery = true, value = "DELETE FROM tb_entry_event WHERE expo_id = :expoId")
