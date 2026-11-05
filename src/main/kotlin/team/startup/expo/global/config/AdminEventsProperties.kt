@@ -11,7 +11,7 @@ import java.time.Duration
  * @property maxConnectionsPerExpo 박람회 하나의 최대 연결 수(인스턴스당).
  * @property connectionLifetime 연결 최대 수명. 끝나면 서버가 닫고, 재연결 때 게이트웨이가 권한을 다시 검증한다.
  * @property heartbeatInterval SSE 주석 heartbeat 간격.
- * @property coalesceInterval 같은 박람회의 변경을 이 시간 동안 모아 한 번만 보낸다. 연속 스캔이 화면의 연속 재조회가 되지 않게 한다. 0이면 모으지 않는다.
+ * @property coalesceInterval 같은 박람회는 이 시간 안에 한 번만 보낸다(첫 변경은 바로, 간격 안의 나머지는 끝에 한 번). 연속 스캔이 화면의 연속 재조회가 되지 않게 한다. 0이면 모으지 않는다.
  */
 @ConfigurationProperties(prefix = "admin-events")
 data class AdminEventsProperties(
