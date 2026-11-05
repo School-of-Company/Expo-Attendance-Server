@@ -57,21 +57,23 @@ class ScanStandardProgramServiceImpl(
     ScanStandardProgramService {
     /**
      * `code`가 있으면 참가자 ID와 함께 유저 서비스에서 확인한다(없는 참가자, 다른 박람회, 틀린 code는 같은 404).
-     * 없으면 설정에 따라 거부하거나 이전 앱을 위해 참가자 ID만으로 존재만 확인한다.
+     * 없으면 설정에 따라 거부하거나 이전 앱을 위해 참가자 ID만으로 존재를 확인한다. 이때 받은 이름을 응답에 다시 쓰도록 돌려준다.
      */
-    private fun checkParticipant(reqDto: ScanStandardProgramReqDto) {
+    private fun checkParticipant(reqDto: ScanStandardProgramReqDto): KnownName? {
         val notFound = ExpectedException(HttpStatus.NOT_FOUND, "행사 참가자를 찾지 못 했습니다.")
         val code = reqDto.code
         if (!code.isNullOrBlank()) {
             userCircuitBreaker.callService("유저", notFound) {
                 userClient.verifyStandardParticipant(VerifyStandardParticipantReqDto(reqDto.expoId, reqDto.participantId, code))
             }
-            return
+            return null
         }
         if (properties.requireCode) throw ExpectedException(HttpStatus.BAD_REQUEST, "참가자 코드가 필요합니다.")
-        userCircuitBreaker.callService("유저", notFound) {
-            userClient.getStandardParticipantNames(StandardParticipantNamesReqDto(reqDto.expoId, listOf(reqDto.participantId)))
-        }
+        val names =
+            userCircuitBreaker.callService("유저", notFound) {
+                userClient.getStandardParticipantNames(StandardParticipantNamesReqDto(reqDto.expoId, listOf(reqDto.participantId)))
+            }
+        return KnownName(ProgramScanNameResolver.pickStandard(names, reqDto.participantId))
     }
 
     override val programType = ProgramType.STANDARD
@@ -82,8 +84,8 @@ class ScanStandardProgramServiceImpl(
         programId: Long,
         reqDto: ScanStandardProgramReqDto,
     ): ProgramScanResDto {
-        checkParticipant(reqDto)
-        return scanProgram(reqDto.expoId, programId, reqDto.participantId, participantId = reqDto.participantId)
+        val knownName = checkParticipant(reqDto)
+        return scanProgram(reqDto.expoId, programId, reqDto.participantId, participantId = reqDto.participantId, knownName = knownName)
     }
 
     override fun findProjectedProgram(

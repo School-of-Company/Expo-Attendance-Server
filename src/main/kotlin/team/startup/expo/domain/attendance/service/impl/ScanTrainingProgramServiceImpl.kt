@@ -60,9 +60,16 @@ class ScanTrainingProgramServiceImpl(
         programId: Long,
         reqDto: ScanTrainingProgramReqDto,
     ): ProgramScanResDto {
-        val traineeId = resolveTraineeId(reqDto)
+        val resolved = resolveTrainee(reqDto)
         // 연수 프로그램은 시간대 검사를 하지 않아 입실이 거부되는 일은 없다
-        return scanProgram(reqDto.expoId, programId, traineeId, participantId = reqDto.participantId, traineeId = traineeId)
+        return scanProgram(
+            reqDto.expoId,
+            programId,
+            resolved.traineeId,
+            participantId = reqDto.participantId,
+            traineeId = resolved.traineeId,
+            knownName = resolved.knownName,
+        )
     }
 
     override fun findProjectedProgram(
@@ -89,9 +96,9 @@ class ScanTrainingProgramServiceImpl(
 
     /**
      * `participantId`와 `code`가 오면 유저 서비스에서 코드를 확인하고 연결된 연수자를 찾는다(틀린 code, 다른 박람회, 연결 없음은 같은
-     * 404). 아니면 이전 방식으로 `traineeId`를 받아 연수자가 이 박람회에 있는지만 확인한다.
+     * 404). 아니면 이전 방식으로 `traineeId`를 받아 연수자가 이 박람회에 있는지 확인하고, 이때 받은 이름을 응답에 다시 쓰도록 함께 돌려준다.
      */
-    private fun resolveTraineeId(reqDto: ScanTrainingProgramReqDto): Long {
+    private fun resolveTrainee(reqDto: ScanTrainingProgramReqDto): ResolvedTrainee {
         val notFound = ExpectedException(HttpStatus.NOT_FOUND, "연수자를 찾지 못 했습니다.")
         val hasParticipant = reqDto.participantId != null
         val hasCode = !reqDto.code.isNullOrBlank()
@@ -99,17 +106,29 @@ class ScanTrainingProgramServiceImpl(
             throw ExpectedException(HttpStatus.BAD_REQUEST, "참가자 ID와 코드를 함께 보내야 합니다.")
         }
         if (hasParticipant) {
-            return userCircuitBreaker
-                .callService("유저", notFound) {
-                    userClient.resolveTraineeByParticipant(
-                        ResolveTraineeByParticipantReqDto(reqDto.expoId, requireNotNull(reqDto.participantId), requireNotNull(reqDto.code)),
-                    )
-                }.traineeId
+            val traineeId =
+                userCircuitBreaker
+                    .callService("유저", notFound) {
+                        userClient.resolveTraineeByParticipant(
+                            ResolveTraineeByParticipantReqDto(
+                                reqDto.expoId,
+                                requireNotNull(reqDto.participantId),
+                                requireNotNull(reqDto.code),
+                            ),
+                        )
+                    }.traineeId
+            return ResolvedTrainee(traineeId, null)
         }
         val traineeId = reqDto.traineeId ?: throw ExpectedException(HttpStatus.BAD_REQUEST, "연수자 ID 또는 참가자 ID와 코드가 필요합니다.")
-        userCircuitBreaker.callService("유저", notFound) {
-            userClient.getTraineeNames(TraineeNamesReqDto(reqDto.expoId, listOf(traineeId)))
-        }
-        return traineeId
+        val names =
+            userCircuitBreaker.callService("유저", notFound) {
+                userClient.getTraineeNames(TraineeNamesReqDto(reqDto.expoId, listOf(traineeId)))
+            }
+        return ResolvedTrainee(traineeId, KnownName(ProgramScanNameResolver.pickTrainee(names, traineeId)))
     }
+
+    private class ResolvedTrainee(
+        val traineeId: Long,
+        val knownName: KnownName?,
+    )
 }
