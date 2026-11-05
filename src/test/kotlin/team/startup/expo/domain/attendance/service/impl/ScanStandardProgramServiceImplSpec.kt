@@ -27,6 +27,7 @@ import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.expo.StandardProgramResDto
 import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
+import team.startup.expo.global.client.user.StandardParticipantNameResDto
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
@@ -76,6 +77,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
                 mockk(relaxed = true),
                 UnitTestSupport.preregisterValidator(),
                 clock,
+                UnitTestSupport.scanLimiter(),
             ),
             ProgramAttendanceProperties(requireCode),
             nameResolver,
@@ -93,7 +95,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
     private fun givenHappyPath(result: ProgramAttendanceResult = ProgramAttendanceResult.ENTERED) {
         every { userClient.verifyStandardParticipant(any()) } just Runs
         every { userClient.getStandardParticipantNames(any()) } returns emptyList()
-        every { expoClient.getStandardProgram(expoId, programId) } returns StandardProgramResDto(programId, "프로그램")
+        every { expoClient.getStandardProgram(expoId, programId) } returns StandardProgramResDto(programId)
         every { expoClient.getPeriod(expoId) } returns ExpoPeriodResDto("2026-05-10", "2026-05-12")
         every { guardRepository.findByExpoIdAndParticipantId(any(), any()) } returns null
         every { applicationClient.checkStandardApplication(programId, participantId) } returns ProgramApplicationResDto(true)
@@ -191,6 +193,40 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
                         exactly = 1,
                     ) { userClient.getStandardParticipantNames(StandardParticipantNamesReqDto(expoId, listOf(participantId))) }
                     verify(exactly = 0) { userClient.verifyStandardParticipant(any()) }
+                }
+            }
+
+            `when`("code가 없으면 확인에서 받은 이름을") {
+                givenHappyPath()
+                every { userClient.getStandardParticipantNames(any()) } returns listOf(StandardParticipantNameResDto(participantId, "홍길동"))
+                val result = service(requireCode = false).scan(programId, withoutCode)
+
+                then("응답에 쓰고 유저 서비스를 한 번만 부른다") {
+                    result.name shouldBe "홍길동"
+                    verify(exactly = 1) { userClient.getStandardParticipantNames(any()) }
+                    verify(exactly = 0) { nameResolver.standard(any(), any()) }
+                }
+            }
+
+            `when`("code가 없고 확인 응답에 그 참가자의 이름이 없으면") {
+                givenHappyPath()
+                val result = service(requireCode = false).scan(programId, withoutCode)
+
+                then("이름은 null이고 이름을 다시 읽지 않는다") {
+                    result.name shouldBe null
+                    verify(exactly = 0) { nameResolver.standard(any(), any()) }
+                }
+            }
+
+            `when`("code가 있으면 이름은") {
+                givenHappyPath()
+                every { nameResolver.standard(expoId, participantId) } returns "김철수"
+                val result = service().scan(programId, withCode)
+
+                then("기록 뒤 이름 조회로 한 번 읽는다") {
+                    result.name shouldBe "김철수"
+                    verify(exactly = 1) { nameResolver.standard(expoId, participantId) }
+                    verify(exactly = 0) { userClient.getStandardParticipantNames(any()) }
                 }
             }
 
@@ -309,7 +345,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
                 givenHappyPath()
                 // 시계는 한국 시간 12:07이다
                 every { expoClient.getStandardProgram(expoId, programId) } returns
-                    StandardProgramResDto(programId, "프로그램", "2026-05-10T14:00", "2026-05-10T15:00")
+                    StandardProgramResDto(programId, startedAt = "2026-05-10T14:00", endedAt = "2026-05-10T15:00")
                 every { recordService.record(any(), any(), any(), any(), any(), false) } returns ProgramAttendanceResult.ENTRY_NOT_ALLOWED
 
                 then("입실을 막도록 넘기고 400을 던진다") {
@@ -321,7 +357,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
             `when`("프로그램 일정 시간대 안이면") {
                 givenHappyPath()
                 every { expoClient.getStandardProgram(expoId, programId) } returns
-                    StandardProgramResDto(programId, "프로그램", "2026-05-10T12:00", "2026-05-10T13:00")
+                    StandardProgramResDto(programId, startedAt = "2026-05-10T12:00", endedAt = "2026-05-10T13:00")
 
                 then("입실을 허용하도록 넘긴다") {
                     shouldNotThrowAny { service().scan(programId, withCode) }

@@ -13,6 +13,12 @@ import java.time.LocalDateTime
  * 그보다 오래된 회차 PUT이 늦게 도착해도 새 회차를 만들지 못하게 한다.
  */
 interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long> {
+    /** 한 참가자의 회차 기록 변경을 한 줄로 세우는 배타 트랜잭션 락이다. 트랜잭션이 끝나면 풀린다(#248). */
+    @Query(nativeQuery = true, value = "SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))) AS locked")
+    fun lockParticipant(
+        @Param("key") key: String,
+    ): Int
+
     fun findAllByExpoIdAndParticipantId(
         expoId: String,
         participantId: Long,

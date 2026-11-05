@@ -72,7 +72,7 @@ class OpenApiConfig(
                 .description("게이트웨이가 검증하는 액세스 토큰. 이 서비스는 토큰을 직접 확인하지 않는다."),
         )
         openApi.paths
-            ?.filterKeys { !it.startsWith(INTERNAL_PREFIX) }
+            ?.filterKeys { !it.startsWith(ApiErrorOperationCustomizer.INTERNAL_PATH_PREFIX) }
             ?.values
             ?.forEach { item -> item.readOperations().forEach { it.addSecurityItem(SecurityRequirement().addList(BEARER_SCHEME)) } }
     }
@@ -90,7 +90,7 @@ class OpenApiConfig(
                 .description("서비스 간 호출 인증용 공유 시크릿. `/internal/**`에만 필요하다."),
         )
         openApi.paths
-            ?.filterKeys { it.startsWith(INTERNAL_PREFIX) }
+            ?.filterKeys { it.startsWith(ApiErrorOperationCustomizer.INTERNAL_PATH_PREFIX) }
             ?.values
             ?.forEach { item -> item.readOperations().forEach { it.addSecurityItem(SecurityRequirement().addList(INTERNAL_TOKEN_SCHEME)) } }
     }
@@ -100,7 +100,7 @@ class OpenApiConfig(
         openApi: OpenAPI,
         components: Components,
     ) {
-        openApi.paths?.keys?.removeIf { it.startsWith(INTERNAL_PREFIX) }
+        openApi.paths?.keys?.removeIf { it.startsWith(ApiErrorOperationCustomizer.INTERNAL_PATH_PREFIX) }
         val schemas = components.schemas ?: return
         val mapper = Json.mapper()
         val reachable = mutableSetOf<String>()
@@ -115,7 +115,6 @@ class OpenApiConfig(
     private fun referencedSchemas(json: String): List<String> = SCHEMA_REF.findAll(json).map { it.groupValues[1] }.toList()
 
     private companion object {
-        const val INTERNAL_PREFIX = "/internal/"
         const val INTERNAL_TOKEN_SCHEME = "internalToken"
         const val BEARER_SCHEME = "bearerAuth"
         val SCHEMA_REF = Regex("#/components/schemas/([^\"]+)\"")

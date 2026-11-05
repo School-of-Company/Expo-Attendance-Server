@@ -5,13 +5,17 @@ import java.time.LocalDate
 
 @Schema(description = "하루 입장자 목록(등록 QR). 최초 입장 시각 최신순이고, 한 사람(QR)은 그날 한 행이다")
 data class EntryListResDto(
+    @field:Schema(description = "박람회 ID")
     val expoId: String,
     @field:Schema(description = "조회한 날짜")
     val date: LocalDate,
+    @field:Schema(description = "페이지 번호(0부터)")
     val page: Int,
+    @field:Schema(description = "페이지 크기")
     val size: Int,
     @field:Schema(description = "그날 등록 QR로 입장한 사람 수(페이지와 상관없음)")
     val totalElements: Long,
+    @field:Schema(description = "이 페이지의 입장자(최초 입장 시각 최신순)")
     val entries: List<EntryListItemResDto>,
 ) {
     override fun toString() = "EntryListResDto(expoId=$expoId, date=$date, page=$page, totalElements=$totalElements)"

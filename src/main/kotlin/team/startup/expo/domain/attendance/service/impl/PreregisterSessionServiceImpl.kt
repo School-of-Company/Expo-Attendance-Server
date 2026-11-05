@@ -11,6 +11,7 @@ import team.startup.expo.domain.attendance.repository.PreregisterSessionReposito
 import team.startup.expo.domain.attendance.service.CancellationGuardService
 import team.startup.expo.domain.attendance.service.PreregisterSessionService
 import team.startup.expo.domain.qr.repository.DeletedExpoRepository
+import team.startup.expo.domain.qr.support.lockAndRequireAlive
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDateTime
@@ -29,10 +30,8 @@ class PreregisterSessionServiceImpl(
         reqDto: AssignPreregisterSessionReqDto,
     ) {
         // 삭제와 같은 락을 잡은 뒤에 삭제 기록을 확인해, 삭제된 박람회의 기록이 되살아나지 않게 한다
-        deletedExpoRepository.lockExpo(expoId)
-        if (deletedExpoRepository.existsById(expoId)) {
-            throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
-        }
+        deletedExpoRepository.lockAndRequireAlive(expoId)
+        lockParticipant(expoId, participantId)
         val now = LocalDateTime.now(clock)
         val sessionId = reqDto.sessionId
         val revision = reqDto.revision
@@ -62,10 +61,8 @@ class PreregisterSessionServiceImpl(
         participantId: Long,
         reqDto: FieldRegisterPreregisterSessionReqDto,
     ) {
-        deletedExpoRepository.lockExpo(expoId)
-        if (deletedExpoRepository.existsById(expoId)) {
-            throw ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")
-        }
+        deletedExpoRepository.lockAndRequireAlive(expoId)
+        lockParticipant(expoId, participantId)
         preregisterSessionRepository.fieldRegisterIfNewer(expoId, participantId, reqDto.revision, LocalDateTime.now(clock))
         cancellationGuardService.releaseCommitted(expoId, participantId, reqDto.revision)
     }
@@ -88,8 +85,9 @@ class PreregisterSessionServiceImpl(
             return
         }
         // 취소 기록을 새로 만들 수 있으므로, 삭제된 박람회의 기록이 되살아나지 않게 assign과 같은 락과 확인을 거친다
-        deletedExpoRepository.lockExpo(expoId)
+        deletedExpoRepository.lockExpoShared(expoId)
         if (deletedExpoRepository.existsById(expoId)) return
+        lockParticipant(expoId, participantId)
         if (sessionId != null) {
             val applied = preregisterSessionRepository.cancelSessionIfNewer(expoId, participantId, sessionId, revision, now)
             if (applied == 0 &&
@@ -107,6 +105,17 @@ class PreregisterSessionServiceImpl(
         if (sameRevision(expoId, participantId, revision).any { it.status == PreregisterSessionStatus.ACTIVE }) {
             throw revisionConflict()
         }
+    }
+
+    /**
+     * 박람회 락이 공유라서(#248) 같은 참가자의 회차 PUT·DELETE·현장 재등록은 이 락으로 한 줄로 세운다. revision 비교와 같은 revision 충돌 확인이
+     * 읽고 쓰는 사이에 다른 요청이 끼지 않게 한다. 박람회 락 다음, 취소 보호 참가자 락 앞에 잡는다(#167 순서).
+     */
+    private fun lockParticipant(
+        expoId: String,
+        participantId: Long,
+    ) {
+        preregisterSessionRepository.lockParticipant("preregister-session:$expoId:$participantId")
     }
 
     private fun sameRevision(

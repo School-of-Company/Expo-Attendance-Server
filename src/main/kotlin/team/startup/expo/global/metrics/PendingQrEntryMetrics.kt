@@ -25,7 +25,7 @@ class PendingQrEntryMetrics {
     private fun pendingCount(repository: QrEntryRepository): Double =
         try {
             repository.countPending().toDouble()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             Double.NaN
         }
 }

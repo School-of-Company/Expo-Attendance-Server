@@ -1,4 +1,4 @@
-package team.startup.expo.global.config
+package team.startup.expo.global.metrics
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import io.micrometer.core.instrument.Gauge

@@ -1,6 +1,7 @@
 package team.startup.expo.global.exception
 
 import jakarta.servlet.http.HttpServletRequest
+import org.slf4j.LoggerFactory
 import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.dao.QueryTimeoutException
 import org.springframework.http.HttpHeaders
@@ -17,6 +18,9 @@ import team.startup.expo.global.logging.logRejection
 
 @RestControllerAdvice
 class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
+    // 부모의 commons-logging `logger`와 같은 이름(이 클래스)의 SLF4J 로거. placeholder로 남긴다
+    private val log = LoggerFactory.getLogger(javaClass)
+
     @ExceptionHandler(ExpectedException::class)
     fun handleExpectedException(
         exception: ExpectedException,
@@ -37,13 +41,13 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
         QueryTimeoutException::class,
     )
     fun handleTemporaryDatabaseFailure(exception: Exception): ResponseEntity<ErrorResponse> {
-        logger.warn("DB 일시 장애로 요청을 처리하지 못했습니다: ${exception.javaClass.simpleName}")
+        log.warn("DB 일시 장애로 요청을 처리하지 못했습니다: {}", exception.javaClass.simpleName)
         return errorResponse(HttpStatus.SERVICE_UNAVAILABLE, "요청이 몰려 잠시 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.")
     }
 
     @ExceptionHandler(Exception::class)
     fun handleUnexpected(exception: Exception): ResponseEntity<ErrorResponse> {
-        logger.error("Unhandled API exception", exception)
+        log.error("Unhandled API exception", exception)
         return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다.")
     }
 

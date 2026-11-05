@@ -10,15 +10,19 @@ import java.time.LocalDateTime
             "입장은 QR당 하루 한 번이라 입장 수는 서로 다른 입장자 수와 같다. **입장 로그가 생기기 전의 입장은 포함되지 않는다.**",
 )
 data class EntrySummaryResDto(
+    @field:Schema(description = "박람회 ID")
     val expoId: String,
     @field:Schema(description = "집계한 날짜. 박람회 전체 기간(`all=true`)이면 비어 있다", nullable = true)
     val date: LocalDate?,
     @field:Schema(description = "집계한 시각(화면의 갱신 시각)")
     val generatedAt: LocalDateTime,
+    @field:Schema(description = "사전등록 QR 입장 수")
     val registered: RegisteredEntrySummaryResDto,
     @field:Schema(description = "종이 QR 구분별(`ADULT`, `CHILD` 등). 입장이 없는 구분은 나오지 않는다")
     val paper: List<PaperEntryCountResDto>,
+    @field:Schema(description = "간편입장 구분별 합계")
     val walkIn: WalkInCountsResDto,
+    @field:Schema(description = "전체 합계")
     val totals: EntryTotalsResDto,
     @field:Schema(
         description = "조회한 날짜와 상관없이 지금부터 10분 전까지의 입장 수(등록 QR + 종이 QR + 간편입장 순증감)",

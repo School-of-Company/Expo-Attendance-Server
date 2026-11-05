@@ -173,6 +173,50 @@ class EntryStatsApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `전체 기간 최근 기록은 날짜를 넘어 최신순으로 합치고 갈래마다 limit을 넘게 읽지 않는다(#255)`() {
+        // 어제 늦은 시각 입장 5명과 간편입장 4건. 오늘 기록 7건보다 모두 앞선다
+        val yesterday = today.minusDays(1)
+        repeat(5) {
+            jdbcTemplate.update(
+                "INSERT INTO tb_entry_log (expo_id, subject_type, subject_id, attendance_date, entered_at) VALUES (?, 'STANDARD', ?, ?, ?)",
+                EXPO,
+                (9000 + it).toString(),
+                yesterday,
+                LocalDateTime.of(yesterday, java.time.LocalTime.of(23, it)),
+            )
+        }
+        repeat(4) {
+            jdbcTemplate.update(
+                "INSERT INTO tb_walk_in_log (expo_id, attendance_date, category, delta, created_at) VALUES (?, ?, 'ADULT', 1, ?)",
+                EXPO,
+                yesterday,
+                LocalDateTime.of(yesterday, java.time.LocalTime.of(22, 50 + it)),
+            )
+        }
+
+        val today7 = recentTimes("")
+        val merged = recentTimes("?all=true&limit=10")
+        merged.take(7) shouldBe today7
+        // 그다음은 어제 입장 23:04, 23:03, 23:02 순이고 간편입장(22:5x)은 그보다 뒤다
+        merged.drop(7).map { it.substring(11, 16) } shouldBe listOf("23:04", "23:03", "23:02")
+        // 어제만 보면 입장 5건 다음에 간편입장이 시각 역순으로 나온다
+        recentTimes("?date=$yesterday&limit=7").map { it.substring(11, 16) } shouldBe
+            listOf("23:04", "23:03", "23:02", "23:01", "23:00", "22:53", "22:52")
+    }
+
+    private fun recentTimes(query: String): List<String> {
+        val body =
+            recent(query)
+                .andExpect(status().isOk)
+                .andReturn()
+                .response.contentAsString
+        return Regex("\"at\":\"([^\"]+)\"")
+            .findAll(body)
+            .map { it.groupValues[1] }
+            .toList()
+    }
+
+    @Test
     fun `간편입장 취소는 최근 기록에 CANCEL로 남는다`() {
         walkIn("""{"category":"STUDENT","action":"UNDO"}""", "gate-1")
 

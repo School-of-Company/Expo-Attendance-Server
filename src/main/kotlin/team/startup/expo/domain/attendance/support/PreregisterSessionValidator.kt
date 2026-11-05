@@ -22,7 +22,8 @@ import java.time.LocalDate
 
 /**
  * 오늘 ACTIVE FIELD가 없으면 사전등록 회차의 입장 시간을 확인한다. 날짜를 알 수 없는 과거 FIELD는 권한이 아니다.
- * 신청 상태는 참가자 ID와 code가 맞는 사람에게만 알려야 하므로, 회차 기록이 있으면 먼저 `verifyCode`로 확인한 뒤에 검사한다.
+ * 신청 상태는 참가자 ID와 code가 맞는 사람에게만 알려야 한다. 검사가 실패해 에러를 돌려줄 때만 `verifyCode`로 먼저 확인하고,
+ * 통과하면 확인하지 않는다(입장 기록이 같은 404로 code를 확인한다, #264).
  * 한 사람이 여러 회차에 배정될 수 있고(#160), 확정 상태인 회차 중 지금이 입장 시간인 회차로 입장한다.
  * 허용 시간은 회차 시작 `leadMinutes`분 전부터 종료 시각까지이고, 시각은 모두 `Instant`(UTC)로 비교한다.
  * 고른 회차 ID는 유저 서비스 입장 기록의 `preregisterSessionId`로 보낸다(#142).
@@ -36,6 +37,7 @@ class PreregisterSessionValidator(
     private val clock: Clock,
     private val fieldVisits: FieldVisitRepository,
     private val expoProjection: ExpoProjectionReader,
+    private val sessionCache: PreregisterSessionCache,
 ) {
     /**
      * 취소된 신청을 거절한다. 회차 기록이 있는데 확정 상태인 회차가 하나도 없으면 취소된 신청이다.
@@ -73,14 +75,31 @@ class PreregisterSessionValidator(
     /**
      * 확정 상태인 회차 중 지금이 입장 시간인 회차 ID를 돌려준다. 입장 시간이 겹치면 시작이 이른 회차를 고른다.
      * 오늘 ACTIVE FIELD는 회차 없이 통과한다.
+     * 열린 회차가 없을 때 [occupation]이 교원·예비교사이면 오늘 확정 회차 중 시작이 가장 이른 회차로 시간과 관계없이 입장한다(#283).
+     * [occupation]은 열린 회차가 없을 때만 부른다.
+     *
+     * [verifyCode]는 이 검사가 에러로 끝날 때만 부르고, code가 틀리면 그 404가 원래 에러 대신 나간다.
+     * 통과한 스캔은 유저 서비스 입장 기록이 code를 확인하므로 같은 호출을 두 번 하지 않는다(#264).
      */
     fun check(
         expoId: String,
         participantId: Long,
+        occupation: () -> String? = { null },
         verifyCode: () -> Unit,
+    ): Long? =
+        try {
+            chooseSession(expoId, participantId, occupation)
+        } catch (e: ExpectedException) {
+            verifyCode()
+            throw e
+        }
+
+    private fun chooseSession(
+        expoId: String,
+        participantId: Long,
+        occupation: () -> String?,
     ): Long? {
         val records = records(expoId, participantId)
-        verifyCode()
         if (activeField(expoId, participantId) != null) return null
         val sessionIds = activeSessionIds(records)
         if (sessionIds.isEmpty()) throw cancelled()
@@ -95,6 +114,12 @@ class PreregisterSessionValidator(
         val now = clock.instant()
         val open = sessions.filter { !now.isBefore(it.opensAt) && !now.isAfter(it.endedAt) }
         open.minWithOrNull(compareBy<Window>({ it.startedAt }, { it.sessionId }))?.let { return it.sessionId }
+
+        val today = LocalDate.now(clock)
+        val todaySessions = sessions.filter { it.startedAt.atZone(clock.zone).toLocalDate() == today }
+        if (todaySessions.isNotEmpty() && TeacherOccupation.matches(occupation())) {
+            return todaySessions.minWith(compareBy<Window>({ it.startedAt }, { it.sessionId })).sessionId
+        }
 
         if (sessions.all { now.isAfter(it.endedAt) }) {
             throw ExpectedException(HttpStatus.BAD_REQUEST, "신청한 회차가 이미 끝났습니다.")
@@ -141,18 +166,20 @@ class PreregisterSessionValidator(
     private fun todaySessions(
         expoId: String,
         records: List<PreregisterSession>,
-        attendanceDate: LocalDate = LocalDate.now(clock),
+        attendanceDate: LocalDate,
     ) = activeSessionIds(records)
         .map { sessionId -> session(expoId, sessionId) }
         .filter { it.startedAt.atZone(clock.zone).toLocalDate() == attendanceDate }
 
-    /** 회차 시간. 프로젝션이 꺼져 있거나 없으면 박람회 서비스를 부른다(#240). */
+    /** 회차 시간. 프로젝션이 꺼져 있거나 없으면 박람회 서비스를 부르고, 그 결과만 잠시 기억한다(#240, #249). */
     private fun session(
         expoId: String,
         sessionId: Long,
     ): PreregisterSessionResDto =
         expoProjection.preregisterSession(expoId, sessionId)
-            ?: expoCircuitBreaker.callService("박람회") { expoClient.getPreregisterSession(expoId, sessionId) }
+            ?: sessionCache.get(expoId, sessionId) {
+                expoCircuitBreaker.callService("박람회") { expoClient.getPreregisterSession(expoId, sessionId) }
+            }
 
     private data class Window(
         val sessionId: Long,

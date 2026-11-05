@@ -2,6 +2,7 @@ package team.startup.expo.domain.qr.support
 
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
+import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.domain.qr.repository.QrEntryRepository
 import team.startup.expo.domain.qr.repository.QrTokenRepository
 import java.time.LocalDate
@@ -16,6 +17,7 @@ import java.time.LocalDateTime
 class QrEntryWriter(
     private val qrEntryRepository: QrEntryRepository,
     private val qrTokenRepository: QrTokenRepository,
+    private val deletedExpoRepository: DeletedExpoRepository,
 ) {
     @Transactional
     fun recordEntry(
@@ -36,7 +38,9 @@ class QrEntryWriter(
         scanner: String?,
     ): Int = qrEntryRepository.reenter(token, expoId, attendanceDate, occurredAt, scanner)
 
-    /** 현장 종이 QR 코드(#243)가 규칙 안이면 이 박람회의 토큰으로 등록하고 저장 토큰을 돌려준다. 규칙 밖이면 입력 그대로 돌려준다. */
+    /** 현장 종이 QR 코드(#243)가 규칙 안이면 이 박람회의 토큰으로 등록하고 저장 토큰을 돌려준다. 규칙 밖이면 입력 그대로 돌려준다.
+     * 등록은 발급과 같은 박람회 락·삭제 확인 안에서 하고, 삭제된 박람회면 404다(#291).
+     */
     @Transactional
     fun registerFieldToken(
         expoId: String,
@@ -44,6 +48,7 @@ class QrEntryWriter(
         now: LocalDateTime,
     ): String {
         val field = FieldQrCode.parse(input) ?: return input
+        deletedExpoRepository.lockAndRequireAlive(expoId)
         val token = field.token(expoId)
         qrTokenRepository.registerField(token, expoId, field.category.name, field.code, now)
         return token

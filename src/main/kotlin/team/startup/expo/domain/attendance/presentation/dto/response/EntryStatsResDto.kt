@@ -6,6 +6,7 @@ import java.time.LocalDateTime
 
 @Schema(description = "시간대별 입·퇴장 건수. 기록이 있는 시간만 나오므로 빈 시간은 0으로 채워 그린다")
 data class HourlyEntryResDto(
+    @field:Schema(description = "박람회 ID")
     val expoId: String,
     @field:Schema(description = "집계한 날짜. 박람회 전체 기간이면 비어 있다", nullable = true)
     val date: LocalDate?,
@@ -14,6 +15,7 @@ data class HourlyEntryResDto(
 )
 
 data class HourlyEntryBucketResDto(
+    @field:Schema(description = "날짜")
     val date: LocalDate,
     @field:Schema(description = "시(0~23, Asia/Seoul)", example = "14")
     val hour: Int,
@@ -29,9 +31,11 @@ data class HourlyEntryBucketResDto(
 
 @Schema(description = "최근 입·퇴장 기록(최신순)")
 data class RecentEntryRecordsResDto(
+    @field:Schema(description = "박람회 ID")
     val expoId: String,
     @field:Schema(description = "조회한 날짜. 박람회 전체 기간이면 비어 있다", nullable = true)
     val date: LocalDate?,
+    @field:Schema(description = "최근 기록(최신순)")
     val records: List<EntryRecordResDto>,
 )
 
@@ -71,9 +75,11 @@ enum class EntryMethod {
 
 @Schema(description = "스캐너별 입장 처리 건수(많은 순). `X-Scanner-Name`을 보내지 않은 처리는 포함하지 않는다")
 data class ScannerEntryCountsResDto(
+    @field:Schema(description = "박람회 ID")
     val expoId: String,
     @field:Schema(description = "집계한 날짜. 박람회 전체 기간이면 비어 있다", nullable = true)
     val date: LocalDate?,
+    @field:Schema(description = "스캐너별 건수(많은 순)")
     val scanners: List<ScannerEntryCountResDto>,
 )
 

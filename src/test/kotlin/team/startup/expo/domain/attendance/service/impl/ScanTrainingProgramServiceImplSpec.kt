@@ -3,6 +3,7 @@ package team.startup.expo.domain.attendance.service.impl
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.core.spec.IsolationMode
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -27,6 +28,7 @@ import team.startup.expo.global.client.expo.TrainingProgramBatchReqDto
 import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.client.user.ResolveTraineeByParticipantReqDto
 import team.startup.expo.global.client.user.ResolveTraineeByParticipantResDto
+import team.startup.expo.global.client.user.TraineeNameResDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.config.ExpoPeriodCacheProperties
@@ -72,6 +74,7 @@ class ScanTrainingProgramServiceImplSpec : BehaviorSpec() {
                 mockk(relaxed = true),
                 UnitTestSupport.preregisterValidator(),
                 clock,
+                UnitTestSupport.scanLimiter(),
             ),
             nameResolver,
             expoProjection,
@@ -236,6 +239,30 @@ class ScanTrainingProgramServiceImplSpec : BehaviorSpec() {
 
                 then("503을 던진다") {
                     shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.") { service.scan(programId, byParticipant) }
+                }
+            }
+
+            `when`("traineeId만 보내면 확인에서 받은 이름을") {
+                givenHappyPath()
+                every { userClient.getTraineeNames(any()) } returns listOf(TraineeNameResDto(traineeId, "박연수"))
+                val result = service.scan(programId, byTrainee)
+
+                then("응답에 쓰고 유저 서비스를 한 번만 부른다") {
+                    result.name shouldBe "박연수"
+                    verify(exactly = 1) { userClient.getTraineeNames(any()) }
+                    verify(exactly = 0) { nameResolver.trainee(any(), any()) }
+                }
+            }
+
+            `when`("participantId와 code를 보내면 이름은") {
+                givenHappyPath()
+                every { nameResolver.trainee(expoId, linkedTraineeId) } returns "이연수"
+                val result = service.scan(programId, byParticipant)
+
+                then("기록 뒤 이름 조회로 한 번 읽는다") {
+                    result.name shouldBe "이연수"
+                    verify(exactly = 1) { nameResolver.trainee(expoId, linkedTraineeId) }
+                    verify(exactly = 0) { userClient.getTraineeNames(any()) }
                 }
             }
 

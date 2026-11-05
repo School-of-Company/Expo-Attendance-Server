@@ -62,7 +62,7 @@ class ExpoProjectionRepository(
         )
     }
 
-    /** 마지막으로 반영한 version. 받은 적 없으면 `null`. */
+    /** 마지막으로 반영한 version. 받은 적 없으면 `null`. 운영 코드는 쓰지 않고 테스트가 반영 여부를 확인할 때만 쓴다. */
     fun version(expoId: String): Long? =
         jdbc.query("SELECT version FROM tb_expo_projection WHERE expo_id = ?", { rs, _ -> rs.getLong(1) }, expoId).singleOrNull()
 

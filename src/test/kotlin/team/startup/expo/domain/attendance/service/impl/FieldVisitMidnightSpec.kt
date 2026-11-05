@@ -16,8 +16,10 @@ import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.support.CancellationGuardGate
 import team.startup.expo.domain.attendance.support.EntryLogWriter
 import team.startup.expo.domain.attendance.support.EntryReplayPolicy
+import team.startup.expo.domain.attendance.support.EntryUserGateway
 import team.startup.expo.domain.attendance.support.FieldEntryFence
 import team.startup.expo.domain.attendance.support.PreregisterSessionValidator
+import team.startup.expo.domain.attendance.support.RepeatEntryResolver
 import team.startup.expo.global.client.user.RecordEntryReqDto
 import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.UserClient
@@ -42,7 +44,7 @@ class FieldVisitMidnightSpec :
                     every { clock.instant() } answers { instant }
                     every { clock.zone } returns ZoneId.of("Asia/Seoul")
                     val validator = mockk<PreregisterSessionValidator>(relaxed = true)
-                    every { validator.check("expo", 7, any()) } answers {
+                    every { validator.check("expo", 7, any(), any()) } answers {
                         instant = Instant.parse("2026-10-22T15:00:01Z")
                         null
                     }
@@ -58,17 +60,27 @@ class FieldVisitMidnightSpec :
                     every { user.recordEntry(any()) } returns RecordEntryResDto(7, "tester", null, true, "STANDARD", null, null)
                     val logs = mockk<EntryLogService>(relaxed = true)
                     val fence = mockk<FieldEntryFence>(relaxed = true)
+                    val users = EntryUserGateway(user, UnitTestSupport.circuitBreaker())
                     val service =
                         ScanEntryServiceImpl(
-                            user,
-                            UnitTestSupport.circuitBreaker(),
+                            users,
                             mockk(relaxed = true),
                             validator,
-                            CancellationGuardGate(UnitTestSupport.transactionManager(), locks, fields, validator, clock),
+                            CancellationGuardGate(
+                                UnitTestSupport.transactionManager(),
+                                locks,
+                                fields,
+                                validator,
+                                clock,
+                                UnitTestSupport.scanLimiter(),
+                            ),
                             logs,
-                            mockk<EntryLogRepository>(relaxed = true),
-                            EntryLogWriter(mockk<EntryLogRepository>(relaxed = true)),
-                            EntryReplayPolicy(EntryReplayProperties()),
+                            RepeatEntryResolver(
+                                mockk<EntryLogRepository>(relaxed = true),
+                                EntryLogWriter(mockk<EntryLogRepository>(relaxed = true)),
+                                EntryReplayPolicy(EntryReplayProperties()),
+                                users,
+                            ),
                             clock,
                             fence,
                         )
