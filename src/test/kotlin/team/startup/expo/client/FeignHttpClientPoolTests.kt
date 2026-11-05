@@ -1,12 +1,12 @@
 package team.startup.expo.client
 
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.context.ApplicationContext
 import org.springframework.cloud.openfeign.support.FeignHttpClientProperties
+import org.springframework.context.ApplicationContext
 import team.startup.expo.support.IntegrationTestSupport
 
 /** Feign이 JDK 기본 클라이언트가 아니라 풀 기반 Apache HttpClient 5를 쓰고, 풀 설정이 반영되는지 확인한다(#256). */
