@@ -37,6 +37,7 @@ import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import java.net.SocketTimeoutException
 import java.time.Clock
 import java.time.LocalDate
@@ -168,7 +169,10 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
 
         mockMvc
             .perform(
-                patch("/attendance/exit/$EXPO").contentType(MediaType.APPLICATION_JSON).content("""{"traineeId":$TRAINEE}"""),
+                patch("/attendance/exit/$EXPO")
+                    .withExpoAdmin()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"traineeId":$TRAINEE}"""),
             ).andExpect(status().isOk)
         traineeEntry()
             .andExpect(status().isOk)
@@ -196,8 +200,11 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
             .andExpect(jsonPath("$.uniqueQr").value(1))
             .andExpect(jsonPath("$.reentered").value(1))
         mockMvc
-            .perform(get("/attendance/summary/$EXPO?all=true").header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN"))
-            .andExpect(jsonPath("$.reentered").value(1))
+            .perform(
+                get(
+                    "/attendance/summary/$EXPO?all=true",
+                ).withExpoAdmin(),
+            ).andExpect(jsonPath("$.reentered").value(1))
     }
 
     @Test
@@ -457,6 +464,7 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
     private fun standardEntry(): ResultActions =
         mockMvc.perform(
             patch("/attendance/$EXPO")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"authority":"ROLE_STANDARD","participantId":$PARTICIPANT,"code":"$CODE"}"""),
         )
@@ -464,6 +472,7 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
     private fun phoneEntry(): ResultActions =
         mockMvc.perform(
             patch("/attendance/$EXPO")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"authority":"ROLE_STANDARD","phoneNumber":"$PHONE"}"""),
         )
@@ -471,6 +480,7 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
     private fun traineeEntry(): ResultActions =
         mockMvc.perform(
             patch("/attendance/$EXPO")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"authority":"ROLE_TRAINEE","phoneNumber":"$PHONE"}"""),
         )
@@ -478,12 +488,17 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
     private fun standardExit(): ResultActions =
         mockMvc.perform(
             patch("/attendance/exit/$EXPO")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"participantId":$PARTICIPANT,"code":"$CODE"}"""),
         )
 
     private fun summary(): ResultActions =
-        mockMvc.perform(get("/attendance/summary/$EXPO?date=$today").header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN"))
+        mockMvc.perform(
+            get(
+                "/attendance/summary/$EXPO?date=$today",
+            ).withExpoAdmin(),
+        )
 
     private fun feign(status: Int): FeignException =
         FeignException.errorStatus(

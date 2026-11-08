@@ -48,6 +48,7 @@ import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -181,6 +182,7 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 patch("/attendance/$EXPO")
+                    .withExpoAdmin()
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"authority":"ROLE_STANDARD","phoneNumber":"01012345678"}"""),
             ).andExpect(status().isBadRequest)
@@ -382,7 +384,10 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
             .perform(
                 patch(
                     "/attendance/$EXPO",
-                ).contentType(MediaType.APPLICATION_JSON).content("""{"authority":"ROLE_STANDARD","phoneNumber":"01012345678"}"""),
+                ).withExpoAdmin()
+                    .contentType(
+                        MediaType.APPLICATION_JSON,
+                    ).content("""{"authority":"ROLE_STANDARD","phoneNumber":"01012345678"}"""),
             ).andExpect(status().isOk)
 
         verify(
@@ -540,6 +545,7 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
     private fun scan(code: String = CODE): ResultActions =
         mockMvc.perform(
             patch("/attendance/$EXPO")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"authority":"ROLE_STANDARD","participantId":$PARTICIPANT,"code":"$code"}"""),
         )

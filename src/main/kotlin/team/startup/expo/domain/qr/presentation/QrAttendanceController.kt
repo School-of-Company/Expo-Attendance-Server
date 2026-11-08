@@ -13,11 +13,13 @@ import team.startup.expo.domain.qr.presentation.dto.request.ScanQrTokenReqDto
 import team.startup.expo.domain.qr.presentation.dto.response.ScanQrTokenResDto
 import team.startup.expo.domain.qr.service.ScanQrTokenService
 import team.startup.expo.global.logging.RequestContext
+import team.startup.expo.global.security.ExpoAccessGuard
 import team.startup.expo.global.swagger.ApiError
 
 @RestController
 @RequestMapping("/attendance/qr")
 class QrAttendanceController(
+    private val expoAccessGuard: ExpoAccessGuard,
     private val scanQrTokenService: ScanQrTokenService,
 ) {
     @Operation(
@@ -27,14 +29,18 @@ class QrAttendanceController(
                 "진행 중이 아니면 400, 퇴장하지 않고 같은 날 다시 찍으면 400, 없는 토큰·다른 박람회 토큰은 404다.",
     )
     @ApiError(400, "요청 값이 올바르지 않거나, 박람회가 진행 중인 상태가 아니거나, 오늘 이미 입장했고 퇴장하지 않은 토큰이다(퇴장 스캔 뒤에는 재입장).")
-    @ApiError(404, "박람회를 찾지 못했거나, 없는 토큰이거나 다른 박람회의 토큰이다. 박람회 서비스가 응답하지 못하면 오류 없이 기록하고 나중에 다시 확인한다.")
-    @ApiError(503, "DB 일시 장애로 요청이 몰려 잠시 처리하지 못했다. 잠시 후 다시 시도한다.")
+    @ApiError(404, "박람회를 찾지 못했거나, 없는 토큰이거나 다른 박람회의 토큰이다. 권한 확인이 성공한 뒤 기간 조회만 실패하면 기록하고 나중에 다시 확인한다.")
+    @ApiError(503, "박람회 권한 판정 서비스를 사용할 수 없거나 DB 일시 장애로 처리하지 못했다.")
+    @ApiError(401, "인증된 사용자 헤더가 없다.")
+    @ApiError(403, "해당 박람회의 CHECKIN 권한이 없다.")
     @PatchMapping("/{expoId}")
     fun scan(
         @PathVariable expoId: String,
         @Valid @RequestBody reqDto: ScanQrTokenReqDto,
         @RequestHeader(name = ScannerName.HEADER, required = false) scannerName: String?,
     ): ScanQrTokenResDto {
+        expoAccessGuard.requireAccess(expoId, "CHECKIN")
+
         RequestContext.bindScan(expoId, null)
         return scanQrTokenService.scan(expoId, reqDto, scannerName)
     }

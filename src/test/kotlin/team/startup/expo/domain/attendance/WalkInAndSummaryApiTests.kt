@@ -30,6 +30,7 @@ import team.startup.expo.global.client.user.RecordEntryResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.LocalDate
 import java.util.concurrent.Callable
@@ -284,12 +285,20 @@ class WalkInAndSummaryApiTests : IntegrationTestSupport() {
                 category,
             )
             mockMvc
-                .perform(patch("/attendance/qr/$EXPO").contentType(MediaType.APPLICATION_JSON).content("""{"token":"$token"}"""))
-                .andExpect(status().isOk)
+                .perform(
+                    patch("/attendance/qr/$EXPO")
+                        .withExpoAdmin()
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"token":"$token"}"""),
+                ).andExpect(status().isOk)
         }
         mockMvc
-            .perform(patch("/attendance/exit/$EXPO").contentType(MediaType.APPLICATION_JSON).content("""{"token":"paper-a1"}"""))
-            .andExpect(status().isOk)
+            .perform(
+                patch("/attendance/exit/$EXPO")
+                    .withExpoAdmin()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"token":"paper-a1"}"""),
+            ).andExpect(status().isOk)
 
         // 등록 QR 일반 참가자 1명 입장
         doReturn(RecordEntryResDto(7001, "홍길동", "01012345678", true, "STANDARD", "STUDENT", null))
@@ -304,6 +313,7 @@ class WalkInAndSummaryApiTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 patch("/attendance/$EXPO")
+                    .withExpoAdmin()
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"authority":"ROLE_STANDARD","participantId":7001,"code":"codePPPPPPPPPPPPPPPPPP"}"""),
             ).andExpect(status().isOk)
@@ -339,7 +349,7 @@ class WalkInAndSummaryApiTests : IntegrationTestSupport() {
         mockMvc.perform(admin(get("/attendance/summary/NOT-A-UUID"))).andExpect(status().isBadRequest)
     }
 
-    private fun admin(request: MockHttpServletRequestBuilder) = request.header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN")
+    private fun admin(request: MockHttpServletRequestBuilder) = request.withExpoAdmin()
 
     private fun walkIn(
         body: String,

@@ -13,11 +13,13 @@ import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScan
 import team.startup.expo.domain.attendance.service.ScanStandardProgramService
 import team.startup.expo.domain.attendance.service.ScanTrainingProgramService
 import team.startup.expo.global.logging.RequestContext
+import team.startup.expo.global.security.ExpoAccessGuard
 import team.startup.expo.global.swagger.ApiError
 
 @RestController
 @RequestMapping("/attendance")
 class ProgramAttendanceController(
+    private val expoAccessGuard: ExpoAccessGuard,
     private val scanStandardProgramService: ScanStandardProgramService,
     private val scanTrainingProgramService: ScanTrainingProgramService,
 ) {
@@ -29,11 +31,15 @@ class ProgramAttendanceController(
     @ApiError(404, "프로그램을 찾지 못했거나, 참가자를 찾지 못했거나(코드가 틀린 경우 포함), 프로그램을 신청하지 않았다.")
     @ApiError(409, "신청 취소를 처리 중이다.")
     @ApiError(503, "박람회·유저·신청 서비스를 사용할 수 없거나, 취소 처리와 겹쳐 잠시 후 다시 시도해야 한다.")
+    @ApiError(401, "인증된 사용자 헤더가 없다.")
+    @ApiError(403, "해당 박람회의 CHECKIN 권한이 없다.")
     @PatchMapping("/standard/{programId}")
     fun scanStandard(
         @PathVariable programId: Long,
         @Valid @RequestBody reqDto: ScanStandardProgramReqDto,
     ): ProgramScanResDto {
+        expoAccessGuard.requireAccess(reqDto.expoId, "CHECKIN")
+
         RequestContext.bindScan(reqDto.expoId, reqDto.participantId)
         return scanStandardProgramService.scan(programId, reqDto)
     }
@@ -49,11 +55,15 @@ class ProgramAttendanceController(
     @ApiError(404, "프로그램을 찾지 못했거나, 연수자를 찾지 못했거나(연결된 연수자가 없거나 코드가 틀린 경우 포함), 프로그램을 신청하지 않았다.")
     @ApiError(409, "신청 취소를 처리 중이다.")
     @ApiError(503, "박람회·유저·신청 서비스를 사용할 수 없거나, 취소 처리와 겹쳐 잠시 후 다시 시도해야 한다.")
+    @ApiError(401, "인증된 사용자 헤더가 없다.")
+    @ApiError(403, "해당 박람회의 CHECKIN 권한이 없다.")
     @PatchMapping("/training/{programId}")
     fun scanTraining(
         @PathVariable programId: Long,
         @Valid @RequestBody reqDto: ScanTrainingProgramReqDto,
     ): ProgramScanResDto {
+        expoAccessGuard.requireAccess(reqDto.expoId, "CHECKIN")
+
         RequestContext.bindScan(reqDto.expoId, reqDto.participantId)
         return scanTrainingProgramService.scan(programId, reqDto)
     }

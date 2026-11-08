@@ -28,6 +28,7 @@ import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -88,6 +89,7 @@ class EntryStatsApiTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 patch("/attendance/$EXPO")
+                    .withExpoAdmin()
                     .header("X-Scanner-Name", "gate-2")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"authority":"ROLE_STANDARD","participantId":7001,"code":"codePPPPPPPPPPPPPPPPPP"}"""),
@@ -312,8 +314,7 @@ class EntryStatsApiTests : IntegrationTestSupport() {
             .toList()
     }
 
-    private fun admin(request: org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder) =
-        request.header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN")
+    private fun admin(request: org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder) = request.withExpoAdmin()
 
     private fun scanPaper(
         token: String,
@@ -322,6 +323,7 @@ class EntryStatsApiTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 patch("/attendance/qr/$EXPO")
+                    .withExpoAdmin()
                     .header("X-Scanner-Name", scanner)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"token":"$token"}"""),
@@ -335,6 +337,7 @@ class EntryStatsApiTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 patch("/attendance/exit/$EXPO")
+                    .withExpoAdmin()
                     .header("X-Scanner-Name", scanner)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"token":"$token"}"""),

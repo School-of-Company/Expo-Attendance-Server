@@ -42,6 +42,7 @@ import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import tools.jackson.databind.json.JsonMapper
 import java.time.Clock
 import java.time.LocalDate
@@ -565,12 +566,18 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
     private fun rawStandard(
         programId: Long,
         body: String,
-    ) = patch("/attendance/standard/$programId").contentType(MediaType.APPLICATION_JSON).content(body)
+    ) = patch("/attendance/standard/$programId")
+        .withExpoAdmin()
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(body)
 
     private fun rawTraining(
         programId: Long,
         body: String,
-    ) = patch("/attendance/training/$programId").contentType(MediaType.APPLICATION_JSON).content(body)
+    ) = patch("/attendance/training/$programId")
+        .withExpoAdmin()
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(body)
 
     private companion object {
         const val CODE = "codeCCCCCCCCCCCCCCCCCC"

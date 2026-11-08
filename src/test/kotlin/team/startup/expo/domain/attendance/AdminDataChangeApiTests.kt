@@ -23,6 +23,7 @@ import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import tools.jackson.databind.ObjectMapper
 import java.time.Clock
 import java.time.LocalDate
@@ -181,7 +182,10 @@ class AdminDataChangeApiTests : IntegrationTestSupport() {
     }
 
     private fun admin(path: String): MvcResult =
-        mockMvc.perform(get(path).header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN")).andReturn()
+        mockMvc
+            .perform(
+                get(path).withExpoAdmin(),
+            ).andReturn()
 
     private fun subscribe(expoId: String = EXPO): MvcResult = admin("/attendance/summary/$expoId/events")
 
@@ -193,8 +197,7 @@ class AdminDataChangeApiTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 post("/walk-in-counts/$EXPO")
-                    .header("X-User-Id", "1")
-                    .header("X-User-Role", "ROLE_ADMIN")
+                    .withExpoAdmin()
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(body),
             ).andReturn()

@@ -60,6 +60,8 @@ class ClientContractTests : IntegrationTestSupport() {
         val path: String,
         val token: String?,
         val body: String,
+        val authorization: String?,
+        val query: String?,
     )
 
     @BeforeEach
@@ -67,6 +69,18 @@ class ClientContractTests : IntegrationTestSupport() {
         received.clear()
         notFoundPaths.clear()
         forcedStatuses.clear()
+    }
+
+    @Test
+    fun `박람회 권한 판정은 원래 Authorization과 permission을 전달하고 기본 권한은 생략한다`() {
+        respond("/internal/expo/expo-access/admin-access", "{}")
+        expoClient.requireAdminAccess("expo-access", "Bearer test-staff", "CHECKIN")
+        expoClient.requireAdminAccess("expo-access", "Bearer test-staff", "STATS_READ")
+        expoClient.requireAdminAccess("expo-access", "Bearer test-admin", null)
+        received.map { it.method to it.path }.toSet() shouldBe setOf("GET" to "/internal/expo/expo-access/admin-access")
+        received.map { it.token }.toSet() shouldBe setOf(EXPO_INTERNAL_TOKEN)
+        received.map { it.authorization } shouldBe listOf("Bearer test-staff", "Bearer test-staff", "Bearer test-admin")
+        received.map { it.query } shouldBe listOf("permission=CHECKIN", "permission=STATS_READ", null)
     }
 
     @Test
@@ -348,7 +362,15 @@ class ClientContractTests : IntegrationTestSupport() {
         private fun handle(exchange: HttpExchange) {
             val path = exchange.requestURI.path
             val body = exchange.requestBody.readBytes().toString(Charsets.UTF_8)
-            received += Received(exchange.requestMethod, path, exchange.requestHeaders.getFirst("X-Internal-Token"), body)
+            received +=
+                Received(
+                    exchange.requestMethod,
+                    path,
+                    exchange.requestHeaders.getFirst("X-Internal-Token"),
+                    body,
+                    exchange.requestHeaders.getFirst("Authorization"),
+                    exchange.requestURI.query,
+                )
 
             val json = responses[path]
             val forced = forcedStatuses.poll()

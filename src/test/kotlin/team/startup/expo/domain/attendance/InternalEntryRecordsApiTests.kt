@@ -22,6 +22,7 @@ import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import java.sql.Timestamp
 import java.time.Clock
 import java.time.LocalDate
@@ -347,10 +348,20 @@ class InternalEntryRecordsApiTests : IntegrationTestSupport() {
     }
 
     private fun entry(): ResultActions =
-        mockMvc.perform(patch("/attendance/qr/$EXPO").contentType(MediaType.APPLICATION_JSON).content("""{"token":"$TOKEN"}"""))
+        mockMvc.perform(
+            patch("/attendance/qr/$EXPO")
+                .withExpoAdmin()
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"token":"$TOKEN"}"""),
+        )
 
     private fun exit(): ResultActions =
-        mockMvc.perform(patch("/attendance/exit/$EXPO").contentType(MediaType.APPLICATION_JSON).content("""{"token":"$TOKEN"}"""))
+        mockMvc.perform(
+            patch("/attendance/exit/$EXPO")
+                .withExpoAdmin()
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"token":"$TOKEN"}"""),
+        )
 
     private companion object {
         const val EXPO = "0b1f6c3e-52a4-4d6e-9d57-4b7a1e5c9a10"

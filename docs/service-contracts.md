@@ -33,7 +33,17 @@ Feign, one circuit breaker per service; 404/409 are results, anything else becom
 
 ## Gateway clients (we provide)
 
-Every route below comes through the gateway. `ROLE_ADMIN` routes check `X-User-Role` (`GatewayRoleAuthenticationFilter`).
+Every route below comes through the gateway. Scans and operational statistics accept `ROLE_ADMIN` or `ROLE_STAFF` from the gateway; entrant lists and paper QR issue/reprint/revoke accept only `ROLE_ADMIN`.
+
+Before any service or statistics-cache read, Attendance forwards the original `Authorization` plus `X-Internal-Token` to Expo `GET /internal/expo/{expoId}/admin-access` (#310, Expo-Expo-Server#256). Permission results are never cached. Expo 401/403 becomes 403, missing expo is 404, downstream failure/circuit open is 503; no failed check proceeds to reads or writes. Program scans use the body's `expoId`.
+
+| API | `permission` |
+|---|---|
+| All five scans, POST walk-in, GET summary/recent | `CHECKIN` |
+| GET walk-in, summary, hourly, scanners, events (SSE), QR token summary | `STATS_READ` |
+| GET summary/entries, POST/GET QR tokens, PATCH QR revoke | omitted (`APPLICATION_READ`, OWNER/MANAGER) |
+
+Expo owns membership and staff validation: OWNER/MANAGER can use all these operations, STAFF can CHECKIN/STATS_READ, VIEWER can STATS_READ. A staff token has `sub=staff:<inviteId>`, `role=ROLE_STAFF` and `expoId`; Expo checks the expo claim and active invitation. Attendance does not parse JWTs. Deploy Expo's new permission checks and Gateway/User staff-token support before enabling these callers.
 
 **Scans**
 
@@ -45,10 +55,10 @@ Every route below comes through the gateway. `ROLE_ADMIN` routes check `X-User-R
 
 **Walk-in counter** (#118, anonymous)
 
-- `POST /walk-in-counts/{expoId}` (`ROLE_ADMIN`): `{category, action: ADD|UNDO, requestId?}` → today's counts. `category` is one of the 8 participant types `KINDERGARTEN_STUDENT|ELEMENTARY_STUDENT|MIDDLE_SCHOOL_STUDENT|HIGH_SCHOOL_STUDENT|PARENT|GENERAL|TEACHER|PRE_SERVICE_TEACHER` (same names as `QrCategory`) or the legacy `ADULT|STUDENT` (kept for old rows and the old screen, #149). UNDO never goes below 0. The same `requestId` counts once per expo, so the same value sent to another expo is counted there too (#169).
-- `GET /walk-in-counts/{expoId}?date=` (`ROLE_ADMIN`): `counts` lists every category, zeros included, so it is 10 entries and grows with new categories.
+- `POST /walk-in-counts/{expoId}` (`CHECKIN`): `{category, action: ADD|UNDO, requestId?}` → today's counts. `category` is one of the 8 participant types `KINDERGARTEN_STUDENT|ELEMENTARY_STUDENT|MIDDLE_SCHOOL_STUDENT|HIGH_SCHOOL_STUDENT|PARENT|GENERAL|TEACHER|PRE_SERVICE_TEACHER` (same names as `QrCategory`) or the legacy `ADULT|STUDENT` (kept for old rows and the old screen, #149). UNDO never goes below 0. The same `requestId` counts once per expo, so the same value sent to another expo is counted there too (#169).
+- `GET /walk-in-counts/{expoId}?date=` (`STATS_READ`): `counts` lists every category, zeros included, so it is 10 entries and grows with new categories.
 
-**Live status screen** (`ROLE_ADMIN`, #119/#131)
+**Live status screen** (permissions above, #119/#131)
 
 - `GET /attendance/summary/{expoId}?date=|all=true`: registered QR (standard/trainee) + paper QR by category (entered/exited) + walk-in + totals `entered/exited/stillInside`, from `tb_entry_log` and `tb_walk_in_log`; entries before the entry log existed are not counted. `all=true` = whole expo, `date`+`all` is 400. Adds `recentEntered10m`, `uniqueQr` and `reentered` (re-entry count, not part of `totals.entered`). `totals.exited` and `paper[].exited` count exit scans (`EXIT` rows of `tb_entry_event`), the same as `/hourly` and `/scanners`, while `stillInside` is the people inside now from `tb_entry_log`, so after a re-entry it is not `entered − exited` (#162).
 - Sub-paths: `/hourly`; `/recent?limit=` (names fetched from User, left empty on failure; paper QR token never returned; does not list re-entries yet); `/scanners?limit=`.
@@ -56,7 +66,7 @@ Every route below comes through the gateway. `ROLE_ADMIN` routes check `X-User-R
 - `/entries?date=&page=&size=` (#237): one day's registered-QR entrants (STANDARD/TRAINEE, no paper QR or walk-in), one row per person per day, newest first entry first, `size` ≤500 (default 500), `{expoId, date, page, size, totalElements, entries:[{id, participationType, name, phoneNumber (masked `010-****-5678`), personalInformationStatus, badge, firstEnteredTime "HH:mm", inside}]}`; name/phone/badge from User `entry-cards` per page, 503 when User fails, a person User no longer knows keeps only id/type/time.
 - `GET /attendance/summary/{expoId}/events`: SSE `admin-data-changed` `{eventId, expoId, resource: ATTENDANCE, occurredAt}`, only when `ATTENDANCE_ADMIN_EVENTS_ENABLED`; a refetch signal from V18 commit-time NOTIFY on `tb_entry_log`/`tb_walk_in_log`, sent at once for the first change after a quiet period, later changes merged per expo into one event at the end of `coalesce-interval` (#269); shared connection handling in `global/sse/SseConnectionRegistry`, kept identical to Expo-Application-Server's. Contract in `docs/admin-data-change-events.md` (#141).
 
-**Paper QR tokens** (`ROLE_ADMIN`)
+**Paper QR tokens** (permissions above)
 
 - `POST /qr-tokens/{expoId}`: issue. Also returns per-category serial + printed code `ADT-0001-K7` = prefix, serial, 2 check chars; serials are never reused (#132).
 - `GET /qr-tokens/{expoId}/summary`: active/revoked per category.
