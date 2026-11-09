@@ -1,14 +1,18 @@
 package team.startup.expo.domain.attendance.support
 
+import com.zaxxer.hikari.HikariDataSource
 import org.postgresql.PGConnection
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.SmartLifecycle
 import org.springframework.stereotype.Component
+import java.sql.Connection
+import java.sql.DriverManager
 import javax.sql.DataSource
 
 /**
  * V18 트리거가 커밋 시점에 보내는 `attendance_admin_changes` NOTIFY를 인스턴스마다 하나의 연결로 받아 구독자에게 전달한다(#141).
+ * 이 연결은 계속 열려 있으므로 입장 스캔이 쓰는 커넥션 풀이 아니라 같은 설정의 전용 연결로 연다.
  * 연결이 끊기면 다시 LISTEN 하고, 그 사이 신호를 잃었을 수 있으므로 모든 구독자에게 재조회 신호를 보낸다.
  *
  * 종료할 때는 웹 서버의 graceful shutdown보다 먼저 멈추며(기본 phase가 더 높다) 열린 SSE 연결을 모두 닫는다. 닫지 않으면 진행 중인
@@ -51,7 +55,7 @@ class AdminDataChangeListener(
         var interrupted = false
         while (running) {
             try {
-                dataSource.connection.use { connection ->
+                openDedicated().use { connection ->
                     connection.createStatement().use { it.execute("LISTEN $CHANNEL") }
                     val notifications = connection.unwrap(PGConnection::class.java)
                     listening = true
@@ -88,6 +92,11 @@ class AdminDataChangeListener(
             }
         }
         listening = false
+    }
+
+    private fun openDedicated(): Connection {
+        val pool = dataSource.unwrap(HikariDataSource::class.java)
+        return DriverManager.getConnection(pool.jdbcUrl, pool.username, pool.password)
     }
 
     private companion object {
