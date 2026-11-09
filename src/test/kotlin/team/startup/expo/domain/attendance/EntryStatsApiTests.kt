@@ -217,6 +217,15 @@ class EntryStatsApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `다른 스캐너가 취소한 간편입장은 그 스캐너의 입장 수를 음수로 만들지 않는다`() {
+        walkIn("""{"category":"ADULT","action":"UNDO"}""", "undo-only")
+
+        scanners()
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.scanners[?(@.scanner=='undo-only')].entered").value(0))
+    }
+
+    @Test
     fun `간편입장 취소는 최근 기록에 CANCEL로 남는다`() {
         walkIn("""{"category":"STUDENT","action":"UNDO"}""", "gate-1")
 
