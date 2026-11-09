@@ -43,13 +43,14 @@ class EntryListServiceImpl(
             entryLogRepository
                 .findRegisteredEntries(expoId, date, reqDto.size, reqDto.page.toLong() * reqDto.size)
                 .map { Row.of(it) }
-        val entries = if (rows.isEmpty()) emptyList() else toItems(expoId, rows)
+        val entries = if (rows.isEmpty()) emptyList() else toItems(expoId, rows, date == LocalDate.now(clock))
         return EntryListResDto(expoId, date, reqDto.page, reqDto.size, total, entries)
     }
 
     private fun toItems(
         expoId: String,
         rows: List<Row>,
+        today: Boolean,
     ): List<EntryListItemResDto> {
         val cards =
             userCircuitBreaker.callService("유저") {

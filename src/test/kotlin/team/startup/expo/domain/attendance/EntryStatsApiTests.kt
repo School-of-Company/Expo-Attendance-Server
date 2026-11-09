@@ -273,7 +273,11 @@ class EntryStatsApiTests : IntegrationTestSupport() {
             .andExpect(jsonPath("$.totals.entered").value(4 + 1 + 5))
             .andExpect(jsonPath("$.uniqueQr").value(4))
         // 어제만 보면 어제 것만 나온다
-        summary("?date=$yesterday").andExpect(jsonPath("$.totals.entered").value(1 + 3)).andExpect(jsonPath("$.uniqueQr").value(1))
+        summary("?date=$yesterday")
+            .andExpect(jsonPath("$.totals.entered").value(1 + 3))
+            .andExpect(jsonPath("$.uniqueQr").value(1))
+            // 어제 퇴장 스캔 없이 나간 사람은 지금 안에 있지 않다
+            .andExpect(jsonPath("$.totals.stillInside").value(0))
 
         // 전체 기간 시간대별에는 날짜별로 나뉜다
         val dates = hourlyBuckets("?all=true").map { it.first }.toSet()

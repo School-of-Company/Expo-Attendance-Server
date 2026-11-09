@@ -109,13 +109,15 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
     ): Int
 
     /**
-     * 종류·구분별 [종류, 구분, 입장 수, 지금 밖에 있는 수, 퇴장 스캔 수]. 구분은 종이 QR에만 있다.
+     * 종류·구분별 [종류, 구분, 입장 수, 지금 안에 있는 수, 퇴장 스캔 수]. 구분은 종이 QR에만 있다.
+     * 지금 안에 있는 수는 범위와 상관없이 [today]의 퇴장하지 않은 행만 센다(지난 날 퇴장 스캔 없이 나간 사람은 안에 없다).
      * 퇴장 스캔 수는 시간대별·스캐너별과 같은 `tb_entry_event`의 `EXIT` 횟수(#162)이고, 구분은 그 사람의 입장 로그에서 가져온다.
      */
     @Query(
         nativeQuery = true,
         value = """
-            SELECT l.subject_type, l.category, COUNT(*), COUNT(l.exited_at), COALESCE(SUM(x.n), 0) FROM tb_entry_log l
+            SELECT l.subject_type, l.category, COUNT(*), COUNT(*) FILTER (WHERE l.attendance_date = :today AND l.exited_at IS NULL),
+                COALESCE(SUM(x.n), 0) FROM tb_entry_log l
             LEFT JOIN (
                 SELECT subject_type, subject_id, attendance_date, COUNT(*) AS n FROM tb_entry_event
                 WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to AND event_type = 'EXIT'
@@ -128,6 +130,7 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
         @Param("expoId") expoId: String,
         @Param("from") from: LocalDate,
         @Param("to") to: LocalDate,
+        @Param("today") today: LocalDate,
     ): List<Array<Any?>>
 
     /** 기간 안에서 서로 다른 QR(참가자·연수자·종이 QR) 수. 같은 QR이 다른 날 다시 입장해도 한 번만 센다. */
