@@ -22,7 +22,7 @@ class ExpoAccessGuard(
         permission: String? = null,
     ) {
         val authorization = request.getHeader("Authorization")
-        if (authorization.isNullOrBlank()) throw ExpectedException(HttpStatus.FORBIDDEN, "접근 권한이 없습니다.")
+        if (authorization.isNullOrBlank()) throw ExpectedException(HttpStatus.UNAUTHORIZED, "인증이 필요합니다.")
         val allowed =
             expoCircuitBreaker.callService("박람회", ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못했습니다.")) {
                 try {

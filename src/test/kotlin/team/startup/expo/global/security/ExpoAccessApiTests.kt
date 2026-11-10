@@ -230,6 +230,21 @@ class ExpoAccessApiTests {
         verifyNoInteractions(entry)
     }
 
+    @Test
+    fun `Authorization이 없거나 비어 있으면 401이며 권한 조회와 스캔을 실행하지 않는다`() {
+        for (authorization in listOf(null, "", " ")) {
+            val request =
+                patch("/attendance/expo")
+                    .header("X-User-Id", "staff:7")
+                    .header("X-User-Role", "ROLE_STAFF")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"authority":"ROLE_STANDARD","participantId":1,"code":"test-code"}""")
+            if (authorization != null) request.header("Authorization", authorization)
+            mvc.perform(request).andExpect(status().isUnauthorized)
+        }
+        verifyNoInteractions(expoClient, entry)
+    }
+
     private fun deny(
         expoId: String,
         permission: String,

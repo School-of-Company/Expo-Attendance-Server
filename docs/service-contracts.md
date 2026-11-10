@@ -35,7 +35,7 @@ Feign, one circuit breaker per service; 404/409 are results, anything else becom
 
 Every route below comes through the gateway. Scans and operational statistics accept `ROLE_ADMIN` or `ROLE_STAFF` from the gateway; entrant lists and paper QR issue/reprint/revoke accept only `ROLE_ADMIN`.
 
-Before any service or statistics-cache read, Attendance forwards the original `Authorization` plus `X-Internal-Token` to Expo `GET /internal/expo/{expoId}/admin-access` (#310, Expo-Expo-Server#256). Permission results are never cached. Expo 401/403 becomes 403, missing expo is 404, downstream failure/circuit open is 503; no failed check proceeds to reads or writes. Program scans use the body's `expoId`.
+Before any service or statistics-cache read, Attendance forwards the original `Authorization` plus `X-Internal-Token` to Expo `GET /internal/expo/{expoId}/admin-access` (#310, Expo-Expo-Server#256). Permission results are never cached. Missing or blank incoming `Authorization` is 401; Expo 401/403 becomes 403, missing expo is 404, downstream failure/circuit open is 503; no failed check proceeds to reads or writes. Program scans use the body's `expoId`.
 
 | API | `permission` |
 |---|---|
