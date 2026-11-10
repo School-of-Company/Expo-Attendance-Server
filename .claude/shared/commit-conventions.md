@@ -84,3 +84,17 @@ change spans several scopes, use `global`; for build/CI-only changes, `ci`.
 
 - Same vocabulary as the commit scope, lowercase in brackets: `[member]`, `[expo]`, `[global]`
 - Description: Korean, concise, no emojis, max 50 characters total
+
+## Version Bump Rule (releases to `main`)
+
+A `develop` → `main` PR's title is not `[scope] description` but a bare `vX.Y.Z`. Decide which of
+X/Y/Z to bump by looking at the commits going into `main` this time:
+
+- **X (Major)** — an architecture change, or a large change to a major feature.
+- **Y (Minor)** — a feature addition/change that changes the API spec. Backward compatibility is not
+  guaranteed.
+- **Z (Patch)** — a plain bug fix, refactor, or performance improvement with no API spec change.
+  Backward compatibility must be guaranteed (bumping only Z must still work correctly).
+
+Reset every field below the one you bump to 0 (e.g. bumping Minor resets Patch to 0). Bump
+`build.gradle.kts`'s `version` to match, committed in the same PR.
