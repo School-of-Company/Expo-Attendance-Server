@@ -76,7 +76,8 @@ Full request/response shapes, status codes and issue links: **`docs/service-cont
 - Periodic jobs take a PostgreSQL advisory lock (`AdvisoryJobLock`, `pg_try_advisory_xact_lock`) so instances do not run the same work; the paper QR re-check locks per expo and skips an expo another instance is processing. The lock lives as long as the transaction, so a crashed instance releases it. Do not add ShedLock.
 - Expo lock: only expo deletion takes the exclusive expo lock (`DeletedExpoRepository.lockExpo`); every other write (walk-in, preregister session PUT/DELETE/field registration, cancellation guard acquire, field visit, QR issue) takes the shared one (`lockExpoShared`, via `lockAndRequireAlive`) and then checks `tb_deleted_expo`, so writes never wait for each other, only for a deletion. Writes that must be ordered among themselves take a narrower key after it: walk-in per category, preregister session per participant, QR serials per category. Order stays expo → participant → registration → trainee.
 - `CANCELLATION_ABORTED_RETENTION_DAYS` (default 0 = off) deletes `tb_cancellation_aborted` rows older than N days. Nothing else is deleted by age (proposal, not decided: `docs/data-retention.md`).
-- Health: `/actuator/health/liveness` and `/actuator/health/readiness` are public GET. Readiness includes only `readinessState` and `db`; never add User/Expo/Application. Rollback notes are in `docs/rollback.md`.
+- Rollback: Flyway migrations are never reverted; keep new tables and columns when rolling back to an older build. V9 dropped NOT NULL on `tb_preregister_session.session_id`, so builds before v0.2.0 may fail on such rows.
+- Health: `/actuator/health/liveness` and `/actuator/health/readiness` are public GET. Readiness includes only `readinessState` and `db`; never add User/Expo/Application.
 - Load: entry scans hold a DB connection while they call other services under the guard lock, so throughput is pool size ÷ downstream latency. `DB_POOL_SIZE` (30), `DB_POOL_CONNECTION_TIMEOUT_MS` (3000) and `TRANSACTION_TIMEOUT` (15s) bound it; a saturated pool or timed-out transaction answers 503, not 500. Reproduce with `load-test/` (JMeter + stub services).
 - Stability: `server.shutdown=graceful` (`SHUTDOWN_TIMEOUT`, default 20s) so a deploy finishes in-flight scans. `/actuator/prometheus` is on the service port (the gateway routes no `/actuator`; `METRICS_PORT` moves it to a separate internal port) and Eureka metadata `prometheus.scrape/port/path` lets the shared Prometheus find it. Metrics: `attendance.circuit.breaker.*` gauges, `attendance.downstream.calls{service,outcome}` (every call to another service, inside `callService`), `attendance.guard.lock.wait{kind=scan|cancel}`, `attendance.qr.entry.pending` (paper QR entries waiting for the period re-check). Tags carry only the service name and outcome, never IDs, phone numbers or bodies. Alert rules live in Expo-Monitoring.
 
@@ -86,20 +87,9 @@ Full request/response shapes, status codes and issue links: **`docs/service-cont
 - Entities follow Expo-Expo-Server style: `@field:` annotations, `Long? = null` ids.
 - Throw `ExpectedException(status, message)` directly; no subclasses.
 
-## Logging
-
-The Expo log standard, shared by every service (Spring and Nest) so the shared Loki in Expo-Monitoring labels them the same way:
-
-- Every stdout line is one JSON object (`logback-spring.xml`, `LogstashEncoder`) with at least `@timestamp` (ISO-8601/RFC3339), `level` (uppercase `TRACE`/`DEBUG`/`INFO`/`WARN`/`ERROR`), `service` (the Eureka app name, `spring.application.name`), `module` and `message`. Other keys (MDC `requestId`/`expoId`/`participantId`, `logger_name`, `stack_trace`) may follow. Nothing else goes to stdout: the Spring banner is off and Logback status warnings must not appear.
-- The pipeline reads only these keys and has no per-service fallback. If logs do not show up or fields do not match, fix the service's output, never add parsing fallbacks to the pipeline.
-- `module` is derived from the logger name by `ModuleNameConverter`, never set at the call site: for `team.startup.expo.{domain|global}.<x>...` it is `<x>`, otherwise the logger's parent package. Nest services reuse the per-class logger context (`nestjs-pino` `renameContext: 'module'`).
-- Never log request/response bodies, phone numbers, participant codes, tokens or URLs with ids.
-- Every request carries `X-Request-Id` (MDC `requestId`; the gateway does not set one, so we accept a safe client value or generate it) and Feign calls forward it. `LOG_LEVEL_CLIENT=debug` temporarily shows circuit-open calls.
-- Access log: `HttpAccessLogFilter` writes one line per request with logger `HttpAccess` (`module` = `HttpAccess`): `<METHOD> <route template, else the URI without query cut to 200 chars> status: <status> (<ms>ms)`, INFO below 400, WARN for 4xx, ERROR for 5xx and a client abort (logged as 499). It runs inside `RequestIdFilter` and outside the security chain, so 401/403 are logged too; `/actuator/**` and the API docs paths are skipped. Never add query strings, headers or bodies. `LOGGING_HTTP_ACCESS_ENABLED=false` turns it off.
-- With the `local` profile the same JSON also goes to `${EXPO_LOG_DIR:-~/.expo/logs}/<service>/app.log` for the local Loki file tail. Production writes stdout only (pm2 captures it); add no log file settings there.
-
 ## Workflow
 
+- Read and follow `.claude/rules/*.md` whose paths match the files in scope.
 - Run `./gradlew ktlintCheck build` before every commit. The context test uses Testcontainers, so Docker must be running.
 - Tests: service logic that needs no DB is a Kotest `BehaviorSpec` (`*Spec.kt`) with MockK and runs without Docker (`./gradlew test --tests "<package>.*"`). Tests that need the real stack (Spring context, JPA, SQL) stay on Testcontainers (`IntegrationTestSupport`).
 - Branch from `origin/develop`; never commit to `main` or `develop`.

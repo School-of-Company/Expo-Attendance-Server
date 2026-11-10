@@ -2,7 +2,7 @@
 
 [ 스타트업 박람회 프로젝트 | Server-V2 ] 참여 서비스. 박람회 입장·퇴장 스캔, 프로그램 출석, 현장 종이 QR을 담당한다.
 
-규칙은 `AGENTS.md`, 서비스 간 계약은 `docs/service-contracts.md`, 롤백 기준은 `docs/rollback.md`에 있다.
+규칙은 `AGENTS.md`, 서비스 간 계약은 `docs/service-contracts.md`에 있다.
 
 ## 실행
 
