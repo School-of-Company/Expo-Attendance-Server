@@ -10,44 +10,101 @@
 
 ## 환경 변수
 
-필수:
+기본값은 `application.yaml`과 같다. `0`=끔은 그 값을 넣으면 기능이 꺼진다는 뜻이다.
 
-| 변수 | 설명 |
-| --- | --- |
-| `INTERNAL_TOKEN` | 이 서비스의 `/internal/**`를 보호하는 `X-Internal-Token` 값. `/internal`을 부르는 박람회·신청·리포트 서비스가 같은 값을 들고 있다 |
-| `USER_INTERNAL_TOKEN`, `EXPO_INTERNAL_TOKEN`, `APPLICATION_INTERNAL_TOKEN` | 유저·박람회·신청 서비스를 부를 때 보내는 토큰. 각 서비스의 `INTERNAL_TOKEN`과 같은 값 |
-| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | PostgreSQL 접속 정보. 기본값은 `jdbc:postgresql://localhost:5432/expo_attention`, `expo_attention`이고 `DB_PASSWORD`는 기본값이 없다 |
+### 필수
 
-선택(괄호 안이 기본값):
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `INTERNAL_TOKEN` | 없음 | 이 서비스의 `/internal/**`를 보호하는 `X-Internal-Token` 값. `/internal`을 부르는 박람회·신청·리포트 서비스가 같은 값을 쓴다. 32자 이상 |
+| `USER_INTERNAL_TOKEN` | 없음 | 유저 서비스를 부를 때 보내는 토큰. 유저 서비스의 `INTERNAL_TOKEN`과 같은 값. 32자 이상 |
+| `EXPO_INTERNAL_TOKEN` | 없음 | 박람회 서비스를 부를 때 보내는 토큰. 박람회 서비스의 `INTERNAL_TOKEN`과 같은 값. 32자 이상 |
+| `APPLICATION_INTERNAL_TOKEN` | 없음 | 신청 서비스를 부를 때 보내는 토큰. 신청 서비스의 `INTERNAL_TOKEN`과 같은 값. 32자 이상 |
+| `DB_PASSWORD` | 없음 | PostgreSQL 비밀번호 |
 
-| 변수 | 설명 |
-| --- | --- |
-| `EUREKA_CLIENT_ENABLED` | `false`면 Eureka에 등록하지도 찾지도 않는다(로컬 개발용, `eureka.client.enabled`). 이때는 아래 `*_URL`을 지정한다 |
-| `USER_URL`, `EXPO_URL`, `APPLICATION_URL` | 비우면 Eureka로 찾는다. Gateway·Eureka 없이 직접 부를 때만 지정 |
-| `QR_ENTRY_REVIEW_ENABLED` (`true`), `QR_ENTRY_REVIEW_INTERVAL_MS` (5분) | 박람회 서비스 장애 때 기간 확인 없이 기록한 종이 QR 입장을 다시 확인하는 작업과 그 주기 |
-| `ENTRY_REPLAY_WINDOW_SECONDS` (`30`, `0`=끔) | 입장 뒤 이 시간 안에 같은 스캐너가 같은 QR을 퇴장 없이 다시 찍으면 400 대신 직전 결과를 돌려준다(타임아웃 뒤 재시도, #176) |
-| `EXPO_PERIOD_CACHE_TTL_SECONDS` (`30`, `0`=끔) | 박람회 기간 캐시 시간. 기간을 고친 직후 최대 이 시간만큼 이전 기간으로 판단될 수 있다 |
-| `PREREGISTER_SESSION_CACHE_TTL_SECONDS` (`30`, `0`=끔) | 박람회 서비스에서 읽은 사전등록 회차 시간 캐시 시간(#249). 회차 시간을 고친 직후 최대 이 시간만큼 이전 시간으로 판정될 수 있다. 프로젝션에서 읽은 값은 캐시하지 않는다 |
-| `ADMIN_STATS_CACHE_TTL_MILLIS` (`1000`, `0`=끔) | 입·퇴장 현황(summary·hourly·recent·scanners) 결과를 대시보드끼리 함께 쓰는 시간(#255). 관리자 변경 신호를 켜면 신호를 받는 즉시 그 박람회 결과를 버린다 |
-| `SCAN_CONCURRENCY_RESERVE` (`6`), `SCAN_CONCURRENCY_WAIT_MS` (`500`) | 동시 스캔 수를 `DB_POOL_SIZE - reserve`로 제한한다(#247: 스캔이 게이트 트랜잭션 안에서 커넥션을 하나 더 요구해 풀에 닿으면 교착). 대기 시간 안에 자리를 못 얻으면 커넥션 없이 503. reserve가 1보다 작으면 기동하지 않고, 허용 수가 2보다 작으면 경고를 남긴다 |
-| `KAFKA_EXPO_PROJECTION_ENABLED` (`false`) | 켜면 `expo.expo.changed`로 받은 박람회 기간·프로그램·회차 시간을 로컬 프로젝션에서 먼저 읽고, 없으면 동기 호출로 넘어간다. `KAFKA_BOOTSTRAP_SERVERS`가 없으면 기동 실패. consumer group `KAFKA_EXPO_PROJECTION_GROUP_ID`(`expo-attention-server.expo-changed`), 실패 메시지는 `expo.expo.changed.dlt`. 켠 뒤 박람회 서비스 `POST /internal/expo-events/republish`로 전체 상태를 한 번 받는다. 자세한 동작은 `docs/service-contracts.md` |
-| `KAFKA_BOOTSTRAP_SERVERS` (빈 값) | Kafka 브로커 주소. 프로젝션을 켤 때만 필요 |
-| `PREREGISTER_ENTRY_LEAD_MINUTES` (`30`) | 사전등록 입장을 회차 시작 몇 분 전부터 허용할지 |
-| `PROGRAM_ATTENDANCE_REQUIRE_CODE` (`false`) | 켜면 일반 프로그램 출석 스캔에 참가자 `code`가 필수 |
-| `PROGRAM_ATTENDANCE_LEAD_MINUTES` (`10`) | 일반 프로그램 입실(첫 스캔)을 시작 몇 분 전부터 받을지. 종료 시각까지 받고, 퇴실은 시각을 보지 않는다 |
-| `ATTENDANCE_ADMIN_EVENTS_ENABLED` (`false`) | 실시간 입·퇴장 현황 SSE(`GET /attendance/summary/{expoId}/events`)와 DB LISTEN 연결. 한도·수명·heartbeat·병합 간격(`..._MAX_CONNECTIONS` `500`, `..._MAX_CONNECTIONS_PER_EXPO` `50`, `..._CONNECTION_LIFETIME` `PT30M`, `..._HEARTBEAT_INTERVAL` `PT25S`, `..._COALESCE_INTERVAL` `PT1S`)은 `docs/admin-data-change-events.md` |
-| `CANCELLATION_ABORTED_RETENTION_DAYS` (`0`=지우지 않음) | 중단된 취소 작업 기록(`tb_cancellation_aborted`)을 이 일수가 지나면 지운다. 신청 서비스의 늦은 재시도 기간보다 충분히 길게 둔다. 다른 데이터는 기간으로 지우지 않는다(`docs/data-retention.md`) |
-| `SHUTDOWN_TIMEOUT` (`20s`) | graceful shutdown 때 처리 중인 요청을 기다리는 시간. 스캔 한 번보다 길게 둔다 |
-| `METRICS_PORT` (서비스 포트) | `/actuator/prometheus`와 헬스 경로를 별도 내부 포트에서 제공. Eureka 메타데이터 `prometheus.port`에도 실린다 |
-| `DB_POOL_SIZE` (`30`), `DB_POOL_CONNECTION_TIMEOUT_MS` (`3000`) | 커넥션 풀 크기와 빈 커넥션 대기 시간(ms). 넘으면 503. 입장 스캔은 다른 서비스를 부르는 동안 커넥션을 하나 잡는다(`load-test/README.md`) |
-| `FEIGN_MAX_CONNECTIONS` (`200`), `FEIGN_MAX_CONNECTIONS_PER_ROUTE` (`50`), `FEIGN_TIME_TO_LIVE_SECONDS` (`900`), `FEIGN_CONNECTION_REQUEST_TIMEOUT_MS` (`1000`) | 다른 서비스를 부르는 Feign 클라이언트(Apache HttpClient 5)의 연결 풀 전체·호스트별 상한, 연결 최대 수명(초), 풀이 가득 찼을 때 연결을 기다리는 시간(ms). 넘게 기다리면 호출 실패로 처리되어 503(#256) |
-| `TRANSACTION_TIMEOUT` (`15s`) | 트랜잭션 기본 제한 시간. 넘으면 503 |
-| `LOGGING_HTTP_ACCESS_ENABLED` (`true`) | 요청마다 접근 로그 한 줄(`module`=`HttpAccess`). 형식은 `AGENTS.md`의 Logging |
-| `LOG_LEVEL_ROOT` (`info`) | 전체 로그 레벨 |
-| `LOG_LEVEL_CLIENT` (`info`) | 다른 서비스 호출(`team.startup.expo.global.client`) 로그. 임시로 `debug`면 회로가 열려 차단된 호출도 호출마다 남는다 |
-| `LOG_LEVEL_SCAN_REJECTION` (`info`) | 스캔 거절 로그(`ScanRejection`). 입구에서 시끄러우면 `warn`으로 올려 끈다 |
-| `SWAGGER_ENABLED` (`false`) | API 문서를 `/attendance/swagger-ui.html`, `/attendance/v3/api-docs`로 제공. 밖에서 보려면 게이트웨이 `publicPaths`에도 열어야 한다 |
-| `SWAGGER_INCLUDE_INTERNAL` (`false`) | 문서에 `/internal/**`와 `X-Internal-Token` 안내도 싣는다(`SWAGGER_ENABLED`가 켜져 있을 때만) |
+### 연결
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `DB_URL` | `jdbc:postgresql://localhost:5432/expo_attention` | PostgreSQL 주소 |
+| `DB_USERNAME` | `expo_attention` | PostgreSQL 계정 |
+| `EUREKA_CLIENT_ENABLED` | `true` | `false`면 Eureka에 등록하지도 찾지도 않는다(로컬 개발용). 이때는 아래 `*_URL`을 지정한다 |
+| `USER_URL` | 빈 값 | 유저 서비스 주소. 비우면 Eureka로 찾는다 |
+| `EXPO_URL` | 빈 값 | 박람회 서비스 주소. 비우면 Eureka로 찾는다 |
+| `APPLICATION_URL` | 빈 값 | 신청 서비스 주소. 비우면 Eureka로 찾는다 |
+| `KAFKA_BOOTSTRAP_SERVERS` | 빈 값 | Kafka 브로커 주소. `KAFKA_EXPO_PROJECTION_ENABLED`를 켤 때만 필요하고, 그때 없으면 기동 실패 |
+
+### 커넥션 풀과 시간 제한
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `DB_POOL_SIZE` | `30` | DB 커넥션 풀 크기. 입장 스캔은 다른 서비스를 부르는 동안 커넥션을 하나 잡는다(`load-test/README.md`) |
+| `DB_POOL_CONNECTION_TIMEOUT_MS` | `3000` | 빈 커넥션을 기다리는 시간(ms). 넘으면 503 |
+| `SCAN_CONCURRENCY_RESERVE` | `6` | 동시 스캔 수를 `DB_POOL_SIZE - reserve`로 제한한다(#247: 스캔이 게이트 트랜잭션 안에서 커넥션을 하나 더 요구해 풀이 바닥나면 교착). 1보다 작으면 기동하지 않고, 허용 수가 2보다 작으면 경고를 남긴다 |
+| `SCAN_CONCURRENCY_WAIT_MS` | `500` | 스캔 자리를 기다리는 시간(ms). 못 얻으면 커넥션 없이 503 |
+| `TRANSACTION_TIMEOUT` | `15s` | 트랜잭션 기본 제한 시간. 넘으면 503 |
+| `FEIGN_MAX_CONNECTIONS` | `200` | 다른 서비스를 부르는 Feign(Apache HttpClient 5) 연결 풀 전체 상한(#256) |
+| `FEIGN_MAX_CONNECTIONS_PER_ROUTE` | `50` | Feign 연결 풀 호스트별 상한 |
+| `FEIGN_TIME_TO_LIVE_SECONDS` | `900` | Feign 연결 최대 수명(초) |
+| `FEIGN_CONNECTION_REQUEST_TIMEOUT_MS` | `1000` | Feign 풀이 가득 찼을 때 연결을 기다리는 시간(ms). 넘으면 호출 실패로 503 |
+| `SHUTDOWN_TIMEOUT` | `20s` | graceful shutdown 때 처리 중인 요청을 기다리는 시간. 스캔 한 번보다 길게 둔다 |
+
+### 입장·출석 규칙
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `PREREGISTER_ENTRY_LEAD_MINUTES` | `30` | 사전등록 입장을 회차 시작 몇 분 전부터 받을지 |
+| `ENTRY_REPLAY_WINDOW_SECONDS` | `30` (`0`=끔) | 입장 뒤 이 시간 안에 같은 스캐너가 같은 QR을 퇴장 없이 다시 찍으면 400 대신 직전 결과를 돌려준다(타임아웃 뒤 재시도, #176) |
+| `PROGRAM_ATTENDANCE_REQUIRE_CODE` | `false` | 켜면 일반 프로그램 출석 스캔에 참가자 `code`가 필수 |
+| `PROGRAM_ATTENDANCE_LEAD_MINUTES` | `10` | 일반 프로그램 입실(첫 스캔)을 시작 몇 분 전부터 받을지. 종료 시각까지 받고, 퇴실은 시각을 보지 않는다 |
+| `QR_ENTRY_REVIEW_ENABLED` | `true` | 박람회 서비스 장애로 기간 확인 없이 기록한 종이 QR 입장을 다시 확인하는 작업 |
+| `QR_ENTRY_REVIEW_INTERVAL_MS` | `300000` (5분) | 위 재확인 주기 |
+
+### 캐시
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `EXPO_PERIOD_CACHE_TTL_SECONDS` | `30` (`0`=끔) | 박람회 기간 캐시 시간. 기간을 고친 직후 최대 이 시간만큼 이전 기간으로 판단될 수 있다 |
+| `PREREGISTER_SESSION_CACHE_TTL_SECONDS` | `30` (`0`=끔) | 박람회 서비스에서 읽은 사전등록 회차 시간 캐시(#249). 프로젝션에서 읽은 값은 캐시하지 않는다 |
+| `ADMIN_STATS_CACHE_TTL_MILLIS` | `1000` (`0`=끔) | 입·퇴장 현황(summary·hourly·recent·scanners) 결과를 대시보드끼리 함께 쓰는 시간(#255). 관리자 변경 신호를 받으면 그 박람회 결과를 바로 버린다 |
+
+### 박람회 프로젝션(Kafka)
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `KAFKA_EXPO_PROJECTION_ENABLED` | `false` | 켜면 `expo.expo.changed`로 받은 박람회 기간·프로그램·회차 시간을 로컬 프로젝션에서 먼저 읽고, 없으면 동기 호출로 넘어간다. 실패 메시지는 `expo.expo.changed.dlt`. 켠 뒤 박람회 서비스 `POST /internal/expo-events/republish`로 전체 상태를 한 번 받는다(`docs/service-contracts.md`) |
+| `KAFKA_EXPO_PROJECTION_GROUP_ID` | `expo-attention-server.expo-changed` | 위 consumer group |
+
+### 실시간 현황 SSE
+
+자세한 동작은 `docs/admin-data-change-events.md`.
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `ATTENDANCE_ADMIN_EVENTS_ENABLED` | `false` | 실시간 입·퇴장 현황 SSE(`GET /attendance/summary/{expoId}/events`)와 DB LISTEN 연결. 켜면 인스턴스마다 `DB_POOL_SIZE`에서 연결 1개를 계속 쓴다 |
+| `ATTENDANCE_ADMIN_EVENTS_MAX_CONNECTIONS` | `500` | 인스턴스 전체 SSE 연결 상한 |
+| `ATTENDANCE_ADMIN_EVENTS_MAX_CONNECTIONS_PER_EXPO` | `50` | 박람회별 SSE 연결 상한 |
+| `ATTENDANCE_ADMIN_EVENTS_CONNECTION_LIFETIME` | `PT30M` | SSE 연결 최대 수명 |
+| `ATTENDANCE_ADMIN_EVENTS_HEARTBEAT_INTERVAL` | `PT25S` | heartbeat 간격 |
+| `ATTENDANCE_ADMIN_EVENTS_COALESCE_INTERVAL` | `PT1S` | 같은 박람회 변경 신호를 합치는 간격 |
+
+### 운영
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `CANCELLATION_ABORTED_RETENTION_DAYS` | `0` (지우지 않음) | 중단된 취소 작업 기록(`tb_cancellation_aborted`)을 이 일수가 지나면 지운다. 신청 서비스의 늦은 재시도 기간보다 충분히 길게 둔다. 다른 데이터는 기간으로 지우지 않는다(`docs/data-retention.md`) |
+| `METRICS_PORT` | 서비스 포트 | `/actuator/prometheus`와 헬스 경로를 별도 내부 포트에서 제공. Eureka 메타데이터 `prometheus.port`에도 실린다 |
+| `SWAGGER_ENABLED` | `false` | API 문서를 `/attendance/swagger-ui.html`, `/attendance/v3/api-docs`로 제공. 밖에서 보려면 게이트웨이 `publicPaths`에도 열어야 한다 |
+| `SWAGGER_INCLUDE_INTERNAL` | `false` | 문서에 `/internal/**`와 `X-Internal-Token` 안내도 싣는다(`SWAGGER_ENABLED`가 켜져 있을 때만) |
+
+### 로그
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `LOGGING_HTTP_ACCESS_ENABLED` | `true` | 요청마다 접근 로그 한 줄(`module`=`HttpAccess`). 형식은 `AGENTS.md`의 Logging |
+| `LOG_LEVEL_ROOT` | `info` | 전체 로그 레벨 |
+| `LOG_LEVEL_CLIENT` | `info` | 다른 서비스 호출(`team.startup.expo.global.client`) 로그. 임시로 `debug`면 회로가 열려 차단된 호출도 호출마다 남는다 |
+| `LOG_LEVEL_SCAN_REJECTION` | `info` | 스캔 거절 로그(`ScanRejection`). 입구에서 시끄러우면 `warn`으로 올려 끈다 |
 
 `/internal`은 게이트웨이 라우팅에 넣지 않는다. 게이트웨이가 모르는 경로는 404로 막혀 외부에서 닿지 않는다.
 
