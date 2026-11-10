@@ -64,7 +64,7 @@ Full request/response shapes, status codes and issue links: **`docs/service-cont
 
 **API docs**: springdoc serves Swagger UI at `/attendance/swagger-ui.html` and the spec at `/attendance/v3/api-docs` (under the gateway's `/attendance` prefix, forwarded unchanged), only when `SWAGGER_ENABLED=true` (default `false`; SecurityConfig opens `GET` on the docs paths only then). `/internal/**` is documented only with `SWAGGER_INCLUDE_INTERNAL=true` (default `false`), which also documents `X-Internal-Token`. The spec pins `servers` to `[{"url": "/"}]` (the gateway rewrites `Host`; the instance address must not leak) and declares `bearerAuth` (HTTP bearer JWT, checked by the gateway) on every non-internal operation for the gateway's unified docs page. The gateway needs `publicPaths` for `GET /attendance/v3/api-docs` and `GET /attendance/swagger-ui` (and sub-paths). Document each endpoint's real error statuses with `@ApiError(status, description)` and every DTO field with `@field:Schema`.
 
-**Config**: `INTERNAL_TOKEN`, `USER_INTERNAL_TOKEN`, `EXPO_INTERNAL_TOKEN`, `APPLICATION_INTERNAL_TOKEN` must be 32+ characters or the service will not start. Every environment variable is listed in `README.md`. `/internal/**` is not routed by the gateway, so it is unreachable from outside.
+**Config**: `INTERNAL_TOKEN`, `USER_INTERNAL_TOKEN`, `EXPO_INTERNAL_TOKEN`, `APPLICATION_INTERNAL_TOKEN` must be 32+ characters or the service will not start. Every environment variable and its default is in `src/main/resources/application.yaml`. `/internal/**` is not routed by the gateway, so it is unreachable from outside.
 
 ## Auth
 
