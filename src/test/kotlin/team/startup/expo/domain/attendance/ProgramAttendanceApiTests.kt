@@ -385,6 +385,19 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `다음 날 스캔은 전날 입실 기록에 퇴실을 남기지 않는다`() {
+        val day = LocalDate.of(2026, 3, 2)
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1009, 511, day, LocalTime.of(14, 0))
+
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1009, 511, day.plusDays(1), LocalTime.of(15, 0)) shouldBe
+            ProgramAttendanceResult.ALREADY_ENTERED
+
+        mockMvc
+            .perform(get("/internal/program-attendances/standard/1009").header("X-Internal-Token", INTERNAL_TOKEN))
+            .andExpect(jsonPath("$[0].leaveTime").value(org.hamcrest.Matchers.nullValue()))
+    }
+
+    @Test
     fun `프로그램별 출석 시간 조회는 예정일이 아닌 실제 기록한 날짜를 attendanceDate로 돌려준다`() {
         val recordedOn = LocalDate.of(2026, 3, 2)
         recordProgramAttendanceService.record(ProgramType.STANDARD, 1008, 509, recordedOn, LocalTime.of(9, 5))
