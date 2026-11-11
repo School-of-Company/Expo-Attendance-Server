@@ -28,6 +28,7 @@ import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -88,6 +89,7 @@ class EntryStatsApiTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 patch("/attendance/$EXPO")
+                    .withExpoAdmin()
                     .header("X-Scanner-Name", "gate-2")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"authority":"ROLE_STANDARD","participantId":7001,"code":"codePPPPPPPPPPPPPPPPPP"}"""),
@@ -173,6 +175,59 @@ class EntryStatsApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `전체 기간 최근 기록은 날짜를 넘어 최신순으로 합치고 갈래마다 limit을 넘게 읽지 않는다(#255)`() {
+        // 어제 늦은 시각 입장 5명과 간편입장 4건. 오늘 기록 7건보다 모두 앞선다
+        val yesterday = today.minusDays(1)
+        repeat(5) {
+            jdbcTemplate.update(
+                "INSERT INTO tb_entry_log (expo_id, subject_type, subject_id, attendance_date, entered_at) VALUES (?, 'STANDARD', ?, ?, ?)",
+                EXPO,
+                (9000 + it).toString(),
+                yesterday,
+                LocalDateTime.of(yesterday, java.time.LocalTime.of(23, it)),
+            )
+        }
+        repeat(4) {
+            jdbcTemplate.update(
+                "INSERT INTO tb_walk_in_log (expo_id, attendance_date, category, delta, created_at) VALUES (?, ?, 'ADULT', 1, ?)",
+                EXPO,
+                yesterday,
+                LocalDateTime.of(yesterday, java.time.LocalTime.of(22, 50 + it)),
+            )
+        }
+
+        val today7 = recentTimes("")
+        val merged = recentTimes("?all=true&limit=10")
+        merged.take(7) shouldBe today7
+        // 그다음은 어제 입장 23:04, 23:03, 23:02 순이고 간편입장(22:5x)은 그보다 뒤다
+        merged.drop(7).map { it.substring(11, 16) } shouldBe listOf("23:04", "23:03", "23:02")
+        // 어제만 보면 입장 5건 다음에 간편입장이 시각 역순으로 나온다
+        recentTimes("?date=$yesterday&limit=7").map { it.substring(11, 16) } shouldBe
+            listOf("23:04", "23:03", "23:02", "23:01", "23:00", "22:53", "22:52")
+    }
+
+    private fun recentTimes(query: String): List<String> {
+        val body =
+            recent(query)
+                .andExpect(status().isOk)
+                .andReturn()
+                .response.contentAsString
+        return Regex("\"at\":\"([^\"]+)\"")
+            .findAll(body)
+            .map { it.groupValues[1] }
+            .toList()
+    }
+
+    @Test
+    fun `다른 스캐너가 취소한 간편입장은 그 스캐너의 입장 수를 음수로 만들지 않는다`() {
+        walkIn("""{"category":"ADULT","action":"UNDO"}""", "undo-only")
+
+        scanners()
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.scanners[?(@.scanner=='undo-only')].entered").value(0))
+    }
+
+    @Test
     fun `간편입장 취소는 최근 기록에 CANCEL로 남는다`() {
         walkIn("""{"category":"STUDENT","action":"UNDO"}""", "gate-1")
 
@@ -229,7 +284,11 @@ class EntryStatsApiTests : IntegrationTestSupport() {
             .andExpect(jsonPath("$.totals.entered").value(4 + 1 + 5))
             .andExpect(jsonPath("$.uniqueQr").value(4))
         // 어제만 보면 어제 것만 나온다
-        summary("?date=$yesterday").andExpect(jsonPath("$.totals.entered").value(1 + 3)).andExpect(jsonPath("$.uniqueQr").value(1))
+        summary("?date=$yesterday")
+            .andExpect(jsonPath("$.totals.entered").value(1 + 3))
+            .andExpect(jsonPath("$.uniqueQr").value(1))
+            // 어제 퇴장 스캔 없이 나간 사람은 지금 안에 있지 않다
+            .andExpect(jsonPath("$.totals.stillInside").value(0))
 
         // 전체 기간 시간대별에는 날짜별로 나뉜다
         val dates = hourlyBuckets("?all=true").map { it.first }.toSet()
@@ -268,8 +327,7 @@ class EntryStatsApiTests : IntegrationTestSupport() {
             .toList()
     }
 
-    private fun admin(request: org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder) =
-        request.header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN")
+    private fun admin(request: org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder) = request.withExpoAdmin()
 
     private fun scanPaper(
         token: String,
@@ -278,6 +336,7 @@ class EntryStatsApiTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 patch("/attendance/qr/$EXPO")
+                    .withExpoAdmin()
                     .header("X-Scanner-Name", scanner)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"token":"$token"}"""),
@@ -291,6 +350,7 @@ class EntryStatsApiTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 patch("/attendance/exit/$EXPO")
+                    .withExpoAdmin()
                     .header("X-Scanner-Name", scanner)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"token":"$token"}"""),

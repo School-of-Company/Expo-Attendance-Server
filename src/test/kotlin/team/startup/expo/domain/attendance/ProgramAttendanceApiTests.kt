@@ -42,6 +42,7 @@ import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import tools.jackson.databind.json.JsonMapper
 import java.time.Clock
 import java.time.LocalDate
@@ -385,6 +386,19 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `다음 날 스캔은 전날 입실 기록에 퇴실을 남기지 않는다`() {
+        val day = LocalDate.of(2026, 3, 2)
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1009, 511, day, LocalTime.of(14, 0))
+
+        recordProgramAttendanceService.record(ProgramType.STANDARD, 1009, 511, day.plusDays(1), LocalTime.of(15, 0)) shouldBe
+            ProgramAttendanceResult.ALREADY_ENTERED
+
+        mockMvc
+            .perform(get("/internal/program-attendances/standard/1009").header("X-Internal-Token", INTERNAL_TOKEN))
+            .andExpect(jsonPath("$[0].leaveTime").value(org.hamcrest.Matchers.nullValue()))
+    }
+
+    @Test
     fun `프로그램별 출석 시간 조회는 예정일이 아닌 실제 기록한 날짜를 attendanceDate로 돌려준다`() {
         val recordedOn = LocalDate.of(2026, 3, 2)
         recordProgramAttendanceService.record(ProgramType.STANDARD, 1008, 509, recordedOn, LocalTime.of(9, 5))
@@ -517,7 +531,7 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
         doReturn(listOf(StandardParticipantNameResDto(participantId, "홍길동")))
             .`when`(userClient)
             .getStandardParticipantNames(StandardParticipantNamesReqDto(expoId, listOf(participantId)))
-        doReturn(StandardProgramResDto(programId, "프로그램")).`when`(expoClient).getStandardProgram(expoId, programId)
+        doReturn(StandardProgramResDto(programId)).`when`(expoClient).getStandardProgram(expoId, programId)
         doReturn(ProgramApplicationResDto(true)).`when`(applicationClient).checkStandardApplication(programId, participantId)
     }
 
@@ -529,7 +543,7 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
         doReturn(listOf(TraineeNameResDto(traineeId, "김연수")))
             .`when`(userClient)
             .getTraineeNames(TraineeNamesReqDto(expoId, listOf(traineeId)))
-        doReturn(listOf(TrainingProgramResDto(programId, "연수")))
+        doReturn(listOf(TrainingProgramResDto(programId)))
             .`when`(expoClient)
             .getTrainingPrograms(expoId, TrainingProgramBatchReqDto(listOf(programId)))
         doReturn(ProgramApplicationResDto(true)).`when`(applicationClient).checkTrainingApplication(programId, traineeId)
@@ -565,12 +579,18 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
     private fun rawStandard(
         programId: Long,
         body: String,
-    ) = patch("/attendance/standard/$programId").contentType(MediaType.APPLICATION_JSON).content(body)
+    ) = patch("/attendance/standard/$programId")
+        .withExpoAdmin()
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(body)
 
     private fun rawTraining(
         programId: Long,
         body: String,
-    ) = patch("/attendance/training/$programId").contentType(MediaType.APPLICATION_JSON).content(body)
+    ) = patch("/attendance/training/$programId")
+        .withExpoAdmin()
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(body)
 
     private companion object {
         const val CODE = "codeCCCCCCCCCCCCCCCCCC"

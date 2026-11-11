@@ -16,6 +16,7 @@ import team.startup.expo.domain.attendance.repository.EntryLogRepository
 import team.startup.expo.domain.attendance.support.EntryReplayPolicy
 import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
 import team.startup.expo.domain.qr.presentation.dto.request.ScanQrTokenReqDto
+import team.startup.expo.domain.qr.repository.DeletedExpoRepository
 import team.startup.expo.domain.qr.repository.QrEntryRepository
 import team.startup.expo.domain.qr.repository.QrTokenRepository
 import team.startup.expo.domain.qr.support.QrEntryWriter
@@ -32,6 +33,7 @@ class ScanQrTokenServiceImplSpec : BehaviorSpec() {
     private val qrEntryRepository = mockk<QrEntryRepository>()
     private val entryLogRepository = mockk<EntryLogRepository>()
     private val expoPeriodValidator = mockk<ExpoPeriodValidator>()
+    private val deletedExpoRepository = mockk<DeletedExpoRepository>(relaxed = true)
     private val clock = UnitTestSupport.fixedClock()
     private val now = LocalDateTime.now(clock)
     private val today = LocalDate.now(clock)
@@ -39,7 +41,7 @@ class ScanQrTokenServiceImplSpec : BehaviorSpec() {
     private val service =
         ScanQrTokenServiceImpl(
             qrTokenRepository,
-            QrEntryWriter(qrEntryRepository, qrTokenRepository),
+            QrEntryWriter(qrEntryRepository, qrTokenRepository, deletedExpoRepository),
             entryLogRepository,
             expoPeriodValidator,
             EntryReplayPolicy(EntryReplayProperties(windowSeconds = 30)),
@@ -151,6 +153,42 @@ class ScanQrTokenServiceImplSpec : BehaviorSpec() {
             `when`("스캔하면") {
                 then("재생이 아니라 재입장이다") {
                     service.scan(expoId, req, "door-1").entryStatus shouldBe EntryStatus.RE_ENTRY
+                }
+            }
+        }
+
+        given("현장 종이 QR 코드를 처음 스캔할 때(#291)") {
+            val fieldReq = ScanQrTokenReqDto("ADT-0001")
+            `when`("박람회가 삭제되었으면") {
+                every { deletedExpoRepository.existsById(expoId) } returns true
+
+                then("404를 던지고 토큰도 입장도 기록하지 않는다") {
+                    shouldFailWith(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.") { service.scan(expoId, fieldReq, "door-1") }
+                    verify(exactly = 1) { deletedExpoRepository.lockExpoShared(expoId) }
+                    verify(exactly = 0) { qrTokenRepository.registerField(any(), any(), any(), any(), any()) }
+                    verify(exactly = 0) { qrEntryRepository.recordEntry(any(), any(), any(), any(), any(), any()) }
+                }
+            }
+
+            `when`("박람회가 삭제되지 않았으면") {
+                every { deletedExpoRepository.existsById(expoId) } returns false
+                every { qrTokenRepository.registerField(any(), any(), any(), any(), any()) } returns 1
+                every { qrEntryRepository.recordEntry("$expoId:ADT-0001", expoId, today, now, any(), any()) } returns 1
+
+                then("락을 잡고 등록한 뒤 입장을 기록한다") {
+                    service.scan(expoId, fieldReq, "door-1").entryStatus shouldBe EntryStatus.FIRST
+                    verify(exactly = 1) { qrTokenRepository.registerField("$expoId:ADT-0001", expoId, any(), "ADT-0001", now) }
+                }
+            }
+        }
+
+        given("발급된 토큰을 스캔할 때(#291)") {
+            `when`("스캔하면") {
+                every { qrEntryRepository.recordEntry("token-1", expoId, today, now, any(), any()) } returns 1
+
+                then("등록 경로를 타지 않아 삭제 박람회 확인도 하지 않는다") {
+                    service.scan(expoId, req, "door-1").entryStatus shouldBe EntryStatus.FIRST
+                    verify(exactly = 0) { deletedExpoRepository.lockExpoShared(any()) }
                 }
             }
         }

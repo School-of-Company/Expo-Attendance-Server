@@ -3,6 +3,8 @@ package team.startup.expo.support
 import feign.FeignException
 import feign.Request
 import feign.RequestTemplate
+import feign.RetryableException
+import feign.codec.DecodeException
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
@@ -11,10 +13,16 @@ import io.mockk.mockk
 import org.springframework.http.HttpStatus
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
+import team.startup.expo.domain.attendance.support.PreregisterSessionCache
 import team.startup.expo.domain.attendance.support.PreregisterSessionValidator
+import team.startup.expo.domain.attendance.support.ScanConcurrencyLimiter
 import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.config.ExpoProjectionProperties
+import team.startup.expo.global.config.PreregisterSessionCacheProperties
+import team.startup.expo.global.config.ScanConcurrencyProperties
 import team.startup.expo.global.exception.ExpectedException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -25,6 +33,12 @@ object UnitTestSupport {
     val NOW: Instant = Instant.parse("2026-05-10T03:00:00Z")
 
     fun fixedClock(instant: Instant = NOW): Clock = Clock.fixed(instant, ZoneOffset.UTC)
+
+    /** 허용 수가 넉넉해 단위 테스트의 스캔을 막지 않는 제한기. */
+    fun scanLimiter(): ScanConcurrencyLimiter = ScanConcurrencyLimiter(ScanConcurrencyProperties(), 30)
+
+    /** 캐시를 끈(TTL 0) 회차 캐시. 기존 테스트가 호출마다 원격 응답을 바꿔도 그대로 보게 한다. */
+    fun noSessionCache(): PreregisterSessionCache = PreregisterSessionCache(PreregisterSessionCacheProperties(ttlSeconds = 0))
 
     fun preregisterValidator(): PreregisterSessionValidator =
         mockk<PreregisterSessionValidator>(relaxed = true).also {
@@ -49,6 +63,20 @@ object UnitTestSupport {
     fun feignConflict(): FeignException = FeignException.Conflict("conflict", request(), null, emptyMap())
 
     fun feignServerError(): FeignException = FeignException.InternalServerError("error", request(), null, emptyMap())
+
+    /** 응답을 받기 전에 끊긴 호출(읽기 타임아웃). Feign은 입출력 오류를 상태 없는 [RetryableException]으로 던진다. */
+    fun feignReadTimeout(): FeignException = retryable(SocketTimeoutException("Read timed out"))
+
+    /** 연결이 거부되어 요청이 나가지 않은 호출. */
+    fun feignConnectRefused(): FeignException = retryable(ConnectException("Connection refused"))
+
+    /** 응답(200)은 받았지만 해석하지 못한 호출. */
+    fun feignDecodeError(): FeignException = DecodeException(200, "decode", request())
+
+    private fun retryable(cause: Throwable): FeignException {
+        val retryAfter: Long? = null
+        return RetryableException(-1, "io", Request.HttpMethod.POST, cause, retryAfter, request())
+    }
 }
 
 /** [block]이 [status]와 [message]의 [ExpectedException]을 던지는지 확인한다. */

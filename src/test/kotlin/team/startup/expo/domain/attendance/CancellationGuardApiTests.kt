@@ -50,6 +50,7 @@ import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -313,6 +314,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
     private fun phoneEntryScan(): ResultActions =
         mockMvc.perform(
             patch("/attendance/$EXPO")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"authority":"ROLE_STANDARD","phoneNumber":"$PHONE"}"""),
         )
@@ -409,7 +411,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
     fun `프로그램 스캔이 신청 확인과 기록을 마칠 때까지 취소 보호가 기다리고 그 뒤에는 출석이 있어 거절된다`() {
         val checking = CountDownLatch(1)
         val proceed = CountDownLatch(1)
-        doReturn(StandardProgramResDto(3101, "프로그램")).`when`(expoClient).getStandardProgram(EXPO, 3101)
+        doReturn(StandardProgramResDto(3101)).`when`(expoClient).getStandardProgram(EXPO, 3101)
         doAnswer {
             checking.countDown()
             proceed.await(10, TimeUnit.SECONDS)
@@ -438,7 +440,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         acquire().andExpect(status().isNoContent)
         // 로컬 신청 취소가 끝난 뒤 abort로 보호를 풀면 신청 확인은 false다
         abort().andExpect(status().isNoContent)
-        doReturn(StandardProgramResDto(3101, "프로그램")).`when`(expoClient).getStandardProgram(EXPO, 3101)
+        doReturn(StandardProgramResDto(3101)).`when`(expoClient).getStandardProgram(EXPO, 3101)
         doReturn(ProgramApplicationResDto(false)).`when`(applicationClient).checkStandardApplication(3101, PARTICIPANT)
 
         programScanRequest().andExpect(status().isNotFound)
@@ -775,6 +777,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
     private fun programScanRequest(): ResultActions =
         mockMvc.perform(
             patch("/attendance/standard/3101")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"expoId":"$EXPO","participantId":$PARTICIPANT,"code":"$CODE"}"""),
         )
@@ -823,15 +826,17 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
     private fun entryScan(participantId: Long = PARTICIPANT): ResultActions =
         mockMvc.perform(
             patch("/attendance/$EXPO")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"authority":"ROLE_STANDARD","participantId":$participantId,"code":"$CODE"}"""),
         )
 
     private fun standardProgramScan(): ResultActions {
-        doReturn(StandardProgramResDto(3101, "프로그램")).`when`(expoClient).getStandardProgram(EXPO, 3101)
+        doReturn(StandardProgramResDto(3101)).`when`(expoClient).getStandardProgram(EXPO, 3101)
         doReturn(ProgramApplicationResDto(true)).`when`(applicationClient).checkStandardApplication(3101, PARTICIPANT)
         return mockMvc.perform(
             patch("/attendance/standard/3101")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"expoId":"$EXPO","participantId":$PARTICIPANT,"code":"$CODE"}"""),
         )
@@ -839,12 +844,13 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
 
     private fun trainingScan(): ResultActions {
         doReturn(listOf(TraineeNameResDto(TRAINEE, "김연수"))).`when`(userClient).getTraineeNames(TraineeNamesReqDto(EXPO, listOf(TRAINEE)))
-        doReturn(listOf(TrainingProgramResDto(3201, "연수")))
+        doReturn(listOf(TrainingProgramResDto(3201)))
             .`when`(expoClient)
             .getTrainingPrograms(EXPO, TrainingProgramBatchReqDto(listOf(3201)))
         doReturn(ProgramApplicationResDto(true)).`when`(applicationClient).checkTrainingApplication(3201, TRAINEE)
         return mockMvc.perform(
             patch("/attendance/training/3201")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"expoId":"$EXPO","traineeId":$TRAINEE}"""),
         )

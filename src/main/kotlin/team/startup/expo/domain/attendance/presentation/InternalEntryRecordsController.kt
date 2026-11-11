@@ -22,11 +22,16 @@ class InternalEntryRecordsController(
     @Operation(
         summary = "입장 기록 목록 조회",
         description =
-            "입장·재입장·퇴장 이력(`tb_entry_event`)을 발생 시각, 같으면 id 오름차순으로 페이지 단위로 돌려준다. " +
+            "입장·재입장·퇴장 이력(`tb_entry_event`)을 입장 날짜, 발생 시각, 같으면 id 오름차순으로 페이지 단위로 돌려준다. " +
+                "끝까지 읽을 때는 첫 요청 뒤 응답의 `nextCursor`를 `cursor`로 보내 이어 읽는다(뒤 페이지도 첫 페이지만큼 빠르고, 전체 수는 첫 요청에서만 센다, #250). " +
                 "`from`·`to`(포함)가 없으면 박람회 전체 기간이다. 이름·연락처와 종이 QR 토큰은 싣지 않는다(종이 QR은 `category`와 `paperCode`). " +
                 "`walkIn`은 같은 범위의 간편입장 순증감을 날짜·구분별로 합친 것으로 첫 페이지에만 채운다. 읽기 전용이다.",
     )
-    @ApiError(400, "박람회 ID 형식이나 날짜 형식이 올바르지 않거나, `from`/`to` 중 하나만 보냈거나, `from`이 `to`보다 늦거나, `page`·`size`가 범위를 벗어났다.")
+    @ApiError(
+        400,
+        "박람회 ID 형식이나 날짜 형식이 올바르지 않거나, `from`/`to` 중 하나만 보냈거나, `from`이 `to`보다 늦거나, `page`·`size`가 범위를 벗어났거나, " +
+            "`cursor` 형식이 틀렸거나 `page`가 0이 아닌데 `cursor`를 보냈다.",
+    )
     @ApiError(503, "DB 일시 장애로 요청이 몰려 잠시 처리하지 못했다. 잠시 후 다시 시도한다.")
     @GetMapping
     fun get(

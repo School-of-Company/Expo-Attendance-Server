@@ -3,11 +3,13 @@ package team.startup.expo.domain.attendance
 import feign.FeignException
 import feign.Request
 import feign.RequestTemplate
+import feign.RetryableException
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.doReturn
+import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.reset
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
@@ -35,6 +37,8 @@ import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
+import java.net.SocketTimeoutException
 import java.time.Clock
 import java.time.LocalDate
 import java.util.concurrent.Callable
@@ -106,7 +110,7 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
             .doThrow(feign(409))
             .`when`(userClient)
             .recordEntry(RecordEntryReqDto(EXPO, "TRAINEE", phoneNumber = PHONE))
-        doReturn(ResolveParticipantResDto(TRAINEE, "TRAINEE"))
+        doReturn(ResolveParticipantResDto(TRAINEE))
             .`when`(userClient)
             .resolveParticipant(ResolveParticipantReqDto(EXPO, PHONE, "TRAINEE"))
         doReturn(listOf(TraineeNameResDto(TRAINEE, "김연수")))
@@ -165,7 +169,10 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
 
         mockMvc
             .perform(
-                patch("/attendance/exit/$EXPO").contentType(MediaType.APPLICATION_JSON).content("""{"traineeId":$TRAINEE}"""),
+                patch("/attendance/exit/$EXPO")
+                    .withExpoAdmin()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"traineeId":$TRAINEE}"""),
             ).andExpect(status().isOk)
         traineeEntry()
             .andExpect(status().isOk)
@@ -193,8 +200,11 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
             .andExpect(jsonPath("$.uniqueQr").value(1))
             .andExpect(jsonPath("$.reentered").value(1))
         mockMvc
-            .perform(get("/attendance/summary/$EXPO?all=true").header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN"))
-            .andExpect(jsonPath("$.reentered").value(1))
+            .perform(
+                get(
+                    "/attendance/summary/$EXPO?all=true",
+                ).withExpoAdmin(),
+            ).andExpect(jsonPath("$.reentered").value(1))
     }
 
     @Test
@@ -226,12 +236,114 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
     }
 
     @Test
-    fun `입장 로그가 없는 입장자의 재스캔은 재입장이 아니라 400이다`() {
+    fun `입장 로그가 없는 입장자의 재스캔은 빠진 로그를 채워 첫 입장으로 응답하고 다시 찍으면 기존 규칙이다`() {
         standardEntry().andExpect(status().isOk)
-        // 입장 로그 도입 전 입장이나 로그 유실을 흉내 낸다
+        // User는 입장을 기록했지만 응답을 잃어 이 서비스에 로그·이력이 없는 상태를 흉내 낸다(#287)
         jdbcTemplate.update("DELETE FROM tb_entry_log")
-        standardEntry().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("이미 박람회에 입장한 유저입니다."))
+        jdbcTemplate.update("DELETE FROM tb_entry_event")
+
+        standardEntry()
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.entryStatus").value("FIRST"))
+            .andExpect(jsonPath("$.firstEnteredTime").exists())
+            .andExpect(jsonPath("$.id").value(PARTICIPANT))
+            .andExpect(jsonPath("$.name").value("홍길동"))
+            .andExpect(jsonPath("$.personalInformationStatus").doesNotExist())
+            .andExpect(jsonPath("$.badge").doesNotExist())
+            .andExpect(jsonPath("$.badgePrint").doesNotExist())
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_entry_log", Long::class.java) shouldBe 1L
         events() shouldBe listOf("ENTER")
+        summary().andExpect(jsonPath("$.totals.entered").value(1)).andExpect(jsonPath("$.totals.stillInside").value(1))
+
+        // 채운 뒤에는 기존 규칙: 퇴장 없이 다시 찍으면 400(테스트는 재생 창이 꺼져 있다), 퇴장한 뒤면 재입장이다
+        standardEntry().andExpect(status().isBadRequest).andExpect(jsonPath("$.message").value("이미 박람회에 입장한 유저입니다."))
+        standardExit().andExpect(status().isOk)
+        standardEntry().andExpect(status().isOk).andExpect(jsonPath("$.entryStatus").value("RE_ENTRY"))
+        events() shouldBe listOf("ENTER", "EXIT", "RE_ENTER")
+    }
+
+    @Test
+    fun `연수자도 입장 로그가 없으면 빠진 로그를 채운다`() {
+        traineeEntry().andExpect(status().isOk)
+        jdbcTemplate.update("DELETE FROM tb_entry_log")
+        jdbcTemplate.update("DELETE FROM tb_entry_event")
+
+        traineeEntry()
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.entryStatus").value("FIRST"))
+            .andExpect(jsonPath("$.id").value(TRAINEE))
+            .andExpect(jsonPath("$.name").value("김연수"))
+            .andExpect(jsonPath("$.phoneNumber").value(PHONE))
+        jdbcTemplate.queryForObject(
+            "SELECT count(*) FROM tb_entry_log WHERE subject_type = 'TRAINEE' AND subject_id = ?",
+            Long::class.java,
+            TRAINEE.toString(),
+        ) shouldBe 1L
+        events() shouldBe listOf("ENTER")
+    }
+
+    @Test
+    fun `입장 로그가 없는 입장자를 동시에 찍어도 로그와 입장 이력은 하나만 채운다`() {
+        standardEntry().andExpect(status().isOk)
+        jdbcTemplate.update("DELETE FROM tb_entry_log")
+        jdbcTemplate.update("DELETE FROM tb_entry_event")
+
+        val results = concurrently(8) { standardEntry().andReturn().response.status }
+
+        results.count { it == 200 } shouldBe 1
+        results.count { it == 400 } shouldBe 7
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_entry_log", Long::class.java) shouldBe 1L
+        events() shouldBe listOf("ENTER")
+    }
+
+    @Test
+    fun `User 입장 기록이 타임아웃이어도 User에 기록돼 있으면 첫 입장으로 마무리한다`() {
+        doThrow(readTimeout())
+            .`when`(userClient)
+            .recordEntry(
+                FieldVisitFixtures.entry(
+                    jdbcTemplate,
+                    clock,
+                    RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE),
+                ),
+            )
+
+        standardEntry()
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.entryStatus").value("FIRST"))
+            .andExpect(jsonPath("$.id").value(PARTICIPANT))
+            .andExpect(jsonPath("$.name").value("홍길동"))
+            .andExpect(jsonPath("$.personalInformationStatus").doesNotExist())
+            .andExpect(jsonPath("$.badge").doesNotExist())
+            .andExpect(jsonPath("$.badgePrint").doesNotExist())
+            .andExpect(jsonPath("$.badgePrintJobId").doesNotExist())
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_entry_log", Long::class.java) shouldBe 1L
+        events() shouldBe listOf("ENTER")
+    }
+
+    @Test
+    fun `User 입장 기록이 타임아웃이고 User에 기록돼 있지 않으면 503이고 로그를 남기지 않는다`() {
+        doThrow(readTimeout())
+            .`when`(userClient)
+            .recordEntry(
+                FieldVisitFixtures.entry(
+                    jdbcTemplate,
+                    clock,
+                    RecordEntryReqDto(EXPO, "STANDARD", participantId = PARTICIPANT, code = CODE),
+                ),
+            )
+        doReturn(
+            team.startup.expo.global.client.user
+                .ParticipantEntryStatusResDto(PARTICIPANT, today, false),
+        ).`when`(userClient)
+            .getEntryStatus(
+                team.startup.expo.global.client.user
+                    .ParticipantEntryStatusReqDto(EXPO, PARTICIPANT, today),
+            )
+
+        standardEntry().andExpect(status().isServiceUnavailable)
+        jdbcTemplate.queryForObject("SELECT count(*) FROM tb_entry_log", Long::class.java) shouldBe 0L
+        events() shouldBe emptyList()
     }
 
     @Test
@@ -295,24 +407,45 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
         standardExit().andExpect(status().isOk)
 
         val threads = 8
-        val executor = Executors.newFixedThreadPool(threads)
-        val start = CountDownLatch(1)
-        val statuses =
-            List(threads) {
-                executor.submit(
-                    Callable {
-                        start.await()
-                        standardEntry().andReturn().response.status
-                    },
-                )
-            }
-        start.countDown()
-        val results = statuses.map { it.get() }
-        executor.shutdown()
+        val results = concurrently(threads) { standardEntry().andReturn().response.status }
 
         results.count { it == 200 } shouldBe 1
         results.count { it == 400 } shouldBe threads - 1
         events().count { it == "RE_ENTER" } shouldBe 1
+    }
+
+    private fun <T> concurrently(
+        threads: Int,
+        block: () -> T,
+    ): List<T> {
+        val executor = Executors.newFixedThreadPool(threads)
+        val start = CountDownLatch(1)
+        val futures =
+            List(threads) {
+                executor.submit(
+                    Callable {
+                        start.await()
+                        block()
+                    },
+                )
+            }
+        start.countDown()
+        val results = futures.map { it.get() }
+        executor.shutdown()
+        return results
+    }
+
+    /** 응답을 받기 전에 끊긴 호출(읽기 타임아웃). Feign은 입출력 오류를 상태 없는 `RetryableException`으로 던진다. */
+    private fun readTimeout(): FeignException {
+        val retryAfter: Long? = null
+        return RetryableException(
+            -1,
+            "Read timed out",
+            Request.HttpMethod.POST,
+            SocketTimeoutException("Read timed out"),
+            retryAfter,
+            Request.create(Request.HttpMethod.POST, "http://x", emptyMap(), null, Charsets.UTF_8, RequestTemplate()),
+        )
     }
 
     private fun guard(state: String) {
@@ -331,6 +464,7 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
     private fun standardEntry(): ResultActions =
         mockMvc.perform(
             patch("/attendance/$EXPO")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"authority":"ROLE_STANDARD","participantId":$PARTICIPANT,"code":"$CODE"}"""),
         )
@@ -338,6 +472,7 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
     private fun phoneEntry(): ResultActions =
         mockMvc.perform(
             patch("/attendance/$EXPO")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"authority":"ROLE_STANDARD","phoneNumber":"$PHONE"}"""),
         )
@@ -345,6 +480,7 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
     private fun traineeEntry(): ResultActions =
         mockMvc.perform(
             patch("/attendance/$EXPO")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"authority":"ROLE_TRAINEE","phoneNumber":"$PHONE"}"""),
         )
@@ -352,12 +488,17 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
     private fun standardExit(): ResultActions =
         mockMvc.perform(
             patch("/attendance/exit/$EXPO")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"participantId":$PARTICIPANT,"code":"$CODE"}"""),
         )
 
     private fun summary(): ResultActions =
-        mockMvc.perform(get("/attendance/summary/$EXPO?date=$today").header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN"))
+        mockMvc.perform(
+            get(
+                "/attendance/summary/$EXPO?date=$today",
+            ).withExpoAdmin(),
+        )
 
     private fun feign(status: Int): FeignException =
         FeignException.errorStatus(

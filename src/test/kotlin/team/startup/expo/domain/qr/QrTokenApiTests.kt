@@ -31,6 +31,7 @@ import team.startup.expo.domain.qr.support.QrEntryPeriodReviewService
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.LocalDate
 import java.util.concurrent.CountDownLatch
@@ -114,6 +115,7 @@ class QrTokenApiTests : IntegrationTestSupport() {
             .perform(
                 post("/qr-tokens/22222222-2222-4222-8222-222222222222")
                     .header("X-User-Role", "ROLE_ADMIN")
+                    .header("Authorization", "Bearer test-admin")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(body),
             ).andExpect(status().isUnauthorized)
@@ -415,9 +417,9 @@ class QrTokenApiTests : IntegrationTestSupport() {
         expoId: String,
         token: String,
     ) = patch("/attendance/qr/$expoId")
+        .withExpoAdmin()
         .contentType(MediaType.APPLICATION_JSON)
         .content("""{"token": "$token"}""")
 
-    private fun org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder.asAdmin() =
-        header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN")
+    private fun org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder.asAdmin() = withExpoAdmin()
 }

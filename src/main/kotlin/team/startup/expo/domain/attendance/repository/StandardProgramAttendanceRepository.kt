@@ -50,7 +50,7 @@ interface StandardProgramAttendanceRepository : JpaRepository<StandardProgramAtt
     ): Int
 
     /**
-     * 입실했고 아직 퇴실하지 않았으면 퇴실을 기록한다. 입실과 같은 분 안의 스캔(연속 스캔)은 퇴실로 치지 않는다.
+     * 같은 날 입실했고 아직 퇴실하지 않았으면 퇴실을 기록한다. 입실과 같은 분 안의 스캔(연속 스캔)과 다른 날의 스캔은 퇴실로 치지 않는다.
      * 반환값 0이면 기록하지 않았다.
      */
     @Modifying
@@ -58,12 +58,14 @@ interface StandardProgramAttendanceRepository : JpaRepository<StandardProgramAtt
         nativeQuery = true,
         value = """
             UPDATE tb_standard_program_attendance SET leave_time = :leaveTime
-            WHERE participant_id = :participantId AND standard_program_id = :programId AND leave_time IS NULL AND entry_time < :leaveTime
+            WHERE participant_id = :participantId AND standard_program_id = :programId AND attendance_date = :attendanceDate
+              AND leave_time IS NULL AND entry_time < :leaveTime
         """,
     )
     fun markLeaveIfPresent(
         @Param("programId") programId: Long,
         @Param("participantId") participantId: Long,
+        @Param("attendanceDate") attendanceDate: LocalDate,
         @Param("leaveTime") leaveTime: LocalTime,
     ): Int
 

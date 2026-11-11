@@ -30,6 +30,7 @@ import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.LocalDate
 import java.util.concurrent.Callable
@@ -114,6 +115,7 @@ class ScanExitApiTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 patch("/attendance/$EXPO")
+                    .withExpoAdmin()
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"authority":"ROLE_STANDARD","participantId":$PARTICIPANT,"code":"$CODE"}"""),
             ).andExpect(status().isOk)
@@ -143,6 +145,7 @@ class ScanExitApiTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 patch("/attendance/$EXPO")
+                    .withExpoAdmin()
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"authority":"ROLE_TRAINEE","phoneNumber":"01011112222"}"""),
             ).andExpect(status().isOk)
@@ -200,10 +203,20 @@ class ScanExitApiTests : IntegrationTestSupport() {
     }
 
     private fun paperEntry(): ResultActions =
-        mockMvc.perform(patch("/attendance/qr/$EXPO").contentType(MediaType.APPLICATION_JSON).content("""{"token":"$TOKEN"}"""))
+        mockMvc.perform(
+            patch("/attendance/qr/$EXPO")
+                .withExpoAdmin()
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"token":"$TOKEN"}"""),
+        )
 
     private fun exit(body: String): ResultActions =
-        mockMvc.perform(patch("/attendance/exit/$EXPO").contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(
+            patch("/attendance/exit/$EXPO")
+                .withExpoAdmin()
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body),
+        )
 
     private fun entry(
         id: Long,

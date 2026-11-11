@@ -7,19 +7,26 @@ import java.time.LocalDateTime
 
 @Schema(description = "입장 기록 목록(Report 엑셀 원천). 이름·연락처와 종이 QR 토큰은 담지 않는다")
 data class EntryRecordsResDto(
+    @field:Schema(description = "박람회 ID")
     val expoId: String,
     @field:Schema(description = "요청한 범위의 시작. 박람회 전체를 요청했으면 비어 있다", nullable = true)
     val from: LocalDate?,
     @field:Schema(description = "요청한 범위의 끝. 박람회 전체를 요청했으면 비어 있다", nullable = true)
     val to: LocalDate?,
+    @field:Schema(description = "페이지 번호(0부터)")
     val page: Int,
+    @field:Schema(description = "페이지 크기")
     val size: Int,
-    @field:Schema(description = "범위 안 전체 이벤트 수(페이지와 상관없음)")
-    val totalElements: Long,
-    @field:Schema(description = "발생 시각, 같으면 id 오름차순")
+    @field:Schema(description = "범위 안 전체 이벤트 수(페이지와 상관없음). `cursor`로 요청했으면 비어 있다(첫 요청 값을 쓴다)", nullable = true)
+    val totalElements: Long?,
+    @field:Schema(description = "입장 날짜, 발생 시각, 같으면 id 오름차순(이벤트는 그 입장 날짜에 일어나므로 발생 시각 순과 같다)")
     val records: List<EntryRecordItemResDto>,
-    @field:Schema(description = "범위 안 간편입장 순증감을 날짜·구분별로 합친 것. 첫 페이지(`page = 0`)에서만 채우고 나머지는 빈 배열. 합계가 0인 날짜·구분은 싣지 않는다")
+    @field:Schema(
+        description = "범위 안 간편입장 순증감을 날짜·구분별로 합친 것. `cursor` 없는 첫 페이지(`page = 0`)에서만 채우고 나머지는 빈 배열. 합계가 0인 날짜·구분은 싣지 않는다",
+    )
     val walkIn: List<EntryRecordWalkInResDto>,
+    @field:Schema(description = "다음 페이지를 읽을 `cursor`. 더 읽을 이벤트가 없으면 비어 있다(#250)", nullable = true)
+    val nextCursor: String?,
 )
 
 data class EntryRecordItemResDto(
@@ -40,6 +47,7 @@ data class EntryRecordItemResDto(
 )
 
 data class EntryRecordWalkInResDto(
+    @field:Schema(description = "날짜")
     val date: LocalDate,
     @field:Schema(description = "간편입장 구분")
     val category: String,

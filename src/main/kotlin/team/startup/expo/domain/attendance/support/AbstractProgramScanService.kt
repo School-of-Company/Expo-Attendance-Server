@@ -5,16 +5,11 @@ import org.springframework.http.HttpStatus
 import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResult
-import team.startup.expo.domain.attendance.support.CancellationGuardGate
-import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
-import team.startup.expo.domain.attendance.support.ProgramAttendanceResult
-import team.startup.expo.domain.attendance.support.RecordProgramAttendanceService
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 /**
@@ -31,6 +26,11 @@ abstract class AbstractProgramScanService<P>(
     private val cancellationGuardGate: CancellationGuardGate,
     protected val clock: Clock,
 ) {
+    /** 대상 확인 응답에서 이미 읽은 이름. [value]가 `null`이어도 "읽었지만 없음"이라 다시 읽지 않는다. */
+    protected class KnownName(
+        val value: String?,
+    )
+
     protected abstract val programType: ProgramType
 
     /** 프로그램이 없거나 삭제됐을 때의 404 문구. */
@@ -70,6 +70,7 @@ abstract class AbstractProgramScanService<P>(
      * @param personId 출석을 기록할 대상(일반은 참가자 ID, 연수는 연수자 ID)
      * @param participantId 취소 보호 락을 잡을 참가자 ID
      * @param traineeId 취소 보호 락을 잡을 연수자 ID
+     * @param knownName 대상 확인 중 이미 이름을 읽었으면 그 값. 있으면 응답용 이름을 유저 서비스에서 다시 읽지 않는다.
      */
     protected fun scanProgram(
         expoId: String,
@@ -77,6 +78,7 @@ abstract class AbstractProgramScanService<P>(
         personId: Long,
         participantId: Long? = null,
         traineeId: Long? = null,
+        knownName: KnownName? = null,
     ): ProgramScanResDto {
         val notFound = ExpectedException(HttpStatus.NOT_FOUND, programNotFoundMessage)
         val program =
@@ -112,12 +114,8 @@ abstract class AbstractProgramScanService<P>(
             }
         return ProgramScanResDto(
             result = scanResult,
-            name = resolveName(expoId, personId),
-            time = if (scanResult == ProgramScanResult.UNCHANGED) null else now.format(TIME),
+            name = if (knownName != null) knownName.value else resolveName(expoId, personId),
+            time = if (scanResult == ProgramScanResult.UNCHANGED) null else now.format(TimeFormat.HOUR_MINUTE),
         )
-    }
-
-    private companion object {
-        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }

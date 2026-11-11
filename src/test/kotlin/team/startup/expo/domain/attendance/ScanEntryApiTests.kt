@@ -28,6 +28,7 @@ import team.startup.expo.global.client.user.ResolveStandardParticipantResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -134,7 +135,8 @@ class ScanEntryApiTests : IntegrationTestSupport() {
 
     @Test
     fun `같은 날 두 번째 입장은 400이다`() {
-        entryReturns("expo-dup", standardEntry(id = 4203))
+        // 두 번째 스캔이 같은 참가자의 입장 로그를 찾도록 참가자 ID를 맞춘다(로그가 없으면 빠진 로그를 채운다, #287)
+        entryReturns("expo-dup", standardEntry(id = 9999))
         mockMvc.perform(scan("expo-dup", "ROLE_STANDARD", "01012345678")).andExpect(status().isOk)
 
         entryThrows("expo-dup", 409)
@@ -200,6 +202,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
                     RecordEntryReqDto("expo-i5", "STANDARD", participantId = 5005, code = "codeEEEEEEEEEEEEEEEEEE"),
                 ),
             )
+        enteredEarlierToday("expo-i5", 5005)
         mockMvc
             .perform(scanById("expo-i5", 5005, "codeEEEEEEEEEEEEEEEEEE"))
             .andExpect(status().isBadRequest)
@@ -217,8 +220,12 @@ class ScanEntryApiTests : IntegrationTestSupport() {
             """{"authority": "ROLE_TRAINEE"}""",
         ).forEach { body ->
             mockMvc
-                .perform(patch("/attendance/expo-i6").contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isBadRequest)
+                .perform(
+                    patch("/attendance/expo-i6")
+                        .withExpoAdmin()
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body),
+                ).andExpect(status().isBadRequest)
         }
     }
 
@@ -249,6 +256,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
             .andExpect(jsonPath("$.message").value("연수자를 찾지 못 했습니다."))
 
         entryThrows("expo-msg", 409)
+        enteredEarlierToday("expo-msg", 9999)
         mockMvc
             .perform(scan("expo-msg", "ROLE_STANDARD", "01012345678"))
             .andExpect(jsonPath("$.message").value("이미 박람회에 입장한 유저입니다."))
@@ -288,6 +296,21 @@ class ScanEntryApiTests : IntegrationTestSupport() {
         mockMvc.perform(scan("expo-s5", "ROLE_STANDARD", "")).andExpect(status().isBadRequest)
     }
 
+    /** 오늘 앞서 입장해 입장 로그가 있는 참가자(재생 창 밖). 로그가 없으면 409 재스캔은 빠진 로그를 채운다(#287). */
+    private fun enteredEarlierToday(
+        expoId: String,
+        participantId: Long,
+    ) {
+        jdbcTemplate.update(
+            "INSERT INTO tb_entry_log (expo_id, subject_type, subject_id, attendance_date, entered_at) " +
+                "VALUES (?, 'STANDARD', ?, ?, ?) ON CONFLICT (expo_id, subject_type, subject_id, attendance_date) DO NOTHING",
+            expoId,
+            participantId.toString(),
+            today,
+            LocalDateTime.now(clock).minusHours(1),
+        )
+    }
+
     private fun entryReturns(
         expoId: String,
         response: RecordEntryResDto,
@@ -324,6 +347,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
         participantId: Long,
         code: String,
     ) = patch("/attendance/$expoId")
+        .withExpoAdmin()
         .contentType(MediaType.APPLICATION_JSON)
         .content("""{"authority": "ROLE_STANDARD", "participantId": $participantId, "code": "$code"}""")
 
@@ -371,6 +395,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
         authority: String,
         phoneNumber: String,
     ) = patch("/attendance/$expoId")
+        .withExpoAdmin()
         .contentType(MediaType.APPLICATION_JSON)
         .content("""{"authority": "$authority", "phoneNumber": "$phoneNumber"}""")
 

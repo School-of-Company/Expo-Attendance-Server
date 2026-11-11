@@ -16,11 +16,13 @@ import team.startup.expo.domain.attendance.service.ScanEntryService
 import team.startup.expo.domain.attendance.service.ScanExitService
 import team.startup.expo.domain.attendance.support.ScannerName
 import team.startup.expo.global.logging.RequestContext
+import team.startup.expo.global.security.ExpoAccessGuard
 import team.startup.expo.global.swagger.ApiError
 
 @RestController
 @RequestMapping("/attendance")
 class AttendanceController(
+    private val expoAccessGuard: ExpoAccessGuard,
     private val scanEntryService: ScanEntryService,
     private val scanExitService: ScanExitService,
 ) {
@@ -38,12 +40,16 @@ class AttendanceController(
     @ApiError(404, "참가자(연수자)를 찾지 못했다. 코드가 틀린 경우도 같다.")
     @ApiError(409, "신청 취소를 처리 중이다.")
     @ApiError(503, "박람회·유저 서비스를 사용할 수 없거나, 취소 처리와 겹쳐 잠시 후 다시 시도해야 한다.")
+    @ApiError(401, "인증된 사용자 헤더가 없다.")
+    @ApiError(403, "해당 박람회의 CHECKIN 권한이 없다.")
     @PatchMapping("/{expoId}")
     fun scanEntry(
         @PathVariable expoId: String,
         @Valid @RequestBody reqDto: ScanEntryReqDto,
         @RequestHeader(name = ScannerName.HEADER, required = false) scannerName: String?,
     ): ScanEntryResDto {
+        expoAccessGuard.requireAccess(expoId, "CHECKIN")
+
         RequestContext.bindScan(expoId, reqDto.participantId)
         return scanEntryService.scan(expoId, reqDto, scannerName)
     }
@@ -52,20 +58,24 @@ class AttendanceController(
         summary = "박람회 퇴장 스캔",
         description =
             "오늘 입장한 참가자·연수자·종이 QR의 퇴장 시각을 기록한다. 입장하지 않았거나(입장 로그가 생기기 전의 입장 포함) 이미 퇴장했으면 400이다. " +
-                "재입장은 아직 허용하지 않는다(입장은 하루 한 번). 기간이나 회차는 확인하지 않는다.",
+                "퇴장 뒤 같은 날 입장 스캔은 재입장으로 처리되고(#148), 재입장한 뒤에는 다시 퇴장할 수 있다. 기간이나 회차는 확인하지 않는다.",
     )
     @ApiError(400, "참가자 ID와 코드, 연수자 ID, 종이 QR 토큰 중 하나만 보내야 한다.")
     @ApiError(400, "오늘 입장 기록이 없다.")
     @ApiError(400, "오늘 이미 퇴장 처리된 QR이다.")
     @ApiError(404, "참가자(연수자)를 찾지 못했다. 코드가 틀린 경우도 같다.")
     @ApiError(404, "종이 QR 토큰을 찾을 수 없다(다른 박람회의 토큰 포함).")
-    @ApiError(503, "유저 서비스를 사용할 수 없다.")
+    @ApiError(503, "박람회 권한 판정 또는 유저 서비스를 사용할 수 없다.")
+    @ApiError(401, "인증된 사용자 헤더가 없다.")
+    @ApiError(403, "해당 박람회의 CHECKIN 권한이 없다.")
     @PatchMapping("/exit/{expoId}")
     fun scanExit(
         @PathVariable expoId: String,
         @Valid @RequestBody reqDto: ScanExitReqDto,
         @RequestHeader(name = ScannerName.HEADER, required = false) scannerName: String?,
     ): ScanExitResDto {
+        expoAccessGuard.requireAccess(expoId, "CHECKIN")
+
         RequestContext.bindScan(expoId, reqDto.participantId)
         return scanExitService.scan(expoId, reqDto, scannerName)
     }
