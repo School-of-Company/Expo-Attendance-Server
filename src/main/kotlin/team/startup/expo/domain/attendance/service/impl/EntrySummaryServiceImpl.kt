@@ -34,7 +34,7 @@ class EntrySummaryServiceImpl(
         val walkIn =
             if (scope.date != null) walkInService.get(expoId, scope.date) else walkInService.getBetween(expoId, scope.from, scope.to)
         val rows =
-            entryLogRepository.summarize(expoId, scope.from, scope.to).map {
+            entryLogRepository.summarize(expoId, scope.from, scope.to, generatedAt.toLocalDate()).map {
                 Row(
                     EntrySubjectType.valueOf(it[0] as String),
                     it[1] as String?,
@@ -56,7 +56,6 @@ class EntrySummaryServiceImpl(
 
         val qrEntered = standard + trainee + paper.sumOf { it.entered }
         val exited = rows.sumOf { it.exited }
-        val outside = rows.sumOf { it.outside }
         return EntrySummaryResDto(
             expoId = expoId,
             date = scope.date,
@@ -64,7 +63,7 @@ class EntrySummaryServiceImpl(
             registered = RegisteredEntrySummaryResDto(standard, trainee),
             paper = paper,
             walkIn = walkIn,
-            totals = EntryTotalsResDto(entered = qrEntered + walkIn.total, exited = exited, stillInside = qrEntered - outside),
+            totals = EntryTotalsResDto(entered = qrEntered + walkIn.total, exited = exited, stillInside = rows.sumOf { it.inside }),
             recentEntered10m = recentEntered(expoId, generatedAt),
             uniqueQr = entryLogRepository.countDistinctSubjects(expoId, scope.from, scope.to),
             reentered = entryLogRepository.countReentered(expoId, scope.from, scope.to),
@@ -84,7 +83,7 @@ class EntrySummaryServiceImpl(
         val type: EntrySubjectType,
         val category: String?,
         val entered: Long,
-        val outside: Long,
+        val inside: Long,
         val exited: Long,
     )
 

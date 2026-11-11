@@ -139,6 +139,20 @@ class EntryListApiTests : IntegrationTestSupport() {
     }
 
     @Test
+    fun `지난 날짜 목록에서는 퇴장 스캔 없이 나간 사람도 안에 있지 않다`() {
+        val yesterday = today.minusDays(1)
+        entry("STANDARD", "11", 9, 0, date = yesterday)
+        doReturn(EntryCardsResDto(emptyList(), emptyList()))
+            .`when`(userClient)
+            .getEntryCards(EntryCardsReqDto(EXPO, listOf(11L), emptyList()))
+
+        entries("?date=$yesterday")
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.entries[0].id").value(11))
+            .andExpect(jsonPath("$.entries[0].inside").value(false))
+    }
+
+    @Test
     fun `입장자가 없으면 유저 서비스를 부르지 않고 빈 목록이다`() {
         entries().andExpect(status().isOk).andExpect(jsonPath("$.entries.length()").value(0))
         verifyNoInteractions(userClient)
