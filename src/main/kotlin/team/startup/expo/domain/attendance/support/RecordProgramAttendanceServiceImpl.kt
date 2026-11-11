@@ -42,8 +42,8 @@ class RecordProgramAttendanceServiceImpl(
 
         val left =
             when (type) {
-                ProgramType.STANDARD -> standardRepository.markLeaveIfPresent(programId, personId, time)
-                ProgramType.TRAINING -> trainingRepository.markLeaveIfPresent(programId, personId, time)
+                ProgramType.STANDARD -> standardRepository.markLeaveIfPresent(programId, personId, attendanceDate, time)
+                ProgramType.TRAINING -> trainingRepository.markLeaveIfPresent(programId, personId, attendanceDate, time)
             }
         if (left == 1) return ProgramAttendanceResult.LEFT
         if (!entryAllowed && !hasEntry(type, programId, personId)) return ProgramAttendanceResult.ENTRY_NOT_ALLOWED
