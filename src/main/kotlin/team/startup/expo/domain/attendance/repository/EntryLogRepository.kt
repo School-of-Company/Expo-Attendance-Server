@@ -168,13 +168,13 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
     ): Long
 
     /**
-     * 날짜·시간별 [날짜, 시, 입장 수, 퇴장 수]. 입장은 입장 시각, 퇴장은 퇴장 시각의 시간에 센다. 간편입장은 순증감(`delta`)을 입장으로 센다.
+     * 날짜·시간별 [날짜, 시, 입장 수, 퇴장 수]. 입장은 입장 시각, 퇴장은 퇴장 시각의 시간에 센다. 간편입장은 순증감(`delta`)을 입장으로 세고, 취소가 다른 시간에 들어와 음수가 되면 0으로 자른다.
      * 기록이 있는 시간만 나온다.
      */
     @Query(
         nativeQuery = true,
         value = """
-            SELECT d, h, SUM(entered), SUM(exited) FROM (
+            SELECT d, h, GREATEST(SUM(entered), 0), SUM(exited) FROM (
                 SELECT attendance_date AS d, CAST(EXTRACT(HOUR FROM entered_at) AS INTEGER) AS h, 1 AS entered, 0 AS exited
                 FROM tb_entry_log WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to
                 UNION ALL
@@ -228,11 +228,11 @@ interface EntryLogRepository : JpaRepository<EntryLog, Long> {
         @Param("limit") limit: Int,
     ): List<Array<Any?>>
 
-    /** 스캐너별 [스캐너, 입장 수, 퇴장 수] 상위 [limit]개. 스캐너 이름을 보내지 않은 기록은 세지 않는다. 간편입장은 순증감을 입장으로 센다. */
+    /** 스캐너별 [스캐너, 입장 수, 퇴장 수] 상위 [limit]개. 스캐너 이름을 보내지 않은 기록은 세지 않는다. 간편입장은 순증감을 입장으로 세고 음수는 0으로 자른다. */
     @Query(
         nativeQuery = true,
         value = """
-            SELECT scanner, SUM(entered) AS entered, SUM(exited) AS exited FROM (
+            SELECT scanner, GREATEST(SUM(entered), 0) AS entered, SUM(exited) AS exited FROM (
                 SELECT scanner, 1 AS entered, 0 AS exited FROM tb_entry_log
                 WHERE expo_id = :expoId AND attendance_date BETWEEN :from AND :to AND scanner IS NOT NULL
                 UNION ALL
