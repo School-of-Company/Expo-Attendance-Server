@@ -88,7 +88,7 @@ class EntryListServiceImpl(
                 personalInformationStatus = card?.personalInformationStatus,
                 badge = card?.badge,
                 firstEnteredTime = row.enteredAt.format(TimeFormat.HOUR_MINUTE),
-                inside = row.exitedAt == null,
+                inside = today && row.exitedAt == null,
             )
         }
     }
