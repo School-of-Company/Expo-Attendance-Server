@@ -21,12 +21,14 @@ import team.startup.expo.domain.attendance.service.EntryListService
 import team.startup.expo.domain.attendance.service.EntryStatsService
 import team.startup.expo.domain.attendance.service.EntrySummaryService
 import team.startup.expo.domain.attendance.support.AdminStatsCache
+import team.startup.expo.global.security.ExpoAccessGuard
 import team.startup.expo.global.swagger.ApiError
 
-/** 입구 화면의 "오늘 입장 처리 건수"(#119). 관리자(`ROLE_ADMIN`) 전용이다. */
+/** 입구 화면의 "오늘 입장 처리 건수"(#119). 박람회별 운영 권한을 확인한다. */
 @RestController
 @RequestMapping("/attendance/summary")
 class EntrySummaryController(
+    private val expoAccessGuard: ExpoAccessGuard,
     private val entrySummaryService: EntrySummaryService,
     private val entryStatsService: EntryStatsService,
     private val entryListService: EntryListService,
@@ -40,14 +42,18 @@ class EntrySummaryController(
                 "입장은 QR당 하루 한 번이라 입장 수는 서로 다른 입장자 수와 같다. 입장 로그가 생기기 전의 입장은 포함되지 않는다. 읽기 전용이다.",
     )
     @ApiError(400, "박람회 ID 형식(소문자 UUID)이나 날짜 형식이 올바르지 않거나, `date`와 `all`을 함께 보냈다.")
-    @ApiError(401, "관리자 역할 헤더가 없다.")
-    @ApiError(403, "`X-User-Role`이 `ROLE_ADMIN`이 아니다.")
-    @ApiError(503, "DB 일시 장애로 요청이 몰려 잠시 처리하지 못했다. 잠시 후 다시 시도한다.")
+    @ApiError(401, "인증된 사용자 헤더가 없다.")
+    @ApiError(403, "해당 박람회의 요청 권한이 없다.")
+    @ApiError(404, "박람회를 찾지 못했다.")
+    @ApiError(503, "박람회 권한 판정 서비스를 사용할 수 없거나 DB 일시 장애로 처리하지 못했다.")
     @GetMapping("/{expoId}")
     fun get(
         @PathVariable expoId: String,
         @Valid @ParameterObject @ModelAttribute reqDto: EntrySummaryReqDto,
-    ): EntrySummaryResDto = statsCache.get("summary", expoId, reqDto) { entrySummaryService.get(expoId, reqDto) }
+    ): EntrySummaryResDto {
+        expoAccessGuard.requireAccess(expoId, "STATS_READ")
+        return statsCache.get("summary", expoId, reqDto) { entrySummaryService.get(expoId, reqDto) }
+    }
 
     @Operation(
         summary = "시간대별 입·퇴장 건수",
@@ -56,14 +62,18 @@ class EntrySummaryController(
                 "기록이 있는 시간만 나온다. 날짜가 없으면 오늘, `all=true`면 박람회 전체 기간이다. 읽기 전용이다.",
     )
     @ApiError(400, "박람회 ID나 날짜 형식이 올바르지 않거나, `date`와 `all`을 함께 보냈다.")
-    @ApiError(401, "관리자 역할 헤더가 없다.")
-    @ApiError(403, "`X-User-Role`이 `ROLE_ADMIN`이 아니다.")
-    @ApiError(503, "DB 일시 장애로 요청이 몰려 잠시 처리하지 못했다. 잠시 후 다시 시도한다.")
+    @ApiError(401, "인증된 사용자 헤더가 없다.")
+    @ApiError(403, "해당 박람회의 요청 권한이 없다.")
+    @ApiError(404, "박람회를 찾지 못했다.")
+    @ApiError(503, "박람회 권한 판정 서비스를 사용할 수 없거나 DB 일시 장애로 처리하지 못했다.")
     @GetMapping("/{expoId}/hourly")
     fun hourly(
         @PathVariable expoId: String,
         @Valid @ParameterObject @ModelAttribute reqDto: EntrySummaryReqDto,
-    ): HourlyEntryResDto = statsCache.get("hourly", expoId, reqDto) { entryStatsService.hourly(expoId, reqDto) }
+    ): HourlyEntryResDto {
+        expoAccessGuard.requireAccess(expoId, "STATS_READ")
+        return statsCache.get("hourly", expoId, reqDto) { entryStatsService.hourly(expoId, reqDto) }
+    }
 
     @Operation(
         summary = "최근 입·퇴장 기록",
@@ -72,14 +82,18 @@ class EntrySummaryController(
                 "등록 QR이면 유저 서비스에서 참가자 이름을 가져와 담지만, 가져오지 못하면 이름만 비운다. 날짜가 없으면 오늘, `all=true`면 박람회 전체 기간이다.",
     )
     @ApiError(400, "박람회 ID나 날짜 형식이 올바르지 않거나, `limit`이 범위를 벗어났거나, `date`와 `all`을 함께 보냈다.")
-    @ApiError(401, "관리자 역할 헤더가 없다.")
-    @ApiError(403, "`X-User-Role`이 `ROLE_ADMIN`이 아니다.")
-    @ApiError(503, "DB 일시 장애로 요청이 몰려 잠시 처리하지 못했다. 잠시 후 다시 시도한다.")
+    @ApiError(401, "인증된 사용자 헤더가 없다.")
+    @ApiError(403, "해당 박람회의 요청 권한이 없다.")
+    @ApiError(404, "박람회를 찾지 못했다.")
+    @ApiError(503, "박람회 권한 판정 서비스를 사용할 수 없거나 DB 일시 장애로 처리하지 못했다.")
     @GetMapping("/{expoId}/recent")
     fun recent(
         @PathVariable expoId: String,
         @Valid @ParameterObject @ModelAttribute reqDto: RecentEntryRecordsReqDto,
-    ): RecentEntryRecordsResDto = statsCache.get("recent", expoId, reqDto) { entryStatsService.recent(expoId, reqDto) }
+    ): RecentEntryRecordsResDto {
+        expoAccessGuard.requireAccess(expoId, "CHECKIN")
+        return statsCache.get("recent", expoId, reqDto) { entryStatsService.recent(expoId, reqDto) }
+    }
 
     @Operation(
         summary = "하루 입장자 목록",
@@ -90,14 +104,18 @@ class EntrySummaryController(
                 "`page`(0부터)·`size`(최대 500)로 나눠 읽고 `totalElements`로 전체 수를 안다. 종이 QR과 간편입장은 담지 않는다. 읽기 전용이다.",
     )
     @ApiError(400, "박람회 ID나 날짜 형식이 올바르지 않거나, `page`·`size`가 범위를 벗어났다.")
-    @ApiError(401, "관리자 역할 헤더가 없다.")
-    @ApiError(403, "`X-User-Role`이 `ROLE_ADMIN`이 아니다.")
-    @ApiError(503, "유저 서비스가 응답하지 않거나 DB 일시 장애로 요청이 몰려 잠시 처리하지 못했다. 잠시 후 다시 시도한다.")
+    @ApiError(401, "인증된 사용자 헤더가 없다.")
+    @ApiError(403, "해당 박람회의 요청 권한이 없다.")
+    @ApiError(404, "박람회를 찾지 못했다.")
+    @ApiError(503, "유저 서비스가 응답하지 않거나 박람회 권한 판정 서비스를 사용할 수 없거나 DB 일시 장애로 처리하지 못했다.")
     @GetMapping("/{expoId}/entries")
     fun entries(
         @PathVariable expoId: String,
         @Valid @ParameterObject @ModelAttribute reqDto: EntryListReqDto,
-    ): EntryListResDto = entryListService.list(expoId, reqDto)
+    ): EntryListResDto {
+        expoAccessGuard.requireAccess(expoId)
+        return entryListService.list(expoId, reqDto)
+    }
 
     @Operation(
         summary = "스캐너별 입장 처리 건수",
@@ -106,12 +124,16 @@ class EntrySummaryController(
                 "헤더를 보내지 않은 처리와 이 기능 이전의 기록은 세지 않는다. 날짜가 없으면 오늘, `all=true`면 박람회 전체 기간이다.",
     )
     @ApiError(400, "박람회 ID나 날짜 형식이 올바르지 않거나, `limit`이 범위를 벗어났거나, `date`와 `all`을 함께 보냈다.")
-    @ApiError(401, "관리자 역할 헤더가 없다.")
-    @ApiError(403, "`X-User-Role`이 `ROLE_ADMIN`이 아니다.")
-    @ApiError(503, "DB 일시 장애로 요청이 몰려 잠시 처리하지 못했다. 잠시 후 다시 시도한다.")
+    @ApiError(401, "인증된 사용자 헤더가 없다.")
+    @ApiError(403, "해당 박람회의 요청 권한이 없다.")
+    @ApiError(404, "박람회를 찾지 못했다.")
+    @ApiError(503, "박람회 권한 판정 서비스를 사용할 수 없거나 DB 일시 장애로 처리하지 못했다.")
     @GetMapping("/{expoId}/scanners")
     fun scanners(
         @PathVariable expoId: String,
         @Valid @ParameterObject @ModelAttribute reqDto: ScannerEntryCountsReqDto,
-    ): ScannerEntryCountsResDto = statsCache.get("scanners", expoId, reqDto) { entryStatsService.scanners(expoId, reqDto) }
+    ): ScannerEntryCountsResDto {
+        expoAccessGuard.requireAccess(expoId, "STATS_READ")
+        return statsCache.get("scanners", expoId, reqDto) { entryStatsService.scanners(expoId, reqDto) }
+    }
 }

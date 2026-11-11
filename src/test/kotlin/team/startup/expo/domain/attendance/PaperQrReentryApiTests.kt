@@ -20,6 +20,7 @@ import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.LocalDate
 import java.util.concurrent.Callable
@@ -112,8 +113,11 @@ class PaperQrReentryApiTests : IntegrationTestSupport() {
         exit(TOKEN_B, "gate-1").andExpect(status().isOk)
 
         mockMvc
-            .perform(get("/attendance/summary/$EXPO?all=true").header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN"))
-            .andExpect(jsonPath("$.totals.entered").value(2))
+            .perform(
+                get(
+                    "/attendance/summary/$EXPO?all=true",
+                ).withExpoAdmin(),
+            ).andExpect(jsonPath("$.totals.entered").value(2))
             .andExpect(jsonPath("$.totals.exited").value(2))
             .andExpect(jsonPath("$.totals.stillInside").value(1))
             .andExpect(jsonPath("$.paper[?(@.category=='ADULT')].entered").value(2))
@@ -121,13 +125,19 @@ class PaperQrReentryApiTests : IntegrationTestSupport() {
             .andExpect(jsonPath("$.reentered").value(1))
         val hourly =
             mockMvc
-                .perform(get("/attendance/summary/$EXPO/hourly?all=true").header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN"))
-                .andReturn()
+                .perform(
+                    get(
+                        "/attendance/summary/$EXPO/hourly?all=true",
+                    ).withExpoAdmin(),
+                ).andReturn()
                 .response.contentAsString
         Regex("\"exited\":(\\d+)").findAll(hourly).sumOf { it.groupValues[1].toLong() } shouldBe 2L
         mockMvc
-            .perform(get("/attendance/summary/$EXPO/scanners").header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN"))
-            .andExpect(jsonPath("$.scanners[0].entered").value(2))
+            .perform(
+                get(
+                    "/attendance/summary/$EXPO/scanners",
+                ).withExpoAdmin(),
+            ).andExpect(jsonPath("$.scanners[0].entered").value(2))
             .andExpect(jsonPath("$.scanners[0].exited").value(2))
     }
 
@@ -184,6 +194,7 @@ class PaperQrReentryApiTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 patch("/attendance/qr/$EXPO")
+                    .withExpoAdmin()
                     .header("X-Scanner-Name", "gate-2")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"token":"$TOKEN"}"""),
@@ -223,8 +234,12 @@ class PaperQrReentryApiTests : IntegrationTestSupport() {
     fun `같은 현장 코드도 박람회마다 따로 입장한다`() {
         entry("ADT-0002").andExpect(status().isOk)
         mockMvc
-            .perform(patch("/attendance/qr/$OTHER_EXPO").contentType(MediaType.APPLICATION_JSON).content("""{"token":"ADT-0002"}"""))
-            .andExpect(status().isOk)
+            .perform(
+                patch("/attendance/qr/$OTHER_EXPO")
+                    .withExpoAdmin()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"token":"ADT-0002"}"""),
+            ).andExpect(status().isOk)
     }
 
     private fun events(): List<String> =
@@ -245,13 +260,17 @@ class PaperQrReentryApiTests : IntegrationTestSupport() {
         token: String,
         scanner: String?,
     ): ResultActions {
-        val request = patch(path).contentType(MediaType.APPLICATION_JSON).content("""{"token":"$token"}""")
+        val request = patch(path).withExpoAdmin().contentType(MediaType.APPLICATION_JSON).content("""{"token":"$token"}""")
         scanner?.let { request.header("X-Scanner-Name", it) }
         return mockMvc.perform(request)
     }
 
     private fun summary(): ResultActions =
-        mockMvc.perform(get("/attendance/summary/$EXPO?date=$today").header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN"))
+        mockMvc.perform(
+            get(
+                "/attendance/summary/$EXPO?date=$today",
+            ).withExpoAdmin(),
+        )
 
     private companion object {
         const val EXPO = "0b1f6c3e-52a4-4d6e-9d57-4b7a1e5c9a10"

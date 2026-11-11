@@ -50,6 +50,7 @@ import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -313,6 +314,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
     private fun phoneEntryScan(): ResultActions =
         mockMvc.perform(
             patch("/attendance/$EXPO")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"authority":"ROLE_STANDARD","phoneNumber":"$PHONE"}"""),
         )
@@ -775,6 +777,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
     private fun programScanRequest(): ResultActions =
         mockMvc.perform(
             patch("/attendance/standard/3101")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"expoId":"$EXPO","participantId":$PARTICIPANT,"code":"$CODE"}"""),
         )
@@ -823,6 +826,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
     private fun entryScan(participantId: Long = PARTICIPANT): ResultActions =
         mockMvc.perform(
             patch("/attendance/$EXPO")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"authority":"ROLE_STANDARD","participantId":$participantId,"code":"$CODE"}"""),
         )
@@ -832,6 +836,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         doReturn(ProgramApplicationResDto(true)).`when`(applicationClient).checkStandardApplication(3101, PARTICIPANT)
         return mockMvc.perform(
             patch("/attendance/standard/3101")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"expoId":"$EXPO","participantId":$PARTICIPANT,"code":"$CODE"}"""),
         )
@@ -845,6 +850,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
         doReturn(ProgramApplicationResDto(true)).`when`(applicationClient).checkTrainingApplication(3201, TRAINEE)
         return mockMvc.perform(
             patch("/attendance/training/3201")
+                .withExpoAdmin()
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"expoId":"$EXPO","traineeId":$TRAINEE}"""),
         )

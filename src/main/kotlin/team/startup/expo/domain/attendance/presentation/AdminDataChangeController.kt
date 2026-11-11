@@ -13,12 +13,14 @@ import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import team.startup.expo.domain.attendance.service.SubscribeAdminDataChangesService
 import team.startup.expo.global.exception.ExpectedException
+import team.startup.expo.global.security.ExpoAccessGuard
 import team.startup.expo.global.swagger.ApiError
 
-/** 실시간 입·퇴장 현황 변경 구독(#141). 관리자(`ROLE_ADMIN`) 전용이며 `admin-events.enabled`일 때만 있다. */
+/** 실시간 입·퇴장 현황 변경 구독(#141). 박람회 STATS_READ 권한이 필요하며 `admin-events.enabled`일 때만 있다. */
 @RestController
 @ConditionalOnProperty("admin-events.enabled", havingValue = "true")
 class AdminDataChangeController(
+    private val expoAccessGuard: ExpoAccessGuard,
     private val subscribeAdminDataChangesService: SubscribeAdminDataChangesService,
 ) {
     @Operation(
@@ -31,14 +33,17 @@ class AdminDataChangeController(
                 "query 파라미터는 받지 않는다.",
     )
     @ApiError(400, "박람회 ID 형식(소문자 UUID)이 올바르지 않거나 query 파라미터를 보냈다.")
-    @ApiError(401, "관리자 역할 헤더가 없다.")
-    @ApiError(403, "`X-User-Role`이 `ROLE_ADMIN`이 아니다.")
-    @ApiError(503, "실시간 연결 수 한도를 넘었다. 잠시 후 다시 연결한다.")
+    @ApiError(401, "인증된 사용자 헤더가 없다.")
+    @ApiError(403, "해당 박람회의 요청 권한이 없다.")
+    @ApiError(404, "박람회를 찾지 못했다.")
+    @ApiError(503, "박람회 권한 판정 서비스를 사용할 수 없거나 실시간 연결 수 한도를 넘었다.")
     @GetMapping("/attendance/summary/{expoId}/events", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     fun subscribe(
         @PathVariable expoId: String,
         request: HttpServletRequest,
     ): ResponseEntity<SseEmitter> {
+        expoAccessGuard.requireAccess(expoId, "STATS_READ")
+
         // 브라우저 EventSource용 토큰 query를 받지 않는다. 인증은 게이트웨이가 Authorization 헤더로 한다
         if (!request.queryString.isNullOrEmpty()) throw ExpectedException(HttpStatus.BAD_REQUEST, "query 파라미터를 받지 않습니다.")
         val emitter = subscribeAdminDataChangesService.subscribe(expoId)

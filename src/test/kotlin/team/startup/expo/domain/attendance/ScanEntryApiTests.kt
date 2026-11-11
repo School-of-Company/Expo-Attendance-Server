@@ -28,6 +28,7 @@ import team.startup.expo.global.client.user.ResolveStandardParticipantResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -219,8 +220,12 @@ class ScanEntryApiTests : IntegrationTestSupport() {
             """{"authority": "ROLE_TRAINEE"}""",
         ).forEach { body ->
             mockMvc
-                .perform(patch("/attendance/expo-i6").contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isBadRequest)
+                .perform(
+                    patch("/attendance/expo-i6")
+                        .withExpoAdmin()
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body),
+                ).andExpect(status().isBadRequest)
         }
     }
 
@@ -342,6 +347,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
         participantId: Long,
         code: String,
     ) = patch("/attendance/$expoId")
+        .withExpoAdmin()
         .contentType(MediaType.APPLICATION_JSON)
         .content("""{"authority": "ROLE_STANDARD", "participantId": $participantId, "code": "$code"}""")
 
@@ -389,6 +395,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
         authority: String,
         phoneNumber: String,
     ) = patch("/attendance/$expoId")
+        .withExpoAdmin()
         .contentType(MediaType.APPLICATION_JSON)
         .content("""{"authority": "$authority", "phoneNumber": "$phoneNumber"}""")
 

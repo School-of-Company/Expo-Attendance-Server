@@ -21,12 +21,16 @@ import team.startup.expo.global.client.user.StandardParticipantEntryCardResDto
 import team.startup.expo.global.client.user.TraineeEntryCardResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
 
 /** 입구 화면의 하루 입장자 목록(#237). */
 class EntryListApiTests : IntegrationTestSupport() {
+    @MockitoBean
+    private lateinit var expoClient: team.startup.expo.global.client.expo.ExpoClient
+
     @Autowired
     private lateinit var mockMvc: MockMvc
 
@@ -157,7 +161,11 @@ class EntryListApiTests : IntegrationTestSupport() {
     }
 
     private fun entries(query: String = ""): ResultActions =
-        mockMvc.perform(get("/attendance/summary/$EXPO/entries$query").header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN"))
+        mockMvc.perform(
+            get(
+                "/attendance/summary/$EXPO/entries$query",
+            ).withExpoAdmin(),
+        )
 
     private fun entry(
         type: String,
