@@ -72,6 +72,7 @@ class EntryUserGateway(
             EntryErrors.participantNotFound(authority),
             onConflict = { throw AlreadyEnteredToday() },
             onOutcomeUnknown = OUTCOME_UNKNOWN.takeIf { detectOutcomeUnknown },
+            onCircuitOpen = { throw EntryNotSent() },
         ) { userClient.recordEntry(request) }
 
     /** 이 참가자의 그날 입장이 기록돼 있는지 묻는다. 응답이 다른 참가자·날짜를 가리키면 기록되지 않은 것으로 본다. */
@@ -125,3 +126,6 @@ internal class AlreadyEnteredToday : RuntimeException(null, null, false, false)
 
 /** 입장 기록 호출이 타임아웃처럼 결과를 모르게 끝난 것을 확인 조회로 넘기는 내부 신호다. 밖으로 나가지 않는다. */
 internal class EntryOutcomeUnknown : RuntimeException(null, null, false, false)
+
+/** 회로가 열려 입장 기록 호출을 보내지 않은 것을 알리는 내부 신호다. 유저 서비스에 기록됐을 리 없으므로 fence를 지운다. */
+internal class EntryNotSent : RuntimeException(null, null, false, false)

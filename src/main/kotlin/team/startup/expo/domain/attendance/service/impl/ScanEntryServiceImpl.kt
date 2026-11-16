@@ -10,6 +10,7 @@ import team.startup.expo.domain.attendance.service.EntryLogService
 import team.startup.expo.domain.attendance.service.ScanEntryService
 import team.startup.expo.domain.attendance.support.AlreadyEnteredToday
 import team.startup.expo.domain.attendance.support.CancellationGuardGate
+import team.startup.expo.domain.attendance.support.EntryNotSent
 import team.startup.expo.domain.attendance.support.EntryOutcomeUnknown
 import team.startup.expo.domain.attendance.support.EntryResponses
 import team.startup.expo.domain.attendance.support.EntryUserGateway
@@ -153,6 +154,9 @@ class ScanEntryServiceImpl(
             }
             attempt?.let { fieldEntryFence.finish(it, true) }
             Scanned(response = repeatEntryResolver.resolve(expoId, reqDto, participantId, now, scanner))
+        } catch (_: EntryNotSent) {
+            attempt?.let { fieldEntryFence.finish(it, false) }
+            throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.")
         } catch (_: EntryOutcomeUnknown) {
             // 유저 서비스가 기록했는지 모른다. 오늘 입장이 기록돼 있지 않거나 확인하지 못하면 지금처럼 503이고 fence는 PENDING으로 남는다.
             // entry-status는 회차를 구분하지 않으므로, 오늘 입장 로그가 이미 있으면(다른 회차로 먼저 입장) 이번 회차가 기록됐는지 알 수 없어
