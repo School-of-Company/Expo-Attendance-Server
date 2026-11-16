@@ -31,8 +31,9 @@ import java.sql.SQLRecoverableException
 import java.sql.SQLTransientException
 
 /**
- * `expo.expo.changed` consumer 설정. Expo-Expo-Server의 `StandardCreatedKafkaConfig`와 같은 규칙이다: 레코드마다 동기 커밋하고,
- * DB 일시 장애만 지수 백오프로 다시 시도한 뒤 `<토픽>.dlt`로 보낸다. 형식 오류(`IllegalArgumentException`)는 바로 DLT로 간다.
+ * `expo.expo.changed` consumer 설정. 레코드마다 동기 커밋한다. DB 일시 장애는 DLT로 보내지 않고 지수 백오프(최대 10초 간격)로
+ * 나을 때까지 다시 시도한다: 건너뛰면 프로젝션에 옛 값이 남고 리더가 Feign으로 넘어가지 않아 다음 변경까지 옛 기간·시간으로 판정한다.
+ * 그 밖의 오류와 형식 오류(`IllegalArgumentException`)는 바로 `<토픽>.dlt`로 간다.
  * 로그에는 파티션·오프셋·예외 종류만 남기고 메시지 본문은 남기지 않는다.
  */
 @Configuration
@@ -59,7 +60,6 @@ class ExpoProjectionKafkaConfig(
         val backOff =
             ExponentialBackOff(1_000L, 2.0).apply {
                 maxInterval = 10_000L
-                maxAttempts = 5L
             }
         val handler = DefaultErrorHandler(recoverer, backOff)
         val retryable =
