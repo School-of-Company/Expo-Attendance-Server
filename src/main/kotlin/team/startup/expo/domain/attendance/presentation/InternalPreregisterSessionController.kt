@@ -46,7 +46,7 @@ class InternalPreregisterSessionController(
         description =
             "사전등록을 취소했거나 다른 날 회차만 있는 참가자가 현장등록으로 다시 등록했을 때 보냅니다. revision보다 오래된 취소·확정 회차를 " +
                 "모두 FIELD_REGISTERED로 바꾸고 확정된 취소 보호를 풉니다. 입장은 회차 시간 확인 없이 오늘 ACTIVE 현장 방문으로 판정하며, " +
-                "없으면 취소된 신청으로 거절합니다(#204). " +
+                "없으면 취소된 신청으로 거절합니다. " +
                 "revision이 더 새로운 기록은 그대로 두고, 같은 요청을 다시 보내도 결과는 같습니다.",
     )
     @ApiError(400, "요청 값이 올바르지 않다.")

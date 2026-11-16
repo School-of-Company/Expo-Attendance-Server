@@ -60,7 +60,7 @@ class EntryUserGateway(
 
     /**
      * 입장을 기록한다. 오늘 이미 입장했으면 [AlreadyEnteredToday], [detectOutcomeUnknown]이고 타임아웃처럼 결과를 모르게 끝나면
-     * [EntryOutcomeUnknown]을 던진다(#287).
+     * [EntryOutcomeUnknown]을 던진다.
      */
     fun recordEntry(
         request: RecordEntryReqDto,
@@ -104,7 +104,7 @@ class EntryUserGateway(
             }
         }
 
-    /** 교원·예비교사 당일 입장(#283)을 위해 클라이언트가 아니라 유저 서비스가 가진 직업을 읽는다. */
+    /** 교원·예비교사 당일 입장을 위해 클라이언트가 아니라 유저 서비스가 가진 직업을 읽는다. */
     fun occupation(
         expoId: String,
         participantId: Long,
@@ -123,5 +123,5 @@ class EntryUserGateway(
 /** 유저 서비스가 409로 답한 것을 재입장 판정으로 넘기는 내부 신호다. 밖으로 나가지 않는다. */
 internal class AlreadyEnteredToday : RuntimeException(null, null, false, false)
 
-/** 입장 기록 호출이 타임아웃처럼 결과를 모르게 끝난 것을 확인 조회로 넘기는 내부 신호다(#287). 밖으로 나가지 않는다. */
+/** 입장 기록 호출이 타임아웃처럼 결과를 모르게 끝난 것을 확인 조회로 넘기는 내부 신호다. 밖으로 나가지 않는다. */
 internal class EntryOutcomeUnknown : RuntimeException(null, null, false, false)

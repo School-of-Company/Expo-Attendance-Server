@@ -12,7 +12,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
 
 /**
- * 박람회 서비스에서 읽은 회차 시간을 `(expoId, sessionId)` 키로 `preregister-session-cache.ttl-seconds` 동안 기억한다(#249).
+ * 박람회 서비스에서 읽은 회차 시간을 `(expoId, sessionId)` 키로 `preregister-session-cache.ttl-seconds` 동안 기억한다.
  * 스캔 하나가 같은 회차를 세 번 읽고 그중 둘은 게이트 트랜잭션 안(커넥션을 쥔 채)이라, 원격 호출 수가 곧 커넥션 점유 시간이다.
  * 프로젝션에서 읽은 값은 여기를 거치지 않는다.
  *

@@ -108,8 +108,8 @@ class PreregisterSessionServiceImpl(
     }
 
     /**
-     * 박람회 락이 공유라서(#248) 같은 참가자의 회차 PUT·DELETE·현장 재등록은 이 락으로 한 줄로 세운다. revision 비교와 같은 revision 충돌 확인이
-     * 읽고 쓰는 사이에 다른 요청이 끼지 않게 한다. 박람회 락 다음, 취소 보호 참가자 락 앞에 잡는다(#167 순서).
+     * 박람회 락이 공유라서 같은 참가자의 회차 PUT·DELETE·현장 재등록은 이 락으로 한 줄로 세운다. revision 비교와 같은 revision 충돌 확인이
+     * 읽고 쓰는 사이에 다른 요청이 끼지 않게 한다. 박람회 락 다음, 취소 보호 참가자 락 앞에 잡는다.
      */
     private fun lockParticipant(
         expoId: String,

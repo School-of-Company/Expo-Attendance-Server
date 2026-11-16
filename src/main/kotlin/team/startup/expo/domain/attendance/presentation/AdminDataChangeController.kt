@@ -16,7 +16,7 @@ import team.startup.expo.global.exception.ExpectedException
 import team.startup.expo.global.security.ExpoAccessGuard
 import team.startup.expo.global.swagger.ApiError
 
-/** 실시간 입·퇴장 현황 변경 구독(#141). 박람회 STATS_READ 권한이 필요하며 `admin-events.enabled`일 때만 있다. */
+/** 실시간 입·퇴장 현황 변경 구독. 박람회 STATS_READ 권한이 필요하며 `admin-events.enabled`일 때만 있다. */
 @RestController
 @ConditionalOnProperty("admin-events.enabled", havingValue = "true")
 class AdminDataChangeController(

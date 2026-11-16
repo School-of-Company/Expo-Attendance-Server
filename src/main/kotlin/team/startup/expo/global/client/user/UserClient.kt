@@ -23,7 +23,7 @@ interface UserClient {
 
     /**
      * 전화번호와 응답자 구분(`STANDARD`, `TRAINEE`)으로 참가자(연수자) ID만 조회한다. 입장을 기록하지 않고, 없으면 404다.
-     * 연수자 재입장에서 유저 서비스의 409가 ID를 주지 않아 쓴다(#148).
+     * 연수자 재입장에서 유저 서비스의 409가 ID를 주지 않아 쓴다.
      */
     @PostMapping("/internal/participants/resolve")
     fun resolveParticipant(
@@ -49,7 +49,7 @@ interface UserClient {
     ): List<TraineeNameResDto>
 
     /**
-     * 입장 목록(#237)용으로 일반 참가자·연수자의 이름, 전화번호, 개인정보 동의, 직업, 학교를 한 번에 읽는다(Expo-User-Server#215). 없는 id와
+     * 입장 목록용으로 일반 참가자·연수자의 이름, 전화번호, 개인정보 동의, 직업, 학교를 한 번에 읽는다(Expo-User-Server#215). 없는 id와
      * 다른 박람회의 id는 404 없이 결과에서 빠진다.
      */
     @PostMapping("/internal/participants/entry-cards")

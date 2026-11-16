@@ -7,7 +7,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.FieldVisitC
 import java.util.UUID
 
 /**
- * 날짜별 현장 방문(FIELD) 등록의 projection과 그 날짜 취소 보호(#204, `docs/field-visits.md`). 등록 ID·참가자·방문일·generation은
+ * 날짜별 현장 방문(FIELD) 등록의 projection과 그 날짜 취소 보호(`docs/field-visits.md`). 등록 ID·참가자·방문일·generation은
  * 신청 서비스가 소유하고 이 서비스는 그대로 반영한다. 모든 작업은 박람회 락 → 참가자 배타 락 → 등록 ID 배타 락 순서로 잠근 뒤 처리하고,
  * 락을 제때 얻지 못하면 503, 삭제된 박람회는 404, 등록 ID의 박람회·참가자·방문일이 요청과 다르면 409다.
  * 이전 세대(generation이 더 작은) 요청은 아무것도 바꾸지 않고 성공으로 끝난다.

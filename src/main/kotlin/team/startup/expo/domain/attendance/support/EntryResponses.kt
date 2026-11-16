@@ -39,7 +39,7 @@ object EntryResponses {
         firstEnteredAt: LocalDateTime,
     ) = withoutUserInfo(reqDto, subjectId, name, EntryStatus.FIRST, firstEnteredAt)
 
-    /** 퇴장한 뒤 다시 들어온 재입장(#148). 최초 입장 시각을 함께 준다. */
+    /** 퇴장한 뒤 다시 들어온 재입장. 최초 입장 시각을 함께 준다. */
     fun reEntry(
         reqDto: ScanEntryReqDto,
         subjectId: Long,

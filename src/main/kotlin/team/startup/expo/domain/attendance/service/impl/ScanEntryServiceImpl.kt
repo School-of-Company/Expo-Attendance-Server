@@ -77,12 +77,12 @@ class ScanEntryServiceImpl(
                 recordOrReenter(expoId, reqDto, null, null, now, scanner)
             }
 
-        // 재입장은 입장 로그가 이미 있다. 처음 입장만, 퇴장 기록과 집계를 위한 입장 로그를 남긴다. 입장은 이미 기록되었으므로 로그 실패가 입장을 막지 않는다(#120)
+        // 재입장은 입장 로그가 이미 있다. 처음 입장만, 퇴장 기록과 집계를 위한 입장 로그를 남긴다. 입장은 이미 기록되었으므로 로그 실패가 입장을 막지 않는다
         scanned.entry?.let {
             val subjectType = if (it.participationType == TRAINEE) EntrySubjectType.TRAINEE else EntrySubjectType.STANDARD
             recordEntryLog(expoId, subjectType, it.id, scannerName, now)
         }
-        // 기록 응답을 잃었지만 유저 서비스에 입장이 확인된 참가자도 정상 첫 입장처럼 로그를 남긴다(#287).
+        // 기록 응답을 잃었지만 유저 서비스에 입장이 확인된 참가자도 정상 첫 입장처럼 로그를 남긴다.
         // 이름 조회는 락 밖에서 한다. User가 느린 바로 그때 락 트랜잭션이 커넥션을 더 오래 쥐지 않게 한다.
         scanned.recoveredParticipantId?.let {
             recordEntryLog(expoId, EntrySubjectType.STANDARD, it, scannerName, now)
@@ -94,7 +94,7 @@ class ScanEntryServiceImpl(
 
     /**
      * 사전등록 QR(참가자 ID와 코드)은 신청한 회차 중 하나의 입장 시간이어야 한다. 입장을 기록하기 전에 지금 회차를 고른다.
-     * 코드가 틀리면 입장 기록과 같은 404여야 해서, 신청 상태를 알리는 에러를 돌려주기 전에만 코드를 확인한다(#264).
+     * 코드가 틀리면 입장 기록과 같은 404여야 해서, 신청 상태를 알리는 에러를 돌려주기 전에만 코드를 확인한다.
      */
     private fun checkPreregisterSession(
         expoId: String,
@@ -130,7 +130,7 @@ class ScanEntryServiceImpl(
      * 유저 서비스에 입장을 기록한다. 오늘 이미 입장했다고(409) 답하면 [RepeatEntryResolver]가 재입장·재생·로그 채움·400을 정한다.
      *
      * 일반 참가자의 기록 호출이 타임아웃처럼 결과를 모르게 끝나면 유저 서비스에 오늘 입장 여부를 한 번 묻고, 기록돼 있으면 첫 입장으로
-     * 마무리한다(#287). 연수자는 입장 여부를 물을 계약이 없어 지금처럼 503이다.
+     * 마무리한다. 연수자는 입장 여부를 물을 계약이 없어 지금처럼 503이다.
      */
     private fun recordOrReenter(
         expoId: String,
@@ -161,7 +161,7 @@ class ScanEntryServiceImpl(
             if (repeatEntryResolver.hasTodayLog(expoId, id, today) || !users.enteredToday(expoId, id, today)) {
                 throw ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.")
             }
-            // entry-status는 code를 보지 않는다. 복구 응답은 이름을 담으므로 QR이면 code를 확인한다(#264).
+            // entry-status는 code를 보지 않는다. 복구 응답은 이름을 담으므로 QR이면 code를 확인한다.
             // 틀린 code는 유저 서비스가 기록하지 않았으므로 fence를 실패로 끝낸다.
             try {
                 verifyCodeIfQr(expoId, reqDto)
@@ -179,7 +179,7 @@ class ScanEntryServiceImpl(
         }
     }
 
-    /** [block]이 에러로 끝나면 QR의 코드를 먼저 확인한다. 틀린 코드에는 신청 상태 대신 404를 돌려준다(#264). */
+    /** [block]이 에러로 끝나면 QR의 코드를 먼저 확인한다. 틀린 코드에는 신청 상태 대신 404를 돌려준다. */
     private fun <T> verifyingCodeOnError(
         expoId: String,
         reqDto: ScanEntryReqDto,
@@ -264,7 +264,7 @@ class ScanEntryServiceImpl(
     /**
      * 스캔 한 번의 결과. 처음 입장은 유저 서비스의 [entry]가, 재입장·재생·복구는 이 서비스가 만든 [response]가 있다.
      * [recoveredParticipantId]는 결과를 모르던 기록을 유저 서비스에서 확인한 참가자로, 처음 입장처럼 입장 로그를 남기고
-     * 락 밖에서 이름을 읽어 응답을 만든다(#287).
+     * 락 밖에서 이름을 읽어 응답을 만든다.
      */
     private class Scanned(
         val entry: RecordEntryResDto? = null,

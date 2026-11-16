@@ -130,7 +130,7 @@ class CancellationGuardServiceImpl(
         exclusive(expoId, participantId) {
             val existing = cancellationGuardRepository.findByExpoIdAndParticipantId(expoId, participantId)
             if (existing == null && cancellationGuardRepository.existsReleasedByCommit(expoId, participantId, operationId)) {
-                // 이 commit이 이미 보호를 해제로 끝냈다. 응답이 유실되어 재시도한 것이므로 확정 후 재시도처럼 204로 둔다(#168)
+                // 이 commit이 이미 보호를 해제로 끝냈다. 응답이 유실되어 재시도한 것이므로 확정 후 재시도처럼 204로 둔다
                 return@exclusive
             }
             if (existing == null || existing.operationId != operationId) {
@@ -221,9 +221,9 @@ class CancellationGuardServiceImpl(
     ) = locked(CancellationGuardGate.traineeKey(expoId, traineeId), null, block)
 
     /**
-     * 잠금 순서 규칙(#167): 한 트랜잭션에서 둘 이상 잡을 때는 항상 박람회 락 -> 참가자(연수자) 락 순서다.
+     * 잠금 순서 규칙: 한 트랜잭션에서 둘 이상 잡을 때는 항상 박람회 락 -> 참가자(연수자) 락 순서다.
      * [PreregisterSessionServiceImpl.assign]이 이 순서로 잡으므로 반대로 잡으면 같은 참가자에서 교착이 난다.
-     * 박람회 락이 필요한 호출은 [expoIdToLock]을 넘겨 참가자 락보다 먼저 잡게 한다. 박람회 락은 삭제만 막는 공유 락이다(#248).
+     * 박람회 락이 필요한 호출은 [expoIdToLock]을 넘겨 참가자 락보다 먼저 잡게 한다. 박람회 락은 삭제만 막는 공유 락이다.
      */
     private fun <T> locked(
         key: String,
@@ -240,9 +240,9 @@ class CancellationGuardServiceImpl(
         /**
          * HELD 보호의 commit을 확정하지 않고 해제로 끝낼지 정한다. 부작용이 없다. [records]는 이 commit이 지정 회차를 취소로 표시한 뒤에 읽은
          * 참가자의 회차 기록 전부다.
-         * - 밀려난 취소: [revision]이 있고, 보호가 걸려 있는 동안 이 취소보다 새로운 신청의 회차 PUT이나 현장 재등록(#249)이 먼저 적용되었다
+         * - 밀려난 취소: [revision]이 있고, 보호가 걸려 있는 동안 이 취소보다 새로운 신청의 회차 PUT이나 현장 재등록이 먼저 적용되었다
          *   (취소되지 않은 기록 중 revision이 더 큰 것이 있다).
-         * - 남은 회차: 회차 하나([sessionId])만 취소했고 확정 상태인 다른 회차가 남아 있어, 참가자가 남은 회차로 계속 입장·출석할 수 있어야 한다(#160).
+         * - 남은 회차: 회차 하나([sessionId])만 취소했고 확정 상태인 다른 회차가 남아 있어, 참가자가 남은 회차로 계속 입장·출석할 수 있어야 한다.
          */
         internal fun releasesHeldCommit(
             records: List<PreregisterSession>,

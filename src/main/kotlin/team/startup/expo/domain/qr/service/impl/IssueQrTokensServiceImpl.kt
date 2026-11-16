@@ -36,7 +36,7 @@ class IssueQrTokensServiceImpl(
 
         // 삭제와 같은 락을 잡은 뒤에 삭제 기록을 확인해, 삭제된 박람회의 토큰이 되살아나지 않게 한다
         deletedExpoRepository.lockAndRequireAlive(expoId)
-        // 박람회 락은 공유라서 연번은 박람회·구분 락으로 따로 세운다(#248)
+        // 박람회 락은 공유라서 연번은 박람회·구분 락으로 따로 세운다
         qrTokenRepository.lockSerial("qr-serial:$expoId:${reqDto.category}")
 
         val now = LocalDateTime.now(clock)

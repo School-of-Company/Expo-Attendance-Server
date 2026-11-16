@@ -18,7 +18,7 @@ import java.net.UnknownHostException
  * "없음"과 구분되도록 503으로 바꾼다. 요청·응답 내용은 로그에 남기지 않는다.
  *
  * [onOutcomeUnknown]이 있으면, 요청이 상대에게 닿았을 수 있는데 응답을 받지 못한 실패([isOutcomeUnknown])일 때 503 대신 그것을
- * 실행한다(예외를 던져야 한다). 쓰기 호출이 실제로 반영됐는지 호출자가 다시 확인할 때 쓴다(#287).
+ * 실행한다(예외를 던져야 한다). 쓰기 호출이 실제로 반영됐는지 호출자가 다시 확인할 때 쓴다.
  */
 fun <T> CircuitBreaker.callService(
     service: String,

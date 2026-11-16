@@ -8,7 +8,7 @@ import java.time.LocalDate
 import java.util.UUID
 
 /**
- * STANDARD 참가자 입장 시도 기록(`tb_entry_scan_fence`, #204). 입장 스캔은 User `POST /internal/entries`를 부르기 전에 시도를 남기고,
+ * STANDARD 참가자 입장 시도 기록(`tb_entry_scan_fence`). 입장 스캔은 User `POST /internal/entries`를 부르기 전에 시도를 남기고,
  * 결과에 따라 입장으로 확정하거나(200, 확인된 409) 지운다(명확한 400/404). 503·타임아웃·중단이면 남아 PENDING이 된다.
  * 날짜별 현장 방문 취소는 이 기록으로 "User에는 기록됐지만 응답을 못 받은 입장"을 알아내고, PENDING이 있으면 503으로 판단을 미룬다.
  * 시간이 지나도 스스로 지우지 않는다.

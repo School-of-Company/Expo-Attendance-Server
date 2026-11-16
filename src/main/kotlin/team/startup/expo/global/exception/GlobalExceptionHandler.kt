@@ -31,7 +31,7 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
     }
 
     /**
-     * DB 커넥션을 제때 얻지 못했거나(풀 고갈, `connection-timeout`), 트랜잭션·쿼리가 시간 안에 끝나지 않았거나, DB에 닿지 못한 경우다(#102).
+     * DB 커넥션을 제때 얻지 못했거나(풀 고갈, `connection-timeout`), 트랜잭션·쿼리가 시간 안에 끝나지 않았거나, DB에 닿지 못한 경우다.
      * 서버 버그가 아니라 잠시 뒤에 다시 하면 되는 상황이라 500이 아니라 503으로 알린다. 입구 스캐너가 곧바로 다시 찍을 수 있다.
      */
     @ExceptionHandler(

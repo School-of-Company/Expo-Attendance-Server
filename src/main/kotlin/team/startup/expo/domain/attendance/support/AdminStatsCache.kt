@@ -11,7 +11,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
 
 /**
- * 입·퇴장 현황(summary·hourly·recent·scanners) 조회 결과를 `admin-stats-cache.ttl-millis`(기본 1초) 동안 대시보드끼리 함께 쓴다(#255).
+ * 입·퇴장 현황(summary·hourly·recent·scanners) 조회 결과를 `admin-stats-cache.ttl-millis`(기본 1초) 동안 대시보드끼리 함께 쓴다.
  * 변경 신호를 받으면 대시보드가 한꺼번에 다시 읽는데, 한 번의 조회가 그날 행을 모두 읽는 집계라 DB 부하가 대시보드 수에 비례했다.
  *
  * - 키는 (조회 종류, 박람회, 요청 조건)이다. 같은 키를 동시에 읽으면 한 번만 계산하고 나머지는 그 결과를 기다린다(single-flight).

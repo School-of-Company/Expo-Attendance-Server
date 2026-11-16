@@ -31,7 +31,7 @@ import java.sql.SQLRecoverableException
 import java.sql.SQLTransientException
 
 /**
- * `expo.expo.changed` consumer 설정(#240). Expo-Expo-Server의 `StandardCreatedKafkaConfig`와 같은 규칙이다: 레코드마다 동기 커밋하고,
+ * `expo.expo.changed` consumer 설정. Expo-Expo-Server의 `StandardCreatedKafkaConfig`와 같은 규칙이다: 레코드마다 동기 커밋하고,
  * DB 일시 장애만 지수 백오프로 다시 시도한 뒤 `<토픽>.dlt`로 보낸다. 형식 오류(`IllegalArgumentException`)는 바로 DLT로 간다.
  * 로그에는 파티션·오프셋·예외 종류만 남기고 메시지 본문은 남기지 않는다.
  */
