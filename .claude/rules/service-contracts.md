@@ -9,7 +9,7 @@ paths:
 
 # Service contracts
 
-Full request/response shapes, status codes and issue links: **`docs/service-contracts.md`** (field visits: `docs/field-visits.md`, admin SSE: `docs/admin-data-change-events.md`). Change a contract by opening an issue first, and read the other side's `develop` code instead of assuming it. All `/internal/**` calls carry `X-Internal-Token`. Feign uses one circuit breaker per service; 404/409 are results, anything else becomes 503.
+Full request/response shapes, status codes and issue links: **`docs/service-contracts.md`** (field visits: `docs/field-visits.md`, admin SSE: `docs/admin-data-change-events.md`). Change a contract by opening an issue first, and read the other side's `develop` code instead of assuming it. All `/internal/**` calls carry `X-Internal-Token`. Feign uses one circuit breaker per service (Expo `admin-access` has its own, `expo-access`, so permission checks and period/program reads do not open each other); 404/409 are results, anything else becomes 503.
 
 | Direction | Service | Summary |
 |---|---|---|
