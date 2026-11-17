@@ -21,9 +21,10 @@ class CircuitBreakerMetricsConfiguration {
         @Qualifier("userCircuitBreaker") user: CircuitBreaker,
         @Qualifier("expoCircuitBreaker") expo: CircuitBreaker,
         @Qualifier("applicationCircuitBreaker") application: CircuitBreaker,
+        @Qualifier("expoAccessCircuitBreaker") expoAccess: CircuitBreaker,
     ): MeterBinder =
         MeterBinder { registry ->
-            listOf(user, expo, application).forEach { breaker ->
+            listOf(user, expo, application, expoAccess).forEach { breaker ->
                 Gauge
                     .builder("attendance.circuit.breaker.state", breaker) { stateValue(it.state) }
                     .tag("name", breaker.name)

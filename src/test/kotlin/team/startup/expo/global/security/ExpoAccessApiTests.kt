@@ -58,7 +58,7 @@ import team.startup.expo.global.swagger.SwaggerProperties
         WalkInController::class,
         AdminDataChangeController::class,
     ],
-    properties = ["internal.token=test-internal-token-0123456789abcdef", "admin-events.enabled=true"],
+    properties = ["internal.token=test-internal-token-0123456789abcdef", "admin-events.enabled=true", "expo-access-cache.ttl-seconds=0"],
 )
 @ContextConfiguration(
     classes = [
@@ -81,7 +81,7 @@ class ExpoAccessApiTests {
     @EnableConfigurationProperties(InternalProperties::class, SwaggerProperties::class)
     class Config {
         @Bean
-        fun expoCircuitBreaker(): CircuitBreaker = CircuitBreaker.ofDefaults("expo-access-test")
+        fun expoAccessCircuitBreaker(): CircuitBreaker = CircuitBreaker.ofDefaults("expo-access-test")
 
         @Bean
         fun statsCache(): AdminStatsCache = AdminStatsCache(AdminStatsCacheProperties(ttlMillis = 60_000))

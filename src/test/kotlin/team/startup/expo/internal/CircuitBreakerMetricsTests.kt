@@ -15,7 +15,13 @@ class CircuitBreakerMetricsTests {
         val application = CircuitBreaker.ofDefaults("application")
         val registry = SimpleMeterRegistry()
 
-        CircuitBreakerMetricsConfiguration().circuitBreakerMetrics(user, expo, application).bindTo(registry)
+        CircuitBreakerMetricsConfiguration()
+            .circuitBreakerMetrics(
+                user,
+                expo,
+                application,
+                CircuitBreaker.ofDefaults("expo-access"),
+            ).bindTo(registry)
 
         fun state(name: String) =
             registry
