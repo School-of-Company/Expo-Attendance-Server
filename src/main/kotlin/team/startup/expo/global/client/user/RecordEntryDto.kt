@@ -15,7 +15,7 @@ data class RecordEntryReqDto(
     val phoneNumber: String? = null,
     val participantId: Long? = null,
     val code: String? = null,
-    /** 사전등록 회차. QR은 입장 시간을 확인한 회차, 전화번호는 오늘 시작이 가장 이른 확정 회차다. 없으면 생략해 회차 없이 기록된다(#142). */
+    /** 사전등록 회차. QR은 입장 시간을 확인한 회차, 전화번호는 오늘 시작이 가장 이른 확정 회차다. 없으면 생략해 회차 없이 기록된다. */
     val preregisterSessionId: Long? = null,
     val attendanceDate: LocalDate? = null,
     val fieldVisitRegistrationId: UUID? = null,
@@ -37,8 +37,8 @@ data class ParticipantEntryStatusResDto(
 /**
  * 연수자는 `occupation`이 없고(연수자는 모두 교사) `school`만 있다. 동행자는 `phoneNumber`가 없다.
  * `badgePrint`는 유저 서비스가 입장과 같은 트랜잭션에 저장한 명찰 자동 출력 작업 결과다(`QUEUED`, `DUPLICATE`, 대상 아님은 `null`).
- * `badgePrintJobId`는 그 작업의 ID다(`DUPLICATE`면 같은 날 이미 있던 작업). 출력대 조회에 쓴다(#279).
- * 이 필드들이 없는 이전 유저 서비스 응답은 `null`로 읽는다(#275).
+ * `badgePrintJobId`는 그 작업의 ID다(`DUPLICATE`면 같은 날 이미 있던 작업). 출력대 조회에 쓴다.
+ * 이 필드들이 없는 이전 유저 서비스 응답은 `null`로 읽는다.
  */
 data class RecordEntryResDto(
     val id: Long,

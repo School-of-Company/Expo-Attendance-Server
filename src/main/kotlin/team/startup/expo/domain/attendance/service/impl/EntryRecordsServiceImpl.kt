@@ -34,7 +34,7 @@ class EntryRecordsServiceImpl(
         val (from, to) = resolveRange(reqDto)
         val cursor = reqDto.cursor?.let { EntryRecordCursor.decode(it) }
         if (cursor != null && reqDto.page != 0) throw ExpectedException(HttpStatus.BAD_REQUEST, "cursor와 page는 함께 보낼 수 없습니다.")
-        // 끝까지 읽는 호출자가 페이지마다 범위 전체를 다시 세지 않게, 커서로 이어 읽을 때는 세지 않는다(#250)
+        // 끝까지 읽는 호출자가 페이지마다 범위 전체를 다시 세지 않게, 커서로 이어 읽을 때는 세지 않는다
         val total = if (cursor == null) entryLogRepository.countEvents(expoId, from, to) else null
         entryLogRepository.planWithActualValues()
         // 한 건 더 읽어 다음 페이지가 있는지 안다. 그래서 마지막 페이지에는 nextCursor가 없다

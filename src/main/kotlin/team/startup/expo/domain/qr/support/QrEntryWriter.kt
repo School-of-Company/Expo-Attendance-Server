@@ -38,8 +38,8 @@ class QrEntryWriter(
         scanner: String?,
     ): Int = qrEntryRepository.reenter(token, expoId, attendanceDate, occurredAt, scanner)
 
-    /** 현장 종이 QR 코드(#243)가 규칙 안이면 이 박람회의 토큰으로 등록하고 저장 토큰을 돌려준다. 규칙 밖이면 입력 그대로 돌려준다.
-     * 등록은 발급과 같은 박람회 락·삭제 확인 안에서 하고, 삭제된 박람회면 404다(#291).
+    /** 현장 종이 QR 코드가 규칙 안이면 이 박람회의 토큰으로 등록하고 저장 토큰을 돌려준다. 규칙 밖이면 입력 그대로 돌려준다.
+     * 등록은 발급과 같은 박람회 락·삭제 확인 안에서 하고, 삭제된 박람회면 404다.
      */
     @Transactional
     fun registerFieldToken(

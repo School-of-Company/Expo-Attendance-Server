@@ -12,7 +12,7 @@ import jakarta.persistence.UniqueConstraint
 import java.time.LocalDateTime
 
 /**
- * 사전등록 참가자 한 명이 박람회에서 신청한 회차 하나(사람당 여러 회차, #160). 참가자와 회차는 ID로만 가리킨다.
+ * 사전등록 참가자 한 명이 박람회에서 신청한 회차 하나(사람당 여러 회차). 참가자와 회차는 ID로만 가리킨다.
  * 회차 없이 도착한 취소(회차 지정 없는 취소)는 `sessionId`가 null인 행 하나로 남는다.
  */
 @Entity

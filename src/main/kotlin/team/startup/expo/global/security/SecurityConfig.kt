@@ -53,7 +53,7 @@ class SecurityConfig {
                     }
             }.authorizeHttpRequests { requests ->
                 requests
-                    // SSE(#141)가 끝날 때의 비동기 디스패치. 처음 요청이 이미 아래 규칙을 통과했고, 게이트웨이 헤더 인증은 다시 하지 않는다
+                    // SSE가 끝날 때의 비동기 디스패치. 처음 요청이 이미 아래 규칙을 통과했고, 게이트웨이 헤더 인증은 다시 하지 않는다
                     .dispatcherTypeMatchers(DispatcherType.ASYNC)
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/prometheus")

@@ -11,7 +11,7 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 
 /**
- * 취소 보호 게이트([CancellationGuardGate])에 들어가는 동시 스캔 수를 제한한다(#247). 게이트 트랜잭션은 커넥션 하나를 쥔 채 안에서
+ * 취소 보호 게이트([CancellationGuardGate])에 들어가는 동시 스캔 수를 제한한다. 게이트 트랜잭션은 커넥션 하나를 쥔 채 안에서
  * fence 쓰기(`REQUIRES_NEW`)로 하나를 더 요구한다. 동시 스캔이 풀 크기에 닿으면 모두 첫 커넥션을 쥔 채 두 번째를 기다리는 교착이 되고
  * 풀 타임아웃으로만 풀린다. 허용 수를 `풀 크기 - reserve`로 막으면 최소 reserve개가 항상 남아 중첩 요청이 진행되므로 교착이 생기지 않는다.
  *

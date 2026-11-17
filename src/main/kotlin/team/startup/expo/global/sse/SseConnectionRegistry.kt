@@ -40,8 +40,8 @@ data class SseLimits(
 class SseConnectionLimitException : RuntimeException("SSE 연결 수 한도를 넘었습니다.")
 
 /**
- * 도메인이 공유하는 SSE 연결 관리. Expo-Application-Server `global/sse/SseConnectionRegistry`(#162)와 같은 구현이다.
- * 한쪽을 고치면 다른 쪽도 맞춘다(#141). 연결 등록·해제, heartbeat, 전송 실패·수명 만료 정리를 한곳에서 맡는다.
+ * 도메인이 공유하는 SSE 연결 관리. Expo-Application-Server `global/sse/SseConnectionRegistry`와 같은 구현이다.
+ * 한쪽을 고치면 다른 쪽도 맞춘다. 연결 등록·해제, heartbeat, 전송 실패·수명 만료 정리를 한곳에서 맡는다.
  *
  * - 전송은 공용 송신 스레드에서 하며 요청 스레드를 점유하지 않는다.
  * - 연결마다 보내지 않은 데이터 이벤트는 최신 하나만 남긴다(latest-wins). 이벤트는 "다시 조회하라"는 신호이므로

@@ -4,7 +4,7 @@ import java.time.Clock
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 같은 키(박람회)의 신호를 `intervalMillis` 안에 한 번만 내보낸다(#269).
+ * 같은 키(박람회)의 신호를 `intervalMillis` 안에 한 번만 내보낸다.
  *
  * 조용하던 뒤의 첫 신호는 바로 내보내고(leading), 그 뒤 간격 안에 들어온 신호는 하나로 합쳐 간격이 끝날 때 한 번 내보낸다(trailing).
  * 그래서 키마다 간격 안에는 많아야 한 번 나가고, 마지막 신호는 반드시 나간다.

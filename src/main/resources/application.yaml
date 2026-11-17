@@ -98,6 +98,9 @@ scan-concurrency:
 expo-period-cache:
   ttl-seconds: ${EXPO_PERIOD_CACHE_TTL_SECONDS:30}
 # #249 회차 시간 조회 캐시. 회차 시간을 고친 직후 최대 이 시간만큼 이전 시간으로 입장이 판정된다. 0이면 끈다
+# 박람회 권한 판정 성공을 (토큰, 박람회, 권한)별로 이 시간 동안 다시 묻지 않는다. Expo 장애가 이보다 짧으면 입구가 멈추지 않고, 회수된 링크는 최대 이 시간만큼 더 통한다. 0이면 끈다
+expo-access-cache:
+  ttl-seconds: ${EXPO_ACCESS_CACHE_TTL_SECONDS:30}
 preregister-session-cache:
   ttl-seconds: ${PREREGISTER_SESSION_CACHE_TTL_SECONDS:30}
 # #255 입·퇴장 현황 조회 결과를 대시보드끼리 이 시간(ms) 동안 함께 쓴다. 관리자 변경 신호를 받으면 그 박람회 결과를 바로 버린다. 0이면 끈다

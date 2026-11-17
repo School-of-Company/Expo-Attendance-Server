@@ -23,10 +23,10 @@ import java.time.LocalDate
 /**
  * 오늘 ACTIVE FIELD가 없으면 사전등록 회차의 입장 시간을 확인한다. 날짜를 알 수 없는 과거 FIELD는 권한이 아니다.
  * 신청 상태는 참가자 ID와 code가 맞는 사람에게만 알려야 한다. 검사가 실패해 에러를 돌려줄 때만 `verifyCode`로 먼저 확인하고,
- * 통과하면 확인하지 않는다(입장 기록이 같은 404로 code를 확인한다, #264).
- * 한 사람이 여러 회차에 배정될 수 있고(#160), 확정 상태인 회차 중 지금이 입장 시간인 회차로 입장한다.
+ * 통과하면 확인하지 않는다(입장 기록이 같은 404로 code를 확인한다).
+ * 한 사람이 여러 회차에 배정될 수 있고, 확정 상태인 회차 중 지금이 입장 시간인 회차로 입장한다.
  * 허용 시간은 회차 시작 `leadMinutes`분 전부터 종료 시각까지이고, 시각은 모두 `Instant`(UTC)로 비교한다.
- * 고른 회차 ID는 유저 서비스 입장 기록의 `preregisterSessionId`로 보낸다(#142).
+ * 고른 회차 ID는 유저 서비스 입장 기록의 `preregisterSessionId`로 보낸다.
  */
 @Component
 class PreregisterSessionValidator(
@@ -75,11 +75,11 @@ class PreregisterSessionValidator(
     /**
      * 확정 상태인 회차 중 지금이 입장 시간인 회차 ID를 돌려준다. 입장 시간이 겹치면 시작이 이른 회차를 고른다.
      * 오늘 ACTIVE FIELD는 회차 없이 통과한다.
-     * 열린 회차가 없을 때 [occupation]이 교원·예비교사이면 오늘 확정 회차 중 시작이 가장 이른 회차로 시간과 관계없이 입장한다(#283).
+     * 열린 회차가 없을 때 [occupation]이 교원·예비교사이면 오늘 확정 회차 중 시작이 가장 이른 회차로 시간과 관계없이 입장한다.
      * [occupation]은 열린 회차가 없을 때만 부른다.
      *
      * [verifyCode]는 이 검사가 에러로 끝날 때만 부르고, code가 틀리면 그 404가 원래 에러 대신 나간다.
-     * 통과한 스캔은 유저 서비스 입장 기록이 code를 확인하므로 같은 호출을 두 번 하지 않는다(#264).
+     * 통과한 스캔은 유저 서비스 입장 기록이 code를 확인하므로 같은 호출을 두 번 하지 않는다.
      */
     fun check(
         expoId: String,
@@ -171,7 +171,7 @@ class PreregisterSessionValidator(
         .map { sessionId -> session(expoId, sessionId) }
         .filter { it.startedAt.atZone(clock.zone).toLocalDate() == attendanceDate }
 
-    /** 회차 시간. 프로젝션이 꺼져 있거나 없으면 박람회 서비스를 부르고, 그 결과만 잠시 기억한다(#240, #249). */
+    /** 회차 시간. 프로젝션이 꺼져 있거나 없으면 박람회 서비스를 부르고, 그 결과만 잠시 기억한다. */
     private fun session(
         expoId: String,
         sessionId: Long,

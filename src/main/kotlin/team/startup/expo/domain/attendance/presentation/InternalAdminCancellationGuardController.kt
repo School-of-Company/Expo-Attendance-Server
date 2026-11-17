@@ -17,7 +17,7 @@ import team.startup.expo.global.exception.ExpectedException
 import team.startup.expo.global.swagger.ApiError
 
 /**
- * 신청 서비스 전용이다. `X-Internal-Token`이 필요하며 gateway에 라우팅하지 않는다. 관리자 프로그램 신청 취소(#116)가 참가자 본인 전화 인증 없이
+ * 신청 서비스 전용이다. `X-Internal-Token`이 필요하며 gateway에 라우팅하지 않는다. 관리자 프로그램 신청 취소가 참가자 본인 전화 인증 없이
  * 입장·출석 후 제한과 스캔 경합 보호를 지키게 한다. **관리자 쓰기 권한 검증은 호출하는 신청 서비스의 몫**이고 이 서비스는 내부 호출자 인증,
  * 박람회·참가자 범위, 스캔 보호만 맡는다. 확정(commit)과 중단(abort)은 기존 `cancellation-guard/{operationId}` 경로를 같은 operationId로 쓴다.
  */

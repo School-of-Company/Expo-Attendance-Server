@@ -6,7 +6,7 @@ Verified against the other services' `develop` code. Change a contract by openin
 
 ## We call
 
-Feign, one circuit breaker per service; 404/409 are results, anything else becomes 503.
+Feign, one circuit breaker per service (Expo `admin-access` has its own, `expo-access`, so permission checks and period/program reads do not open each other); 404/409 are results, anything else becomes 503.
 
 | Service | Call | Used for |
 |---|---|---|
@@ -35,7 +35,7 @@ Feign, one circuit breaker per service; 404/409 are results, anything else becom
 
 Every route below comes through the gateway. Scans and operational statistics accept `ROLE_ADMIN` or `ROLE_STAFF` from the gateway; entrant lists and paper QR issue/reprint/revoke accept only `ROLE_ADMIN`.
 
-Before any service or statistics-cache read, Attendance forwards the original `Authorization` plus `X-Internal-Token` to Expo `GET /internal/expo/{expoId}/admin-access` (#310, Expo-Expo-Server#256). Permission results are never cached. Missing or blank incoming `Authorization` is 401; Expo 401/403 becomes 403, missing expo is 404, downstream failure/circuit open is 503; no failed check proceeds to reads or writes. Program scans use the body's `expoId`.
+Before any service or statistics-cache read, Attendance forwards the original `Authorization` plus `X-Internal-Token` to Expo `GET /internal/expo/{expoId}/admin-access` (#310, Expo-Expo-Server#256). Only allowed results are remembered, per (token SHA-256, expo, permission), for `expo-access-cache.ttl-seconds` (default 30, 0 = off); denials and failures are never cached, so a revoked link keeps working up to that long. Missing or blank incoming `Authorization` is 401; Expo 401/403 becomes 403, missing expo is 404, downstream failure/circuit open is 503; no failed check proceeds to reads or writes. Program scans use the body's `expoId`.
 
 | API | `permission` |
 |---|---|
@@ -75,6 +75,6 @@ Expo owns membership and staff validation: OWNER/MANAGER can use all these opera
 
 ## Expo read projection
 
-With `KAFKA_EXPO_PROJECTION_ENABLED` (default off) the consumer `ExpoChangedConsumer` (group `expo-projection.group-id`, default `expo-attention-server.expo-changed`) reads `expo.expo.changed` (Expo-Expo-Server `docs/expo-change-events.md`) into `tb_expo_projection*`, a read-only copy of only what we read: expo period, `deleting` and `programChangePending`, standard program times, training program IDs, preregister session times. Each message replaces the expo's whole projection; a message whose `version` is not above the stored one (duplicate `eventId`, late, replayed) changes nothing; a tombstone deletes the programs/sessions and keeps the `version`. Invalid messages and DB failures after retries go to `expo.expo.changed.dlt`. With the flag on, the four Expo reads in the table above look in the projection first (`ExpoProjectionReader`); a miss (not received yet, tombstone, `deleting` for program/session reads, or `programChangePending` for program reads, both of which Expo answers 409) falls back to the same Feign call and circuit breaker, logged once per expo and read kind. With it off, nothing reads the projection. It is separate from `tb_preregister_session` (per-participant confirmed sessions pushed by Application). So a pending program change gives the same result as the sync path (Expo's 409, which we turn into 503) instead of a stale program.
+With `KAFKA_EXPO_PROJECTION_ENABLED` (default off) the consumer `ExpoChangedConsumer` (group `expo-projection.group-id`, default `expo-attention-server.expo-changed`) reads `expo.expo.changed` (Expo-Expo-Server `docs/expo-change-events.md`) into `tb_expo_projection*`, a read-only copy of only what we read: expo period, `deleting` and `programChangePending`, standard program times, training program IDs, preregister session times. Each message replaces the expo's whole projection; a message whose `version` is not above the stored one (duplicate `eventId`, late, replayed) changes nothing; a tombstone deletes the programs/sessions and keeps the `version`. Invalid messages and other errors go to `expo.expo.changed.dlt`; transient DB failures are retried (backoff up to 10s) until they succeed, never sent there, so the projection is never left on an old value. With the flag on, the four Expo reads in the table above look in the projection first (`ExpoProjectionReader`); a miss (not received yet, tombstone, `deleting` for program/session reads, or `programChangePending` for program reads, both of which Expo answers 409) falls back to the same Feign call and circuit breaker, logged once per expo and read kind. With it off, nothing reads the projection. It is separate from `tb_preregister_session` (per-participant confirmed sessions pushed by Application). So a pending program change gives the same result as the sync path (Expo's 409, which we turn into 503) instead of a stale program.
 
 Setup: the flag requires `KAFKA_BOOTSTRAP_SERVERS` (the service will not start without it); the consumer group is `KAFKA_EXPO_PROJECTION_GROUP_ID`. After turning it on, call Expo's `POST /internal/expo-events/republish` once to receive the whole state.

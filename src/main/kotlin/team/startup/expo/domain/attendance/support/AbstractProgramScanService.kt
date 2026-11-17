@@ -39,7 +39,7 @@ abstract class AbstractProgramScanService<P>(
     /** 신청하지 않은 사람의 404 문구. */
     protected abstract val notAppliedMessage: String
 
-    /** 박람회 프로젝션에서 프로그램을 찾는다(#240). 꺼져 있거나 없으면 `null`이고, 그러면 [findProgram]으로 박람회 서비스를 부른다. */
+    /** 박람회 프로젝션에서 프로그램을 찾는다. 꺼져 있거나 없으면 `null`이고, 그러면 [findProgram]으로 박람회 서비스를 부른다. */
     protected abstract fun findProjectedProgram(
         expoId: String,
         programId: Long,
@@ -91,7 +91,7 @@ abstract class AbstractProgramScanService<P>(
         val now = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES)
         val attendanceDate = LocalDate.now(clock)
         // 신청 확인과 기록을 같은 취소 보호 락 안에서 한다. 이미 락 안에 있는 스캔은 신청 취소(acquire)가 기다리고, 취소가 끝난 뒤 들어온
-        // 스캔은 최신 신청 상태를 읽는다(#88).
+        // 스캔은 최신 신청 상태를 읽는다.
         val result =
             cancellationGuardGate.scanning(
                 expoId,

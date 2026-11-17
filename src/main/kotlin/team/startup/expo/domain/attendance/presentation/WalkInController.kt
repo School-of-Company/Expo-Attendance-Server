@@ -19,7 +19,7 @@ import team.startup.expo.global.security.ExpoAccessGuard
 import team.startup.expo.global.swagger.ApiError
 import java.time.LocalDate
 
-/** 입구 스캐너(관리자 계정)가 QR 없는 방문객을 개인정보 없이 센다(#118). 박람회별 운영 권한을 확인한다. */
+/** 입구 스캐너(관리자 계정)가 QR 없는 방문객을 개인정보 없이 센다. 박람회별 운영 권한을 확인한다. */
 @RestController
 @RequestMapping("/walk-in-counts")
 class WalkInController(

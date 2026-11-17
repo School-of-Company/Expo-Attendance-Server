@@ -607,6 +607,11 @@ class ScanEntryServiceImplSpec : BehaviorSpec() {
                         shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "유저 서비스를 잠시 사용할 수 없습니다.") { service.scan(expoId, codeReq) }
                         verify(exactly = 0) { userClient.getEntryStatus(any()) }
                         verify(exactly = 0) { entryLogService.recordEntry(any(), any(), any(), any(), any(), any()) }
+                        if (failure === circuitOpen) {
+                            verify { fieldFence.finish(attemptId, false) }
+                        } else {
+                            verify(exactly = 0) { fieldFence.finish(attemptId, false) }
+                        }
                     }
                 }
             }

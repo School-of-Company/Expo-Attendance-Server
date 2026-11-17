@@ -10,7 +10,7 @@ import tools.jackson.databind.ObjectMapper
 import java.time.Instant
 
 /**
- * `expo.expo.changed`를 받아 박람회 프로젝션을 갱신한다(#240). 형식이 잘못된 메시지는 [IllegalArgumentException]으로 바로 DLT에
+ * `expo.expo.changed`를 받아 박람회 프로젝션을 갱신한다. 형식이 잘못된 메시지는 [IllegalArgumentException]으로 바로 DLT에
  * 보낸다(`ExpoProjectionKafkaConfig`). 메시지 본문은 로그에 남기지 않는다.
  */
 @Component

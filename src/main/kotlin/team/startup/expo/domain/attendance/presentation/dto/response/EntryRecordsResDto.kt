@@ -25,7 +25,7 @@ data class EntryRecordsResDto(
         description = "범위 안 간편입장 순증감을 날짜·구분별로 합친 것. `cursor` 없는 첫 페이지(`page = 0`)에서만 채우고 나머지는 빈 배열. 합계가 0인 날짜·구분은 싣지 않는다",
     )
     val walkIn: List<EntryRecordWalkInResDto>,
-    @field:Schema(description = "다음 페이지를 읽을 `cursor`. 더 읽을 이벤트가 없으면 비어 있다(#250)", nullable = true)
+    @field:Schema(description = "다음 페이지를 읽을 `cursor`. 더 읽을 이벤트가 없으면 비어 있다", nullable = true)
     val nextCursor: String?,
 )
 

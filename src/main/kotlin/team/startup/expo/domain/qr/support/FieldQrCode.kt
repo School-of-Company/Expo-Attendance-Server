@@ -3,7 +3,7 @@ package team.startup.expo.domain.qr.support
 import team.startup.expo.domain.qr.entity.QrCategory
 
 /**
- * 장학사가 미리 만들어 리플렛에 붙여 둔 종이 QR의 코드(#243). 성인은 `ADT-0001`~`ADT-0500`, 어린이는 `KID-0001`~`KID-0500`이고,
+ * 장학사가 미리 만들어 리플렛에 붙여 둔 종이 QR의 코드. 성인은 `ADT-0001`~`ADT-0500`, 어린이는 `KID-0001`~`KID-0500`이고,
  * 확인 문자가 없으며 QR에 코드 글자가 그대로 들어 있다. 서버가 발급한 `ADT-0001-K7` 형식([team.startup.expo.domain.qr.entity.QrTokenCode])과
  * 따로 쓴다.
  *

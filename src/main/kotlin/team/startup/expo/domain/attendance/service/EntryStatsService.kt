@@ -7,7 +7,7 @@ import team.startup.expo.domain.attendance.presentation.dto.response.HourlyEntry
 import team.startup.expo.domain.attendance.presentation.dto.response.RecentEntryRecordsResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ScannerEntryCountsResDto
 
-/** 실시간 입·퇴장 현황 화면용 조회(#131). 모두 읽기 전용이다. */
+/** 실시간 입·퇴장 현황 화면용 조회. 모두 읽기 전용이다. */
 interface EntryStatsService {
     /** 날짜·시간별 입·퇴장 건수. */
     fun hourly(

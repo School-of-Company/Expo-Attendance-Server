@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 import java.time.Duration
 
 /**
- * 실시간 입·퇴장 현황 변경 SSE(#141, `docs/admin-data-change-events.md`). 기본은 꺼져 있다.
+ * 실시간 입·퇴장 현황 변경 SSE(`docs/admin-data-change-events.md`). 기본은 꺼져 있다.
  *
  * @property enabled 켜면 구독 경로와 DB LISTEN 연결이 생긴다. Gateway의 `text/event-stream` 전달을 확인한 뒤 켠다.
  * @property maxConnections 인스턴스당 최대 연결 수.

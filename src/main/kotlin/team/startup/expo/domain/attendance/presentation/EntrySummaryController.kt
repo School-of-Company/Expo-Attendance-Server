@@ -24,7 +24,7 @@ import team.startup.expo.domain.attendance.support.AdminStatsCache
 import team.startup.expo.global.security.ExpoAccessGuard
 import team.startup.expo.global.swagger.ApiError
 
-/** 입구 화면의 "오늘 입장 처리 건수"(#119). 박람회별 운영 권한을 확인한다. */
+/** 입구 화면의 "오늘 입장 처리 건수". 박람회별 운영 권한을 확인한다. */
 @RestController
 @RequestMapping("/attendance/summary")
 class EntrySummaryController(

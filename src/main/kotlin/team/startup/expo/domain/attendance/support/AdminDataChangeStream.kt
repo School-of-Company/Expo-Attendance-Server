@@ -17,10 +17,10 @@ import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
 /**
- * 박람회별 실시간 입·퇴장 현황 변경 신호(#141). 연결 관리는 공통 [SseConnectionRegistry]가 맡는다.
+ * 박람회별 실시간 입·퇴장 현황 변경 신호. 연결 관리는 공통 [SseConnectionRegistry]가 맡는다.
  *
  * 입구에서는 1초에 여러 번 스캔이 커밋되므로, 같은 박람회는 `coalesceInterval` 안에 한 번만 보낸다.
- * 조용하던 뒤의 첫 변경은 바로 보내고(leading), 그 간격 안의 변경은 하나로 합쳐 간격이 끝날 때 한 번 보낸다(trailing, #269).
+ * 조용하던 뒤의 첫 변경은 바로 보내고(leading), 그 간격 안의 변경은 하나로 합쳐 간격이 끝날 때 한 번 보낸다(trailing).
  * 신호를 버리지는 않는다.
  */
 @Component

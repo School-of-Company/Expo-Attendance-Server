@@ -30,7 +30,7 @@ data class EntryRecordsReqDto(
     val size: Int = DEFAULT_SIZE,
     @field:Schema(
         description =
-            "앞 응답의 `nextCursor`. 보내면 그 뒤부터 `size`건을 돌려준다(#250). `from`·`to`는 앞 요청과 같게 보낸다. " +
+            "앞 응답의 `nextCursor`. 보내면 그 뒤부터 `size`건을 돌려준다. `from`·`to`는 앞 요청과 같게 보낸다. " +
                 "이때 `totalElements`는 비어 있고 `walkIn`은 빈 배열이다(첫 요청에서 받는다). 형식이 틀리면 400",
         nullable = true,
     )

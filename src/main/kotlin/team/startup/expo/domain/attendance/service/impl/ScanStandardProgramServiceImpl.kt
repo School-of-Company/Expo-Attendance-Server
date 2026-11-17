@@ -108,7 +108,7 @@ class ScanStandardProgramServiceImpl(
         personId: Long,
     ) = programScanNameResolver.standard(expoId, personId)
 
-    // 입실만 일정 시간대 안에서 받는다. 이미 입실한 사람의 퇴실은 시각을 보지 않는다(#198)
+    // 입실만 일정 시간대 안에서 받는다. 이미 입실한 사람의 퇴실은 시각을 보지 않는다
     override fun allowsEntry(program: StandardProgramResDto) =
         ProgramEntryWindow.allowsEntry(program.startedAt, program.endedAt, clock.instant(), properties.leadMinutes)
 }

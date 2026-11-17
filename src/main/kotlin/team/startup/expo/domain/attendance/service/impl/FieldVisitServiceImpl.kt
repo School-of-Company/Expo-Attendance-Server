@@ -240,7 +240,7 @@ class FieldVisitServiceImpl(
         if (visit.expoId != expoId || visit.participantId != participantId || visit.visitDate != date) throw conflict()
     }
 
-    /** 박람회 락 → 박람회 삭제 확인 → 참가자 배타 락 → 등록 ID 배타 락 순서다(#167). 락 대기 지표는 기록하지 않는다. */
+    /** 박람회 락 → 박람회 삭제 확인 → 참가자 배타 락 → 등록 ID 배타 락 순서다. 락 대기 지표는 기록하지 않는다. */
     private fun <T> locked(
         expoId: String,
         participantId: Long,
