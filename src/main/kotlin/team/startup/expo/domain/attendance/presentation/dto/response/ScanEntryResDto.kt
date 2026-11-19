@@ -20,9 +20,9 @@ data class ScanEntryResDto(
     val personalInformationStatus: Boolean?,
     @field:Schema(description = "참가 유형(유저 서비스의 `participationType`)", example = "STANDARD")
     val participationType: String,
-    /** 명찰 출력 대상(연수자 전원, 교사인 일반 참가자)이 아니면 `null`이다. */
+    /** 명찰 출력 대상(연수자 전원, 교사·예비교사인 일반 참가자)이 아니면 `null`이다. */
     @field:Schema(
-        description = "명찰 정보. 명찰 출력 대상(연수자 전원, 교사인 일반 참가자)이 아니거나 재입장이면 `null`이다",
+        description = "명찰 정보. 명찰 출력 대상(연수자 전원, 교사·예비교사인 일반 참가자)이 아니거나 재입장이면 `null`이다",
         nullable = true,
     )
     val badge: BadgeResDto?,
@@ -30,7 +30,7 @@ data class ScanEntryResDto(
     val entryStatus: EntryStatus,
     @field:Schema(description = "오늘 최초 입장 시각(`HH:mm`). 재입장이어도 처음 입장한 시각이다", example = "10:05", nullable = true)
     val firstEnteredTime: String?,
-    /** 유저 서비스가 준 값을 그대로 옮긴다. 재입장, 재생처럼 유저 서비스가 결과를 주지 않으면 `null`이다(#275). */
+    /** 유저 서비스가 준 값을 그대로 옮긴다. 재입장, 재생처럼 유저 서비스가 결과를 주지 않으면 `null`이다. */
     @field:Schema(
         description =
             "명찰 자동 출력 요청 결과. `QUEUED`는 출력 작업 저장, `DUPLICATE`는 오늘 작업이 이미 있음, " +
@@ -40,7 +40,7 @@ data class ScanEntryResDto(
         nullable = true,
     )
     val badgePrint: String? = null,
-    /** 유저 서비스가 준 값을 그대로 옮긴다. `badgePrint`와 같은 범위(첫 입장)에서만 값이 있다(#279). */
+    /** 유저 서비스가 준 값을 그대로 옮긴다. `badgePrint`와 같은 범위(첫 입장)에서만 값이 있다. */
     @field:Schema(
         description =
             "명찰 출력 작업 ID. 유저 서비스 `GET /admin/badge-prints/{expoId}/jobs/{jobId}`로 배정된 출력대를 조회한다. " +

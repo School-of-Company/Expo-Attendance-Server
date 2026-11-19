@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
 
-/** 퇴장 스캔 요청(#120). 입장한 QR과 같은 값을 보낸다. 아래 셋 중 하나만 보낸다. */
+/** 퇴장 스캔 요청. 입장한 QR과 같은 값을 보낸다. 아래 셋 중 하나만 보낸다. */
 @Schema(
     description =
         "퇴장 스캔 요청. 일반 참가자는 `participantId`와 `code`, 연수자는 `traineeId`, 현장 종이 QR은 `token` 중 하나만 보낸다.",

@@ -12,7 +12,7 @@ import jakarta.persistence.UniqueConstraint
 import java.time.LocalDate
 import java.time.LocalDateTime
 
-/** 하루 한 번의 입장과 그 퇴장(#120). 입장 기록의 사본이며 퇴장과 집계를 위해 둔다. */
+/** 하루 한 번의 입장과 그 퇴장. 입장 기록의 사본이며 퇴장과 집계를 위해 둔다. */
 @Entity
 @Table(
     name = "tb_entry_log",
@@ -43,7 +43,7 @@ class EntryLog(
     /** 종이 QR 토큰의 구분. 다른 입장에는 없다. */
     @field:Column(name = "category", length = 30)
     val category: String? = null,
-    /** 입장을 처리한 스캐너(기기) 이름(#131). 보내지 않았으면 비어 있다. */
+    /** 입장을 처리한 스캐너(기기) 이름. 보내지 않았으면 비어 있다. */
     @field:Column(name = "scanner", length = 40)
     val scanner: String? = null,
     /** 퇴장을 처리한 스캐너(기기) 이름. */

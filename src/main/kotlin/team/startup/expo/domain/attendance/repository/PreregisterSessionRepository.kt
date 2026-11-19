@@ -8,11 +8,17 @@ import team.startup.expo.domain.attendance.entity.PreregisterSession
 import java.time.LocalDateTime
 
 /**
- * 참가자의 회차 기록은 (참가자, 회차)당 한 행이다(#160). revision은 행(회차)마다 비교한다.
+ * 참가자의 회차 기록은 (참가자, 회차)당 한 행이다. revision은 행(회차)마다 비교한다.
  * 회차를 지정하지 않은 취소(기존 방식)는 참가자의 모든 회차를 취소하고, 회차 없는 취소 행에 그 revision을 남겨
  * 그보다 오래된 회차 PUT이 늦게 도착해도 새 회차를 만들지 못하게 한다.
  */
 interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long> {
+    /** 한 참가자의 회차 기록 변경을 한 줄로 세우는 배타 트랜잭션 락이다. 트랜잭션이 끝나면 풀린다. */
+    @Query(nativeQuery = true, value = "SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))) AS locked")
+    fun lockParticipant(
+        @Param("key") key: String,
+    ): Int
+
     fun findAllByExpoIdAndParticipantId(
         expoId: String,
         participantId: Long,
@@ -119,7 +125,7 @@ interface PreregisterSessionRepository : JpaRepository<PreregisterSession, Long>
     ): Int
 
     /**
-     * 현장등록으로 다시 등록했다(#249, #186): revision이 더 큰 취소 기록과 확정 회차를 모두 현장 재등록으로 바꾼다.
+     * 현장등록으로 다시 등록했다: revision이 더 큰 취소 기록과 확정 회차를 모두 현장 재등록으로 바꾼다.
      * 확정 회차도 바꾸는 것은 다른 날 회차로 확정된 사람이 현장등록하면 그 회차 시간 없이 입장해야 하기 때문이다(그날 회차 확정자는 신청 서비스가 현장등록을 거절한다).
      * 행과 revision을 남겨 그보다 오래된 회차 PUT·DELETE와 늦게 온 취소 보호 확정이 다시 막지 못하게 한다.
      */

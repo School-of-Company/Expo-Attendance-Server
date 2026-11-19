@@ -59,7 +59,7 @@ class ExpoPeriodValidator(
     }
 
     private fun fetchPeriod(expoId: String): Pair<LocalDate, LocalDate> {
-        // 프로젝션이 꺼져 있거나 없으면 박람회 서비스를 부른다(#240)
+        // 프로젝션이 꺼져 있거나 없으면 박람회 서비스를 부른다
         val period =
             expoProjection.period(expoId)
                 ?: expoCircuitBreaker.callService("박람회", ExpectedException(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.")) {

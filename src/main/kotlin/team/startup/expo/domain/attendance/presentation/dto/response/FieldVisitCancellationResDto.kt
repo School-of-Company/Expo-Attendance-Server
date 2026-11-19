@@ -6,6 +6,7 @@ import java.util.UUID
 
 enum class FieldVisitGuardState { NONE, HELD, COMMITTED, ABORTED }
 
+@Schema(description = "방문일별 취소 가능 상태")
 data class FieldVisitCancellationResDto(
     @field:Schema(description = "등록 ID")
     val registrationId: UUID,

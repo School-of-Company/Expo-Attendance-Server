@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Configuration
 import team.startup.expo.domain.qr.repository.QrEntryRepository
 
 /**
- * `attendance.qr.entry.pending`: 박람회 서비스 장애 때 기간 확인 없이 기록해 아직 다시 확인하지 못한 종이 QR 입장 수(#101).
+ * `attendance.qr.entry.pending`: 박람회 서비스 장애 때 기간 확인 없이 기록해 아직 다시 확인하지 못한 종이 QR 입장 수.
  * 오래 줄지 않으면 박람회 서비스가 계속 응답하지 못하거나 재확인 작업이 멈춘 것이다. 수집할 때마다 부분 인덱스로 센다.
  * 조회가 실패하면 NaN을 돌려줘 지표가 0으로 보이지 않게 한다.
  */
@@ -25,7 +25,7 @@ class PendingQrEntryMetrics {
     private fun pendingCount(repository: QrEntryRepository): Double =
         try {
             repository.countPending().toDouble()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             Double.NaN
         }
 }

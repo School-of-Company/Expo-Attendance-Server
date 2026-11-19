@@ -11,5 +11,4 @@ data class ResolveParticipantReqDto(
 
 data class ResolveParticipantResDto(
     val participantId: Long,
-    val participationType: String,
 )

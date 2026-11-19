@@ -1,4 +1,4 @@
-package team.startup.expo.global.config
+package team.startup.expo.global.metrics
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import io.micrometer.core.instrument.Gauge
@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
 /**
- * 다른 서비스 호출의 회로 차단기 상태를 메트릭으로 내보낸다(#101). 회로 차단기를 `CircuitBreaker.of`로 직접 만들어 Spring Boot의
+ * 다른 서비스 호출의 회로 차단기 상태를 메트릭으로 내보낸다. 회로 차단기를 `CircuitBreaker.of`로 직접 만들어 Spring Boot의
  * Resilience4j 자동 바인딩이 적용되지 않으므로 여기서 게이지를 등록한다. 대상 서비스는 `name` 태그로 구분한다.
  *
  * - `attendance.circuit.breaker.state`: 0 닫힘, 1 열림, 2 반열림(그 밖의 상태는 3)
@@ -21,9 +21,10 @@ class CircuitBreakerMetricsConfiguration {
         @Qualifier("userCircuitBreaker") user: CircuitBreaker,
         @Qualifier("expoCircuitBreaker") expo: CircuitBreaker,
         @Qualifier("applicationCircuitBreaker") application: CircuitBreaker,
+        @Qualifier("expoAccessCircuitBreaker") expoAccess: CircuitBreaker,
     ): MeterBinder =
         MeterBinder { registry ->
-            listOf(user, expo, application).forEach { breaker ->
+            listOf(user, expo, application, expoAccess).forEach { breaker ->
                 Gauge
                     .builder("attendance.circuit.breaker.state", breaker) { stateValue(it.state) }
                     .tag("name", breaker.name)

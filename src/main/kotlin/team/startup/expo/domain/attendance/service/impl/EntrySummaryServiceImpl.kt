@@ -1,7 +1,7 @@
 package team.startup.expo.domain.attendance.service.impl
 
-import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import team.startup.expo.domain.attendance.entity.EntrySubjectType
 import team.startup.expo.domain.attendance.presentation.dto.request.EntrySummaryReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.EntrySummaryResDto
@@ -13,7 +13,7 @@ import team.startup.expo.domain.attendance.repository.WalkInLogRepository
 import team.startup.expo.domain.attendance.service.EntrySummaryService
 import team.startup.expo.domain.attendance.service.WalkInService
 import team.startup.expo.domain.attendance.support.EntryScope
-import team.startup.expo.global.exception.ExpectedException
+import team.startup.expo.domain.attendance.support.NativeRows
 import java.time.Clock
 import java.time.LocalDateTime
 
@@ -24,6 +24,7 @@ class EntrySummaryServiceImpl(
     private val walkInLogRepository: WalkInLogRepository,
     private val clock: Clock,
 ) : EntrySummaryService {
+    @Transactional(readOnly = true)
     override fun get(
         expoId: String,
         reqDto: EntrySummaryReqDto,
@@ -33,13 +34,13 @@ class EntrySummaryServiceImpl(
         val walkIn =
             if (scope.date != null) walkInService.get(expoId, scope.date) else walkInService.getBetween(expoId, scope.from, scope.to)
         val rows =
-            entryLogRepository.summarize(expoId, scope.from, scope.to).map {
+            entryLogRepository.summarize(expoId, scope.from, scope.to, generatedAt.toLocalDate()).map {
                 Row(
                     EntrySubjectType.valueOf(it[0] as String),
                     it[1] as String?,
-                    (it[2] as Number).toLong(),
-                    (it[3] as Number).toLong(),
-                    (it[4] as Number).toLong(),
+                    NativeRows.long(it[2]),
+                    NativeRows.long(it[3]),
+                    NativeRows.long(it[4]),
                 )
             }
 
@@ -55,7 +56,6 @@ class EntrySummaryServiceImpl(
 
         val qrEntered = standard + trainee + paper.sumOf { it.entered }
         val exited = rows.sumOf { it.exited }
-        val outside = rows.sumOf { it.outside }
         return EntrySummaryResDto(
             expoId = expoId,
             date = scope.date,
@@ -63,7 +63,7 @@ class EntrySummaryServiceImpl(
             registered = RegisteredEntrySummaryResDto(standard, trainee),
             paper = paper,
             walkIn = walkIn,
-            totals = EntryTotalsResDto(entered = qrEntered + walkIn.total, exited = exited, stillInside = qrEntered - outside),
+            totals = EntryTotalsResDto(entered = qrEntered + walkIn.total, exited = exited, stillInside = rows.sumOf { it.inside }),
             recentEntered10m = recentEntered(expoId, generatedAt),
             uniqueQr = entryLogRepository.countDistinctSubjects(expoId, scope.from, scope.to),
             reentered = entryLogRepository.countReentered(expoId, scope.from, scope.to),
@@ -83,7 +83,7 @@ class EntrySummaryServiceImpl(
         val type: EntrySubjectType,
         val category: String?,
         val entered: Long,
-        val outside: Long,
+        val inside: Long,
         val exited: Long,
     )
 

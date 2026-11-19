@@ -1,6 +1,6 @@
-# 날짜별 FIELD 권위 (#204)
+# 날짜별 FIELD 권위
 
-Application #311은 등록 ID(UUID), 참가자, KST 방문일, generation을 소유한다.
+Application은 등록 ID(UUID), 참가자, KST 방문일, generation을 소유한다.
 Attendance의 `PUT /internal/expos/{expoId}/participants/{participantId}/field-visits/{registrationId}`는
 `{visitDate,generation,status,operationId}`를 projection하고 204를 반환한다.
 같은 세대 CANCELLED는 최종 상태이며 이전 세대 요청은 변경 없이 204다.
@@ -58,10 +58,10 @@ PENDING이 있는 취소 조회/acquire는 503이다. 이후 성공/409 또는 �
 ## 배포와 검증
 
 1. Application V41 원장을 배포하고 field-visits 플래그는 비활성으로 둔다.
-2. User #202 및 Attendance V24/계약을 배포하고 알려진 방문일 projection을 전달한다.
+2. User 및 Attendance V24/계약을 배포하고 알려진 방문일 projection을 전달한다.
    날짜 미상 legacy FIELD는 차단하며 추정 backfill하지 않는다.
 3. 등록→입장, 취소→재등록, 응답 유실, 옛 세대 지연, KST 자정, PRE 보존을 실통합 검증한다.
-4. Application field-visits 활성화 후 #310 V42 취소 소비를 활성화한다.
+4. Application field-visits 활성화 후 V42 취소 소비를 활성화한다.
 
 새 필수 환경변수는 없다. Docker가 없으면 `FieldVisitPersistenceTests`의 PostgreSQL SQL,
 독립 트랜잭션 및 실제 advisory lock 경합은 미검증이다. fakeprovider/MockK는 실통합을 대신하지 않는다.

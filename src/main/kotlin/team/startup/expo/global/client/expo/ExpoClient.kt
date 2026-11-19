@@ -5,6 +5,8 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestHeader
+import org.springframework.web.bind.annotation.RequestParam
 
 @FeignClient(
     name = "expo-expo-server",
@@ -12,10 +14,23 @@ import org.springframework.web.bind.annotation.RequestBody
     configuration = [ExpoClientConfiguration::class],
 )
 interface ExpoClient {
+    @GetMapping("/internal/expo/{expoId}/admin-access")
+    fun requireAdminAccess(
+        @PathVariable("expoId") expoId: String,
+        @RequestHeader("Authorization") authorization: String,
+        @RequestParam("permission", required = false) permission: String?,
+    )
+
     @GetMapping("/internal/expo/{expoId}")
     fun getPeriod(
         @PathVariable("expoId") expoId: String,
     ): ExpoPeriodResDto
+
+    /** 같은 `GET /internal/expo/{expoId}` 응답의 기능 설정. 신규 쓰기 허용 여부를 정할 때만 부른다([ExpoFeaturePolicy]). */
+    @GetMapping("/internal/expo/{expoId}")
+    fun getFeatures(
+        @PathVariable("expoId") expoId: String,
+    ): ExpoFeaturesResDto?
 
     /** 이 박람회의 일반 프로그램을 조회한다. 박람회나 프로그램이 없으면 404다. */
     @GetMapping("/internal/expo/{expoId}/standard-programs/{programId}")

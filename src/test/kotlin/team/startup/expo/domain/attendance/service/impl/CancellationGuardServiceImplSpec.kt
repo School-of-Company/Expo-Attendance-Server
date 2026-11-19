@@ -133,7 +133,7 @@ class CancellationGuardServiceImplSpec : BehaviorSpec() {
                 then("박람회 락을 참가자 락보다 먼저 잡는다(assign과 같은 순서라 교착이 나지 않는다)") {
                     verifyOrder {
                         guardRepository.setLockTimeout(CancellationGuardGate.LOCK_TIMEOUT)
-                        deletedExpoRepository.lockExpo(expoId)
+                        deletedExpoRepository.lockExpoShared(expoId)
                         guardRepository.lockExclusive(CancellationGuardGate.participantKey(expoId, participantId))
                     }
                 }
@@ -200,7 +200,7 @@ class CancellationGuardServiceImplSpec : BehaviorSpec() {
                     shouldFailWith(HttpStatus.NOT_FOUND, "박람회를 찾지 못 했습니다.") {
                         service.acquire(expoId, participantId, operationId, acquireReq)
                     }
-                    verify { deletedExpoRepository.lockExpo(expoId) }
+                    verify { deletedExpoRepository.lockExpoShared(expoId) }
                     verify(exactly = 0) { guardRepository.insertHeldIfAbsent(any(), any(), any(), any()) }
                     verify(exactly = 0) { userClient.getCancellationStatus(any()) }
                 }

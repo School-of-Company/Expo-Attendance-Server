@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component
 import java.util.concurrent.TimeUnit
 
 /**
- * 서비스 지표 기록(#101). 다른 서비스 호출([team.startup.expo.global.client.callService])과 취소 보호 락 대기처럼 스프링 빈이 아닌
+ * 서비스 지표 기록. 다른 서비스 호출([team.startup.expo.global.client.callService])과 취소 보호 락 대기처럼 스프링 빈이 아닌
  * 확장 함수나 생성자가 고정된 클래스에서도 기록할 수 있게 레지스트리를 한 곳에 둔다. 레지스트리가 아직 없으면(단위 테스트 등) 아무것도 하지 않는다.
  *
  * 태그에는 대상 서비스와 결과 같은 값만 쓰고, 요청·응답 내용, 참가자·박람회 ID, 전화번호는 넣지 않는다(라벨 값이 늘어나지 않게).
@@ -60,6 +60,12 @@ class AttendanceMetrics(
                 .publishPercentileHistogram()
                 .register(target)
                 .record(nanos, TimeUnit.NANOSECONDS)
+        }
+
+        /** 동시 스캔 허용 수가 차서 커넥션을 잡기 전에 거절한 횟수. */
+        fun recordScanRejected() {
+            val target = registry ?: return
+            target.counter("attendance.scan.concurrency.rejected").increment()
         }
     }
 }

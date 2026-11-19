@@ -25,7 +25,7 @@ class GetParticipantQrServiceImpl(
         reqDto: GetParticipantQrReqDto,
     ): ParticipantQrResDto {
         val notFound = ExpectedException(HttpStatus.NOT_FOUND, "QR을 찾지 못 했습니다.")
-        // 확정 상태인 사전등록 회차가 하나라도 있으면 방문일 전에도 QR을 내준다(#218). 방문일과 회차 입장 시간은 스캔이 따로 확인한다.
+        // 확정 상태인 사전등록 회차가 하나라도 있으면 방문일 전에도 QR을 내준다. 방문일과 회차 입장 시간은 스캔이 따로 확인한다.
         // 현장 재등록(FIELD)은 오늘 유효한 것만 인정한다. 대기·미확정 여부는 호출하는 신청 서비스가 먼저 판정한다
         if (preregisterSessionValidator.isCancelled(expoId, participantId)) throw notFound
 

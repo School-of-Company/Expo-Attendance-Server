@@ -44,12 +44,15 @@ class InternalPreregisterSessionController(
     @Operation(
         summary = "취소 뒤 현장 재등록",
         description =
-            "사전등록을 취소한 참가자가 현장등록으로 다시 등록했을 때 보냅니다. revision보다 오래된 취소 회차와 확정된 취소 보호를 풀어 " +
-                "현장등록자처럼 회차 시간 확인 없이 입장할 수 있게 합니다. 확정 회차는 그대로 두고, 같은 요청을 다시 보내도 결과는 같습니다.",
+            "사전등록을 취소했거나 다른 날 회차만 있는 참가자가 현장등록으로 다시 등록했을 때 보냅니다. revision보다 오래된 취소·확정 회차를 " +
+                "모두 FIELD_REGISTERED로 바꾸고 확정된 취소 보호를 풉니다. 입장은 회차 시간 확인 없이 오늘 ACTIVE 현장 방문으로 판정하며, " +
+                "없으면 취소된 신청으로 거절합니다. " +
+                "revision이 더 새로운 기록은 그대로 두고, 같은 요청을 다시 보내도 결과는 같습니다.",
     )
     @ApiError(400, "요청 값이 올바르지 않다.")
     @ApiError(404, "삭제된 박람회다.")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    // FIELD_REGISTRATION은 검사하지 않는다: Application outbox가 이미 받은 현장등록을 옮기는 경로라, 신규 등록은 Application 진입에서 막는다
     @PutMapping("/field-registration")
     fun fieldRegister(
         @PathVariable expoId: String,

@@ -25,11 +25,11 @@ class EntryLogServiceImpl(
         enteredAt: LocalDateTime?,
     ) {
         val now = enteredAt ?: LocalDateTime.now(clock)
+        val scanner = ScannerName.of(scannerName)
         // 유저 서비스는 이미 입장을 기록했다. 일시적인 DB 오류로 로그가 빠지면 퇴장 스캔이 "입장 기록 없음"이 되므로 몇 번 다시 시도한다.
         var failure: Exception? = null
         repeat(ATTEMPTS) {
             try {
-                val scanner = ScannerName.of(scannerName)
                 val inserted =
                     entryLogWriter.insertIfAbsent(
                         expoId,
@@ -40,7 +40,7 @@ class EntryLogServiceImpl(
                         category,
                         scanner,
                     )
-                // 퇴장한 뒤 다른 회차로 입장하면 유저 서비스는 새 입장으로 받으므로, 오늘 로그를 다시 열어 재입장으로 남긴다(#174)
+                // 퇴장한 뒤 다른 회차로 입장하면 유저 서비스는 새 입장으로 받으므로, 오늘 로그를 다시 열어 재입장으로 남긴다
                 if (inserted == 0) entryLogWriter.reenter(expoId, subjectType.name, subjectId, now.toLocalDate(), now, scanner)
                 return
             } catch (e: Exception) {

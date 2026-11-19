@@ -9,7 +9,7 @@ import jakarta.persistence.Table
 import java.time.LocalDate
 import java.time.LocalDateTime
 
-/** 간편입장 증감 한 번(+1, 취소는 -1)(#118). 합계는 이 행들의 합이다. */
+/** 간편입장 증감 한 번(+1, 취소는 -1). 합계는 이 행들의 합이다. */
 @Entity
 @Table(name = "tb_walk_in_log")
 class WalkInLog(
@@ -28,7 +28,7 @@ class WalkInLog(
     val requestId: String? = null,
     @field:Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime,
-    /** 요청을 보낸 스캐너(기기) 이름(#131). 보내지 않았으면 비어 있다. */
+    /** 요청을 보낸 스캐너(기기) 이름. 보내지 않았으면 비어 있다. */
     @field:Column(name = "scanner", length = 40)
     val scanner: String? = null,
 )

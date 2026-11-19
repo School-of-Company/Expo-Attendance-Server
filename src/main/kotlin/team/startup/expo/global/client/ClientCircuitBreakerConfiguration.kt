@@ -23,6 +23,14 @@ class ClientCircuitBreakerConfiguration {
     @Bean
     fun expoCircuitBreaker(): CircuitBreaker = circuitBreaker("expo")
 
+    /** 권한 판정은 매 요청이라 호출 수가 많다. 판정 장애가 기간·프로그램 조회 회로를 열지 않게 나눈다. */
+    @Bean
+    fun expoAccessCircuitBreaker(): CircuitBreaker = circuitBreaker("expo-access")
+
+    /** 기능 설정 조회도 스캔마다 부른다. 이 조회의 실패가 기간·프로그램 조회 회로(퇴실 스캔 포함)를 열지 않게 나눈다. */
+    @Bean
+    fun expoFeatureCircuitBreaker(): CircuitBreaker = circuitBreaker("expo-feature")
+
     @Bean
     fun applicationCircuitBreaker(): CircuitBreaker = circuitBreaker("application")
 
