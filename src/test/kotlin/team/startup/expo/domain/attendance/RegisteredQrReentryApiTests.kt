@@ -37,6 +37,7 @@ import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.stubAllFeaturesOn
 import team.startup.expo.support.withExpoAdmin
 import java.net.SocketTimeoutException
 import java.time.Clock
@@ -71,6 +72,7 @@ class RegisteredQrReentryApiTests : IntegrationTestSupport() {
             "TRUNCATE TABLE tb_entry_log, tb_entry_event, tb_cancellation_guard, tb_preregister_session, tb_deleted_expo RESTART IDENTITY CASCADE",
         )
         reset(userClient, expoClient)
+        expoClient.stubAllFeaturesOn()
         doReturn(
             team.startup.expo.global.client.user
                 .ParticipantEntryStatusResDto(PARTICIPANT, today, true),

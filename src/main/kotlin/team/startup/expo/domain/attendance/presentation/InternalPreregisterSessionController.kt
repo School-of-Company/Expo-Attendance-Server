@@ -52,6 +52,7 @@ class InternalPreregisterSessionController(
     @ApiError(400, "요청 값이 올바르지 않다.")
     @ApiError(404, "삭제된 박람회다.")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    // FIELD_REGISTRATION은 검사하지 않는다: Application outbox가 이미 받은 현장등록을 옮기는 경로라, 신규 등록은 Application 진입에서 막는다
     @PutMapping("/field-registration")
     fun fieldRegister(
         @PathVariable expoId: String,

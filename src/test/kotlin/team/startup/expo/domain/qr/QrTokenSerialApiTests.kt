@@ -21,6 +21,7 @@ import team.startup.expo.domain.qr.entity.QrTokenCode
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.stubAllFeaturesOn
 import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.LocalDate
@@ -45,6 +46,7 @@ class QrTokenSerialApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
+        expoClient.stubAllFeaturesOn()
         expoCircuitBreaker.reset()
         val today = LocalDate.now(clock)
         doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString()))

@@ -6,6 +6,8 @@ import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResult
 import team.startup.expo.global.client.callService
+import team.startup.expo.global.client.expo.ExpoFeature
+import team.startup.expo.global.client.expo.ExpoFeaturePolicy
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDate
@@ -24,6 +26,7 @@ abstract class AbstractProgramScanService<P>(
     private val expoPeriodValidator: ExpoPeriodValidator,
     private val recordProgramAttendanceService: RecordProgramAttendanceService,
     private val cancellationGuardGate: CancellationGuardGate,
+    private val expoFeaturePolicy: ExpoFeaturePolicy,
     protected val clock: Clock,
 ) {
     /** 대상 확인 응답에서 이미 읽은 이름. [value]가 `null`이어도 "읽었지만 없음"이라 다시 읽지 않는다. */
@@ -32,6 +35,9 @@ abstract class AbstractProgramScanService<P>(
     )
 
     protected abstract val programType: ProgramType
+
+    /** 신규 입실을 허용하는 박람회 기능. */
+    protected abstract val attendanceFeature: ExpoFeature
 
     /** 프로그램이 없거나 삭제됐을 때의 404 문구. */
     protected abstract val programNotFoundMessage: String
@@ -86,7 +92,9 @@ abstract class AbstractProgramScanService<P>(
                 ?: expoCircuitBreaker.callService("박람회", notFound) { findProgram(expoId, programId) }
         expoPeriodValidator.checkInProgress(expoId)
 
-        val entryAllowed = allowsEntry(program)
+        // 기능이 꺼졌거나 설정을 읽지 못하면 신규 입실만 막고, 이미 입실한 사람의 퇴실은 그대로 받는다. 취소 보호 락 밖에서 조회한다
+        val entryBlocked = entryBlockedByFeature(expoId)
+        val entryAllowed = entryBlocked == null && allowsEntry(program)
         // 분 단위로 기록한다(v1과 같음)
         val now = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES)
         val attendanceDate = LocalDate.now(clock)
@@ -106,11 +114,25 @@ abstract class AbstractProgramScanService<P>(
             }
         val scanResult =
             when (result) {
-                ProgramAttendanceResult.ENTERED -> ProgramScanResult.ENTERED
-                ProgramAttendanceResult.LEFT -> ProgramScanResult.LEFT
-                ProgramAttendanceResult.ALREADY_ENTERED -> ProgramScanResult.UNCHANGED
-                ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, programNotFoundMessage)
-                ProgramAttendanceResult.ENTRY_NOT_ALLOWED -> throw ExpectedException(HttpStatus.BAD_REQUEST, "출석 가능한 시간이 아닙니다.")
+                ProgramAttendanceResult.ENTERED -> {
+                    ProgramScanResult.ENTERED
+                }
+
+                ProgramAttendanceResult.LEFT -> {
+                    ProgramScanResult.LEFT
+                }
+
+                ProgramAttendanceResult.ALREADY_ENTERED -> {
+                    ProgramScanResult.UNCHANGED
+                }
+
+                ProgramAttendanceResult.PROGRAM_DELETED -> {
+                    throw ExpectedException(HttpStatus.NOT_FOUND, programNotFoundMessage)
+                }
+
+                ProgramAttendanceResult.ENTRY_NOT_ALLOWED -> {
+                    throw entryBlocked ?: ExpectedException(HttpStatus.BAD_REQUEST, "출석 가능한 시간이 아닙니다.")
+                }
             }
         return ProgramScanResDto(
             result = scanResult,
@@ -118,4 +140,13 @@ abstract class AbstractProgramScanService<P>(
             time = if (scanResult == ProgramScanResult.UNCHANGED) null else now.format(TimeFormat.HOUR_MINUTE),
         )
     }
+
+    /** 신규 입실을 막아야 하면 그 오류(기능 OFF 409, 설정 조회 장애 503), 아니면 `null`. 없는 박람회(404)는 그대로 던진다. */
+    private fun entryBlockedByFeature(expoId: String): ExpectedException? =
+        try {
+            if (expoFeaturePolicy.isEnabled(expoId, attendanceFeature)) null else ExpoFeaturePolicy.disabled(attendanceFeature)
+        } catch (e: ExpectedException) {
+            if (e.status != HttpStatus.SERVICE_UNAVAILABLE) throw e
+            e
+        }
 }

@@ -27,6 +27,10 @@ class ClientCircuitBreakerConfiguration {
     @Bean
     fun expoAccessCircuitBreaker(): CircuitBreaker = circuitBreaker("expo-access")
 
+    /** 기능 설정 조회도 스캔마다 부른다. 이 조회의 실패가 기간·프로그램 조회 회로(퇴실 스캔 포함)를 열지 않게 나눈다. */
+    @Bean
+    fun expoFeatureCircuitBreaker(): CircuitBreaker = circuitBreaker("expo-feature")
+
     @Bean
     fun applicationCircuitBreaker(): CircuitBreaker = circuitBreaker("application")
 

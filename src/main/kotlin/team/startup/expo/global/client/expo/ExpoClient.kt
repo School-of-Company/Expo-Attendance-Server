@@ -26,6 +26,12 @@ interface ExpoClient {
         @PathVariable("expoId") expoId: String,
     ): ExpoPeriodResDto
 
+    /** 같은 `GET /internal/expo/{expoId}` 응답의 기능 설정. 신규 쓰기 허용 여부를 정할 때만 부른다([ExpoFeaturePolicy]). */
+    @GetMapping("/internal/expo/{expoId}")
+    fun getFeatures(
+        @PathVariable("expoId") expoId: String,
+    ): ExpoFeaturesResDto?
+
     /** 이 박람회의 일반 프로그램을 조회한다. 박람회나 프로그램이 없으면 404다. */
     @GetMapping("/internal/expo/{expoId}/standard-programs/{programId}")
     fun getStandardProgram(

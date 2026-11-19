@@ -44,9 +44,11 @@ import team.startup.expo.domain.qr.service.IssueQrTokensService
 import team.startup.expo.domain.qr.service.RevokeQrTokenService
 import team.startup.expo.domain.qr.service.ScanQrTokenService
 import team.startup.expo.global.client.expo.ExpoClient
+import team.startup.expo.global.client.expo.ExpoFeaturePolicy
 import team.startup.expo.global.config.AdminStatsCacheProperties
 import team.startup.expo.global.exception.GlobalExceptionHandler
 import team.startup.expo.global.swagger.SwaggerProperties
+import team.startup.expo.support.stubAllFeaturesOn
 
 @WebMvcTest(
     controllers = [
@@ -85,6 +87,11 @@ class ExpoAccessApiTests {
 
         @Bean
         fun statsCache(): AdminStatsCache = AdminStatsCache(AdminStatsCacheProperties(ttlMillis = 60_000))
+
+        // 회로 차단기를 빈으로 두지 않아 권한 판정 회로(expoAccessCircuitBreaker)만 주입 대상으로 남긴다
+        @Bean
+        fun expoFeaturePolicy(expoClient: ExpoClient): ExpoFeaturePolicy =
+            ExpoFeaturePolicy(expoClient, CircuitBreaker.ofDefaults("expo-test"))
     }
 
     @Autowired private lateinit var mvc: MockMvc
@@ -125,6 +132,7 @@ class ExpoAccessApiTests {
 
     @BeforeEach
     fun resetCircuit() {
+        expoClient.stubAllFeaturesOn()
         expoCircuitBreaker.reset()
         cache.invalidateAll()
     }

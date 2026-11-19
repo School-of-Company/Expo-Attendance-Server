@@ -22,6 +22,7 @@ import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.stubAllFeaturesOn
 import team.startup.expo.support.withExpoAdmin
 import java.sql.Timestamp
 import java.time.Clock
@@ -53,6 +54,7 @@ class InternalEntryRecordsApiTests : IntegrationTestSupport() {
             "TRUNCATE TABLE tb_entry_log, tb_entry_event, tb_qr_entry, tb_qr_token, tb_walk_in_log, tb_deleted_expo RESTART IDENTITY CASCADE",
         )
         reset(userClient, expoClient)
+        expoClient.stubAllFeaturesOn()
         doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString())).`when`(expoClient).getPeriod(anyString())
     }
 

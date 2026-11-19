@@ -28,6 +28,7 @@ import team.startup.expo.global.client.user.ResolveStandardParticipantResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.stubAllFeaturesOn
 import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.LocalDate
@@ -56,6 +57,7 @@ class ScanEntryApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
+        expoClient.stubAllFeaturesOn()
         FieldVisitFixtures.clear(jdbcTemplate)
         listOf("expo-i5" to 5005L, "expo-dup" to 9999L, "expo-msg" to 9999L).forEach { (expo, id) ->
             doReturn(
