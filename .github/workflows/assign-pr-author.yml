@@ -6,6 +6,8 @@ on:
 
 jobs:
   assign-author:
+    # GitHub App(봇)은 담당자가 될 수 없어 403 으로 실패한다.
+    if: github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
