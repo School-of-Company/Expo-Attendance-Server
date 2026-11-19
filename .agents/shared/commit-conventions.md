@@ -33,7 +33,10 @@ history is consistent and different, follow it and skip the rest of this section
   - **Say the intent, not the implementation.** The diff already shows what was edited; the subject says
     what is different now. `빈 저장소에서 PR 생성이 500으로 끝나던 문제 해결` over `try/catch 추가`
 - Subject line only (no body) — except for a breaking change, which gets a `BREAKING CHANGE: <설명>` body
-- Never add AI as a co-author
+- Never add AI as a co-author, and never leave a tool's signature behind. Some tools append these on their own,
+  so check the message before committing and delete them:
+  - in a commit message: `Co-Authored-By: Claude … <noreply@anthropic.com>` (any `Co-Authored-By:` naming an AI)
+  - in a PR title or body: `🤖 Generated with [Claude Code](https://claude.com/claude-code)` (any "Generated with" footer)
 
 ## Choosing the Type
 
@@ -84,17 +87,3 @@ change spans several scopes, use `global`; for build/CI-only changes, `ci`.
 
 - Same vocabulary as the commit scope, lowercase in brackets: `[member]`, `[expo]`, `[global]`
 - Description: Korean, concise, no emojis, max 50 characters total
-
-## Version Bump Rule (releases to `main`)
-
-A `develop` → `main` PR's title is not `[scope] description` but a bare `vX.Y.Z`. Decide which of
-X/Y/Z to bump by looking at the commits going into `main` this time:
-
-- **X (Major)** — an architecture change, or a large change to a major feature.
-- **Y (Minor)** — a feature addition/change that changes the API spec. Backward compatibility is not
-  guaranteed.
-- **Z (Patch)** — a plain bug fix, refactor, or performance improvement with no API spec change.
-  Backward compatibility must be guaranteed (bumping only Z must still work correctly).
-
-Reset every field below the one you bump to 0 (e.g. bumping Minor resets Patch to 0). Bump
-`build.gradle.kts`'s `version` to match, committed in the same PR.
