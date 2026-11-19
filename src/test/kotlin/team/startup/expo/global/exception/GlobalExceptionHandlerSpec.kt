@@ -3,11 +3,15 @@ package team.startup.expo.global.exception
 import io.kotest.core.spec.IsolationMode
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.mockk
 import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.dao.QueryTimeoutException
 import org.springframework.http.HttpStatus
 import org.springframework.transaction.CannotCreateTransactionException
 import org.springframework.transaction.TransactionTimedOutException
+import team.startup.expo.global.client.expo.ExpoFeature
+import team.startup.expo.global.client.expo.ExpoFeaturePolicy
+import tools.jackson.databind.json.JsonMapper
 
 /** DB 없이 도는 단위 테스트: 커넥션 풀 고갈 같은 일시적인 DB 장애는 500이 아니라 503으로 알린다(#102). */
 class GlobalExceptionHandlerSpec :
@@ -34,6 +38,25 @@ class GlobalExceptionHandlerSpec :
                         response.body!!.message shouldBe "요청이 몰려 잠시 처리하지 못했습니다. 잠시 후 다시 시도해 주세요."
                     }
                 }
+            }
+        }
+
+        given("ExpectedException 응답 본문은") {
+            val mapper = JsonMapper.builder().build()
+
+            then("기능 OFF 409에는 기존 필드에 code=FEATURE_DISABLED를 더한다") {
+                val response = handler.handleExpectedException(ExpoFeaturePolicy.disabled(ExpoFeature.QR_ADMISSION), mockk(relaxed = true))
+                response.statusCode shouldBe HttpStatus.CONFLICT
+                mapper.writeValueAsString(response.body) shouldBe
+                    """{"status":409,"message":"이 박람회에서 사용하지 않는 기능입니다: QR_ADMISSION","code":"FEATURE_DISABLED"}"""
+            }
+            then("다른 오류는 code 없이 기존 모양 그대로다") {
+                val response =
+                    handler.handleExpectedException(
+                        ExpectedException(HttpStatus.CONFLICT, "신청 취소를 처리 중입니다."),
+                        mockk(relaxed = true),
+                    )
+                mapper.writeValueAsString(response.body) shouldBe """{"status":409,"message":"신청 취소를 처리 중입니다."}"""
             }
         }
 

@@ -50,6 +50,7 @@ import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.stubAllFeaturesOn
 import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.Instant
@@ -99,6 +100,7 @@ class CancellationGuardApiTests : IntegrationTestSupport() {
                 "tb_standard_program_attendance, tb_training_program_attendance RESTART IDENTITY CASCADE",
         )
         reset(userClient, expoClient, applicationClient)
+        expoClient.stubAllFeaturesOn()
         sessionValid()
         listOf(PARTICIPANT, OTHER_PARTICIPANT).forEach { id ->
             jdbcTemplate.update(

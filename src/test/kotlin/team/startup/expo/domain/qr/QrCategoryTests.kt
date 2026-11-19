@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.startup.expo.domain.qr.entity.QrCategory
 import team.startup.expo.domain.qr.repository.QrTokenRepository
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.stubAllFeaturesOn
 import team.startup.expo.support.withExpoAdmin
 
 /** 종이 QR 구분은 폼 서비스의 직업(`Occupation`) 9개 값에 현장용 어른·아이를 더한 값이다. */
@@ -43,6 +44,7 @@ class QrCategoryTests : IntegrationTestSupport() {
 
     @Test
     fun `현장용 어른과 아이 구분으로 종이 QR을 발급하고 저장한다`() {
+        expoClient.stubAllFeaturesOn()
         listOf("ADULT" to QrCategory.ADULT, "CHILD" to QrCategory.CHILD).forEachIndexed { index, (name, category) ->
             val response =
                 mockMvc
@@ -63,6 +65,7 @@ class QrCategoryTests : IntegrationTestSupport() {
 
     @Test
     fun `유치원생 구분으로 종이 QR을 발급하고 저장한다`() {
+        expoClient.stubAllFeaturesOn()
         val response =
             mockMvc
                 .perform(

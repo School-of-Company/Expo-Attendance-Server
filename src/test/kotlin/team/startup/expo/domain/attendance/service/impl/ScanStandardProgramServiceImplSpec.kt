@@ -24,6 +24,8 @@ import team.startup.expo.domain.attendance.support.RecordProgramAttendanceServic
 import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.application.ProgramApplicationResDto
 import team.startup.expo.global.client.expo.ExpoClient
+import team.startup.expo.global.client.expo.ExpoFeature
+import team.startup.expo.global.client.expo.ExpoFeaturePolicy
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.expo.StandardProgramResDto
 import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
@@ -33,7 +35,9 @@ import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.global.config.ExpoPeriodCacheProperties
 import team.startup.expo.global.config.ProgramAttendanceProperties
+import team.startup.expo.global.exception.ExpectedException
 import team.startup.expo.support.UnitTestSupport
+import team.startup.expo.support.shouldFailFeatureDisabled
 import team.startup.expo.support.shouldFailWith
 import java.time.Instant
 import java.time.LocalDate
@@ -58,6 +62,9 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
         }
     private val guardRepository = mockk<CancellationGuardRepository>(relaxed = true)
 
+    // 기본은 기능 ON
+    private val featurePolicy = mockk<ExpoFeaturePolicy>().also { every { it.isEnabled(any(), any()) } returns true }
+
     // 03:07:42 UTC. 기록 시각은 분 단위로 잘린다
     private val clock = UnitTestSupport.fixedClock(Instant.parse("2026-05-10T03:07:42Z"))
 
@@ -79,6 +86,7 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
                 clock,
                 UnitTestSupport.scanLimiter(),
             ),
+            featurePolicy,
             ProgramAttendanceProperties(requireCode),
             nameResolver,
             expoProjection,
@@ -103,6 +111,64 @@ class ScanStandardProgramServiceImplSpec : BehaviorSpec() {
     }
 
     init {
+        given("일반 프로그램 출석 기능(STANDARD_ATTENDANCE)이") {
+            `when`("ON이면") {
+                givenHappyPath()
+                val result = service().scan(programId, withCode)
+
+                then("입실을 기록하고 그 기능 키로 확인한다") {
+                    result.result shouldBe ProgramScanResult.ENTERED
+                    verify(exactly = 1) { featurePolicy.isEnabled(expoId, ExpoFeature.STANDARD_ATTENDANCE) }
+                    verify(exactly = 1) { recordService.record(ProgramType.STANDARD, programId, participantId, any(), any(), true) }
+                }
+            }
+
+            `when`("OFF이고 아직 입실하지 않았으면") {
+                givenHappyPath()
+                every { featurePolicy.isEnabled(expoId, ExpoFeature.STANDARD_ATTENDANCE) } returns false
+                every { recordService.record(any(), any(), any(), any(), any(), false) } returns ProgramAttendanceResult.ENTRY_NOT_ALLOWED
+
+                then("입실을 막고 409다") {
+                    shouldFailFeatureDisabled(ExpoFeature.STANDARD_ATTENDANCE) { service().scan(programId, withCode) }
+                }
+            }
+
+            `when`("OFF여도 이미 입실한 사람이면") {
+                givenHappyPath()
+                every { featurePolicy.isEnabled(expoId, ExpoFeature.STANDARD_ATTENDANCE) } returns false
+                every { recordService.record(any(), any(), any(), any(), any(), false) } returns ProgramAttendanceResult.LEFT
+                val result = service().scan(programId, withCode)
+
+                then("퇴실은 그대로 기록한다") {
+                    result.result shouldBe ProgramScanResult.LEFT
+                }
+            }
+
+            `when`("설정을 읽지 못하면(박람회 서비스 장애·구형 응답)") {
+                givenHappyPath()
+                every { featurePolicy.isEnabled(expoId, ExpoFeature.STANDARD_ATTENDANCE) } throws
+                    ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "박람회 서비스를 잠시 사용할 수 없습니다.")
+                every { recordService.record(any(), any(), any(), any(), any(), false) } returns ProgramAttendanceResult.ENTRY_NOT_ALLOWED
+
+                then("신규 입실은 허용으로 보지 않고 503이다") {
+                    shouldFailWith(HttpStatus.SERVICE_UNAVAILABLE, "박람회 서비스를 잠시 사용할 수 없습니다.") {
+                        service().scan(programId, withCode)
+                    }
+                }
+            }
+
+            `when`("설정을 읽지 못해도 이미 입실한 사람이면") {
+                givenHappyPath()
+                every { featurePolicy.isEnabled(expoId, ExpoFeature.STANDARD_ATTENDANCE) } throws
+                    ExpectedException(HttpStatus.SERVICE_UNAVAILABLE, "박람회 서비스를 잠시 사용할 수 없습니다.")
+                every { recordService.record(any(), any(), any(), any(), any(), false) } returns ProgramAttendanceResult.LEFT
+
+                then("퇴실은 기록한다") {
+                    service().scan(programId, withCode).result shouldBe ProgramScanResult.LEFT
+                }
+            }
+        }
+
         given("박람회 프로젝션(#240)에서") {
             `when`("프로그램과 기간이 프로젝션에 있으면") {
                 givenHappyPath()

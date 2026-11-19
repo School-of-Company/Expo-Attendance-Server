@@ -23,6 +23,7 @@ import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.stubAllFeaturesOn
 import team.startup.expo.support.withExpoAdmin
 import tools.jackson.databind.ObjectMapper
 import java.time.Clock
@@ -60,6 +61,7 @@ class AdminDataChangeApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
+        expoClient.stubAllFeaturesOn()
         jdbcTemplate.execute("TRUNCATE TABLE tb_walk_in_log, tb_entry_log, tb_entry_event RESTART IDENTITY CASCADE")
         doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString())).`when`(expoClient).getPeriod(anyString())
         eventually { listener.isListening() }

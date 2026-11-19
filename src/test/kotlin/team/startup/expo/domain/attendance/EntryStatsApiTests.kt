@@ -28,6 +28,7 @@ import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.stubAllFeaturesOn
 import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.LocalDate
@@ -59,6 +60,7 @@ class EntryStatsApiTests : IntegrationTestSupport() {
             "TRUNCATE TABLE tb_walk_in_log, tb_entry_log, tb_entry_event, tb_qr_entry, tb_qr_token, tb_deleted_expo RESTART IDENTITY CASCADE",
         )
         reset(userClient, expoClient)
+        expoClient.stubAllFeaturesOn()
         doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString())).`when`(expoClient).getPeriod(anyString())
         doReturn(listOf(StandardParticipantNameResDto(7001, "홍길동")))
             .`when`(userClient)

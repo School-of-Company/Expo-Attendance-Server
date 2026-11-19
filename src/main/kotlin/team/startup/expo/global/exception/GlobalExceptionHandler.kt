@@ -27,7 +27,7 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
         request: HttpServletRequest,
     ): ResponseEntity<ErrorResponse> {
         logRejection(request, exception.status, exception.message)
-        return errorResponse(exception.status, exception.message)
+        return errorResponse(exception.status, exception.message, exception.code)
     }
 
     /**
@@ -69,8 +69,9 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
     private fun errorResponse(
         status: HttpStatus,
         message: String,
+        code: String? = null,
     ): ResponseEntity<ErrorResponse> =
         ResponseEntity
             .status(status)
-            .body(ErrorResponse(status = status.value(), message = message))
+            .body(ErrorResponse(status = status.value(), message = message, code = code))
 }

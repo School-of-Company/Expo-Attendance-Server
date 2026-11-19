@@ -17,6 +17,8 @@ import team.startup.expo.domain.attendance.support.RecordProgramAttendanceServic
 import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.expo.ExpoClient
+import team.startup.expo.global.client.expo.ExpoFeature
+import team.startup.expo.global.client.expo.ExpoFeaturePolicy
 import team.startup.expo.global.client.expo.StandardProgramResDto
 import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
@@ -42,6 +44,7 @@ class ScanStandardProgramServiceImpl(
     expoPeriodValidator: ExpoPeriodValidator,
     recordProgramAttendanceService: RecordProgramAttendanceService,
     cancellationGuardGate: CancellationGuardGate,
+    expoFeaturePolicy: ExpoFeaturePolicy,
     private val properties: ProgramAttendanceProperties,
     private val programScanNameResolver: ProgramScanNameResolver,
     private val expoProjection: ExpoProjectionReader,
@@ -52,6 +55,7 @@ class ScanStandardProgramServiceImpl(
         expoPeriodValidator,
         recordProgramAttendanceService,
         cancellationGuardGate,
+        expoFeaturePolicy,
         clock,
     ),
     ScanStandardProgramService {
@@ -77,6 +81,7 @@ class ScanStandardProgramServiceImpl(
     }
 
     override val programType = ProgramType.STANDARD
+    override val attendanceFeature = ExpoFeature.STANDARD_ATTENDANCE
     override val programNotFoundMessage = "일반 프로그램을 찾지 못 했습니다."
     override val notAppliedMessage = "일반 프로그램을 참가 중인 유저를 찾지 못 했습니다."
 

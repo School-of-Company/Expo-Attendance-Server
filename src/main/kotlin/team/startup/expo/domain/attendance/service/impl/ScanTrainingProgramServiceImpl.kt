@@ -16,6 +16,8 @@ import team.startup.expo.domain.attendance.support.RecordProgramAttendanceServic
 import team.startup.expo.global.client.application.ApplicationClient
 import team.startup.expo.global.client.callService
 import team.startup.expo.global.client.expo.ExpoClient
+import team.startup.expo.global.client.expo.ExpoFeature
+import team.startup.expo.global.client.expo.ExpoFeaturePolicy
 import team.startup.expo.global.client.expo.TrainingProgramBatchReqDto
 import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.client.user.ResolveTraineeByParticipantReqDto
@@ -40,6 +42,7 @@ class ScanTrainingProgramServiceImpl(
     expoPeriodValidator: ExpoPeriodValidator,
     recordProgramAttendanceService: RecordProgramAttendanceService,
     cancellationGuardGate: CancellationGuardGate,
+    expoFeaturePolicy: ExpoFeaturePolicy,
     private val programScanNameResolver: ProgramScanNameResolver,
     private val expoProjection: ExpoProjectionReader,
     clock: Clock,
@@ -49,10 +52,12 @@ class ScanTrainingProgramServiceImpl(
         expoPeriodValidator,
         recordProgramAttendanceService,
         cancellationGuardGate,
+        expoFeaturePolicy,
         clock,
     ),
     ScanTrainingProgramService {
     override val programType = ProgramType.TRAINING
+    override val attendanceFeature = ExpoFeature.TRAINING_ATTENDANCE
     override val programNotFoundMessage = "연수 프로그램을 찾지 못했습니다."
     override val notAppliedMessage = "연수 프로그램을 참가 중인 유저를 찾지 못 했습니다."
 
@@ -61,7 +66,7 @@ class ScanTrainingProgramServiceImpl(
         reqDto: ScanTrainingProgramReqDto,
     ): ProgramScanResDto {
         val resolved = resolveTrainee(reqDto)
-        // 연수 프로그램은 시간대 검사를 하지 않아 입실이 거부되는 일은 없다
+        // 연수 프로그램은 시간대 검사를 하지 않는다. 신규 입실은 TRAINING_ATTENDANCE가 꺼졌거나 설정을 읽지 못할 때만 막힌다
         return scanProgram(
             reqDto.expoId,
             programId,

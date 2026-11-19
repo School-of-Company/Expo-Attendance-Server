@@ -42,6 +42,7 @@ import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.stubAllFeaturesOn
 import team.startup.expo.support.withExpoAdmin
 import tools.jackson.databind.json.JsonMapper
 import java.time.Clock
@@ -86,6 +87,7 @@ class ProgramAttendanceApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
+        expoClient.stubAllFeaturesOn()
         FieldVisitFixtures.clear(jdbcTemplate)
         periodReturns(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString()))
     }

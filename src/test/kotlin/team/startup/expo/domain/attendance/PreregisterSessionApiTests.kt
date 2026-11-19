@@ -48,6 +48,7 @@ import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.client.user.VerifyStandardParticipantReqDto
 import team.startup.expo.support.FieldVisitFixtures
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.stubAllFeaturesOn
 import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.Duration
@@ -83,6 +84,7 @@ class PreregisterSessionApiTests : IntegrationTestSupport() {
         FieldVisitFixtures.clear(jdbcTemplate)
         jdbcTemplate.execute("TRUNCATE TABLE tb_preregister_session, tb_cancellation_guard, tb_deleted_expo RESTART IDENTITY CASCADE")
         reset(userClient, expoClient)
+        expoClient.stubAllFeaturesOn()
         doReturn(ResolveStandardParticipantResDto(PARTICIPANT))
             .`when`(userClient)
             .resolveStandardParticipant(ResolveStandardParticipantReqDto(EXPO, "01012345678"))

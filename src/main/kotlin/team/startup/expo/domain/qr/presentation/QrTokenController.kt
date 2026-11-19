@@ -23,6 +23,8 @@ import team.startup.expo.domain.qr.service.GetQrTokenSummaryService
 import team.startup.expo.domain.qr.service.GetQrTokensService
 import team.startup.expo.domain.qr.service.IssueQrTokensService
 import team.startup.expo.domain.qr.service.RevokeQrTokenService
+import team.startup.expo.global.client.expo.ExpoFeature
+import team.startup.expo.global.client.expo.ExpoFeaturePolicy
 import team.startup.expo.global.security.ExpoAccessGuard
 import team.startup.expo.global.swagger.ApiError
 
@@ -34,6 +36,7 @@ class QrTokenController(
     private val getQrTokenSummaryService: GetQrTokenSummaryService,
     private val getQrTokensService: GetQrTokensService,
     private val revokeQrTokenService: RevokeQrTokenService,
+    private val expoFeaturePolicy: ExpoFeaturePolicy,
 ) {
     @Operation(
         summary = "종이 QR 토큰 발급",
@@ -43,7 +46,8 @@ class QrTokenController(
     @ApiError(401, "인증된 사용자 헤더가 없다.")
     @ApiError(403, "해당 박람회의 요청 권한이 없다.")
     @ApiError(404, "박람회를 찾지 못했다.")
-    @ApiError(503, "박람회 권한 판정 서비스를 사용할 수 없거나 DB 일시 장애로 처리하지 못했다.")
+    @ApiError(409, "이 박람회에서 종이 QR 발급(`PAPER_QR`, `QR_ADMISSION` 필요)을 사용하지 않는다.")
+    @ApiError(503, "박람회 권한 판정·기능 설정 조회를 사용할 수 없거나 DB 일시 장애로 처리하지 못했다.")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/{expoId}")
     fun issue(
@@ -51,6 +55,8 @@ class QrTokenController(
         @Valid @RequestBody reqDto: IssueQrTokensReqDto,
     ): IssueQrTokensResDto {
         expoAccessGuard.requireAccess(expoId)
+        // 발급 트랜잭션(박람회 락)을 잡기 전에 확인한다
+        expoFeaturePolicy.require(expoId, ExpoFeature.PAPER_QR)
         return issueQrTokensService.issue(expoId, reqDto)
     }
 

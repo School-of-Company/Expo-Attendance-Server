@@ -16,6 +16,7 @@ import org.springframework.transaction.TransactionStatus
 import team.startup.expo.domain.attendance.support.PreregisterSessionCache
 import team.startup.expo.domain.attendance.support.PreregisterSessionValidator
 import team.startup.expo.domain.attendance.support.ScanConcurrencyLimiter
+import team.startup.expo.global.client.expo.ExpoFeature
 import team.startup.expo.global.client.expo.projection.ExpoProjectionReader
 import team.startup.expo.global.config.ExpoProjectionProperties
 import team.startup.expo.global.config.PreregisterSessionCacheProperties
@@ -88,4 +89,15 @@ fun shouldFailWith(
     val e = shouldThrow<ExpectedException> { block() }
     e.status shouldBe status
     e.message shouldBe message
+}
+
+/** [block]이 [feature] OFF 409(`code` = `FEATURE_DISABLED`)를 던지는지 확인한다. */
+fun shouldFailFeatureDisabled(
+    feature: ExpoFeature,
+    block: () -> Unit,
+) {
+    val e = shouldThrow<ExpectedException> { block() }
+    e.status shouldBe HttpStatus.CONFLICT
+    e.message shouldBe "이 박람회에서 사용하지 않는 기능입니다: ${feature.name}"
+    e.code shouldBe "FEATURE_DISABLED"
 }

@@ -31,6 +31,7 @@ import team.startup.expo.domain.qr.support.QrEntryPeriodReviewService
 import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.stubAllFeaturesOn
 import team.startup.expo.support.withExpoAdmin
 import java.time.Clock
 import java.time.LocalDate
@@ -53,6 +54,7 @@ class QrTokenApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUpPeriod() {
+        expoClient.stubAllFeaturesOn()
         // 앞선 테스트의 장애 호출이 회로를 열어 두지 않게 한다
         expoCircuitBreaker.reset()
         // 앞선 테스트가 남긴 기간 확인 대기 입장이 재확인 건수에 섞이지 않게 한다
