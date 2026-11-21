@@ -17,6 +17,12 @@ interface DeletedProgramRepository : JpaRepository<DeletedProgram, String> {
         @Param("programKey") programKey: String,
     ): Int
 
+    /** 스캔용 공유 락. 스캔끼리는 막지 않고 [lockProgram](삭제)만 기다린다. 스캔 쓰기는 SQL 자체가 멱등이다. */
+    @Query(nativeQuery = true, value = "SELECT 1 FROM (SELECT pg_advisory_xact_lock_shared(hashtext(:programKey))) AS locked")
+    fun lockProgramShared(
+        @Param("programKey") programKey: String,
+    ): Int
+
     /** 이미 삭제 기록이 있으면 아무것도 하지 않는다. */
     @Modifying
     @Query(
