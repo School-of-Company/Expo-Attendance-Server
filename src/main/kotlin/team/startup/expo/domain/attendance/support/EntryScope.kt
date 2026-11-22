@@ -13,8 +13,9 @@ data class EntryScope(
     val date: LocalDate?,
 ) {
     companion object {
-        private val EARLIEST = LocalDate.of(2000, 1, 1)
-        private val LATEST = LocalDate.of(2999, 12, 31)
+        /** 박람회 전체를 뜻하는 기간의 양 끝. 입장 기록 내보내기(`EntryRecordsServiceImpl`)도 같은 값을 쓴다. */
+        val EARLIEST: LocalDate = LocalDate.of(2000, 1, 1)
+        val LATEST: LocalDate = LocalDate.of(2999, 12, 31)
 
         fun of(
             date: LocalDate?,

@@ -7,8 +7,8 @@ import team.startup.expo.domain.attendance.presentation.dto.response.TrainingPro
 import team.startup.expo.domain.attendance.repository.StandardProgramAttendanceRepository
 import team.startup.expo.domain.attendance.repository.TrainingProgramAttendanceRepository
 import team.startup.expo.domain.attendance.service.GetProgramAttendancesService
+import team.startup.expo.domain.attendance.support.TimeFormat
 import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 
 @Service
 class GetProgramAttendancesServiceImpl(
@@ -27,9 +27,5 @@ class GetProgramAttendancesServiceImpl(
             TrainingProgramAttendanceResDto(it.traineeId, it.attendanceDate, it.entryTime.text(), it.leaveTime?.text())
         }
 
-    private fun LocalTime.text(): String = format(TIME_FORMAT)
-
-    private companion object {
-        val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-    }
+    private fun LocalTime.text(): String = format(TimeFormat.HOUR_MINUTE)
 }

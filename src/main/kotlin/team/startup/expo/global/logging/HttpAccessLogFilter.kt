@@ -93,8 +93,6 @@ class HttpAccessLogFilter(
                 "/actuator",
                 "/attendance/swagger-ui",
                 "/attendance/v3/api-docs",
-                "/swagger-ui",
-                "/v3/api-docs",
             )
     }
 }

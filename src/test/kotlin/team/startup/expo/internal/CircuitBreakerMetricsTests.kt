@@ -4,7 +4,7 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import io.kotest.matchers.shouldBe
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.junit.jupiter.api.Test
-import team.startup.expo.global.config.CircuitBreakerMetricsConfiguration
+import team.startup.expo.global.metrics.CircuitBreakerMetricsConfiguration
 
 /** DB 없이 도는 단위 테스트: 서비스별 회로 차단기 상태가 `name` 태그로 게이지에 나오는지 확인한다. */
 class CircuitBreakerMetricsTests {
@@ -15,7 +15,13 @@ class CircuitBreakerMetricsTests {
         val application = CircuitBreaker.ofDefaults("application")
         val registry = SimpleMeterRegistry()
 
-        CircuitBreakerMetricsConfiguration().circuitBreakerMetrics(user, expo, application).bindTo(registry)
+        CircuitBreakerMetricsConfiguration()
+            .circuitBreakerMetrics(
+                user,
+                expo,
+                application,
+                CircuitBreaker.ofDefaults("expo-access"),
+            ).bindTo(registry)
 
         fun state(name: String) =
             registry

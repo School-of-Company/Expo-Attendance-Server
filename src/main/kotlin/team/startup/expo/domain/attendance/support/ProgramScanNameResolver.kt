@@ -4,7 +4,9 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Component
 import team.startup.expo.global.client.callService
+import team.startup.expo.global.client.user.StandardParticipantNameResDto
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
+import team.startup.expo.global.client.user.TraineeNameResDto
 import team.startup.expo.global.client.user.TraineeNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.global.exception.ExpectedException
@@ -15,6 +17,20 @@ class ProgramScanNameResolver(
     private val userClient: UserClient,
     @Qualifier("userCircuitBreaker") private val userCircuitBreaker: CircuitBreaker,
 ) {
+    companion object {
+        /** 이미 받은 이름 목록에서 [participantId]의 이름을 고른다. 없으면 `null`. */
+        fun pickStandard(
+            names: List<StandardParticipantNameResDto>,
+            participantId: Long,
+        ): String? = names.firstOrNull { it.participantId == participantId }?.name
+
+        /** 이미 받은 이름 목록에서 [traineeId]의 이름을 고른다. 없으면 `null`. */
+        fun pickTrainee(
+            names: List<TraineeNameResDto>,
+            traineeId: Long,
+        ): String? = names.firstOrNull { it.traineeId == traineeId }?.name
+    }
+
     fun standard(
         expoId: String,
         participantId: Long,
@@ -22,8 +38,7 @@ class ProgramScanNameResolver(
         lookup {
             userClient
                 .getStandardParticipantNames(StandardParticipantNamesReqDto(expoId, listOf(participantId)))
-                .firstOrNull { it.participantId == participantId }
-                ?.name
+                .let { pickStandard(it, participantId) }
         }
 
     fun trainee(
@@ -33,8 +48,7 @@ class ProgramScanNameResolver(
         lookup {
             userClient
                 .getTraineeNames(TraineeNamesReqDto(expoId, listOf(traineeId)))
-                .firstOrNull { it.traineeId == traineeId }
-                ?.name
+                .let { pickTrainee(it, traineeId) }
         }
 
     private fun lookup(block: () -> String?): String? =

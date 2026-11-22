@@ -295,7 +295,7 @@ class FieldVisitServiceImplSpec : BehaviorSpec() {
                 then("참가자 다음 linked trainee 배타락 뒤에 날짜별 출석을 확인한다") {
                     acquire()
                     verifyOrder {
-                        deleted.lockExpo(expo)
+                        deleted.lockExpoShared(expo)
                         locks.lockExclusive(CancellationGuardGate.participantKey(expo, participant))
                         locks.lockExclusive(CancellationGuardGate.traineeKey(expo, 9))
                         training.existsByTraineeIdAndAttendanceDate(9, date)

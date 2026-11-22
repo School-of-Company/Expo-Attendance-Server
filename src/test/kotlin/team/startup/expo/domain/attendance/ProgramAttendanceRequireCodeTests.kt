@@ -16,6 +16,7 @@ import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.user.StandardParticipantNamesReqDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 
 @TestPropertySource(properties = ["program-attendance.require-code=true"])
 class ProgramAttendanceRequireCodeTests : IntegrationTestSupport() {
@@ -36,6 +37,7 @@ class ProgramAttendanceRequireCodeTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 patch("/attendance/standard/1")
+                    .withExpoAdmin()
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"expoId": "expo-req", "participantId": 5}"""),
             ).andExpect(status().isBadRequest)

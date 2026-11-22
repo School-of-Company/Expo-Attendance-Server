@@ -15,7 +15,13 @@ interface QrTokenRepository : JpaRepository<QrToken, String> {
         expoId: String,
     ): Boolean
 
-    /** 이 박람회·구분에서 이미 매긴 가장 큰 연번(없으면 0). 발급은 박람회 락 안에서 하므로 겹치지 않는다. */
+    /** 박람회·구분의 연번 할당을 한 줄로 세우는 배타 트랜잭션 락이다. 트랜잭션이 끝나면 풀린다. */
+    @Query(nativeQuery = true, value = "SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))) AS locked")
+    fun lockSerial(
+        @Param("key") key: String,
+    ): Int
+
+    /** 이 박람회·구분에서 이미 매긴 가장 큰 연번(없으면 0). 발급은 연번 락([lockSerial]) 안에서 하므로 겹치지 않는다. */
     @Query("SELECT COALESCE(MAX(t.serial), 0) FROM QrToken t WHERE t.expoId = :expoId AND t.category = :category")
     fun findMaxSerial(
         @Param("expoId") expoId: String,
@@ -46,7 +52,7 @@ interface QrTokenRepository : JpaRepository<QrToken, String> {
         @Param("expoId") expoId: String,
     ): List<QrTokenCategoryCount>
 
-    /** 현장 종이 QR 코드(#243)를 첫 스캔 때 등록한다. 이미 있으면 아무것도 하지 않는다. 연번은 발급 방식과 겹치지 않게 비워 둔다. */
+    /** 현장 종이 QR 코드를 첫 스캔 때 등록한다. 이미 있으면 아무것도 하지 않는다. 연번은 발급 방식과 겹치지 않게 비워 둔다. */
     @Modifying
     @Query(
         nativeQuery = true,

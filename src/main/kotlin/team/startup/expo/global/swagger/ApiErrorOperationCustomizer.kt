@@ -40,7 +40,7 @@ class ApiErrorOperationCustomizer : OperationCustomizer {
         handlerMethod.beanType
             .getAnnotation(RequestMapping::class.java)
             ?.value
-            ?.any { it.startsWith("/internal") } == true
+            ?.any { it.startsWith(INTERNAL_PATH_PREFIX) } == true
 
     private fun errorResponse(descriptions: List<String>): ApiResponse =
         ApiResponse()
@@ -54,6 +54,9 @@ class ApiErrorOperationCustomizer : OperationCustomizer {
 
     companion object {
         const val ERROR_SCHEMA = "ErrorResponse"
+
+        /** 문서에서 내부(서비스 간) 엔드포인트로 다루는 경로 접두사. 보안 판정은 `InternalTokenAuthenticationFilter.INTERNAL_PATH_MATCHER`가 따로 한다. */
+        const val INTERNAL_PATH_PREFIX = "/internal/"
         private const val HTTP_UNAUTHORIZED = 401
         private const val HTTP_INTERNAL_SERVER_ERROR = 500
     }

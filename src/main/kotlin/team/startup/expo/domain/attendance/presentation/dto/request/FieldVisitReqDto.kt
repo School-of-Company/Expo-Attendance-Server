@@ -8,6 +8,7 @@ import java.util.UUID
 
 enum class FieldVisitStatus { ACTIVE, CANCELLED }
 
+@Schema(description = "날짜별 현장등록 projection 요청")
 data class ProjectFieldVisitReqDto(
     @field:Schema(description = "KST 방문일")
     val visitDate: LocalDate,
@@ -20,6 +21,7 @@ data class ProjectFieldVisitReqDto(
     val operationId: UUID,
 )
 
+@Schema(description = "방문일 취소 상태 조회·취소 보호 획득 요청")
 data class FieldVisitCancellationReqDto(
     @field:NotBlank
     @field:Schema(description = "소유 확인용 전화번호")
@@ -33,6 +35,7 @@ data class FieldVisitCancellationReqDto(
     override fun toString() = "FieldVisitCancellationReqDto(visitDate=$visitDate, generation=$generation)"
 }
 
+@Schema(description = "방문일 취소 보호 확정·중단 요청")
 data class FinishFieldVisitGuardReqDto(
     @field:Schema(description = "KST 취소 대상 방문일")
     val visitDate: LocalDate,

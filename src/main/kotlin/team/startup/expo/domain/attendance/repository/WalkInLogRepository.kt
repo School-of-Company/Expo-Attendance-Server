@@ -48,7 +48,7 @@ interface WalkInLogRepository : JpaRepository<WalkInLog, Long> {
         @Param("to") to: LocalDate,
     ): List<Array<Any>>
 
-    /** 날짜·구분별 [날짜, 구분, 순증감](#150). 기록이 없는 날짜·구분은 행이 없다. */
+    /** 날짜·구분별 [날짜, 구분, 순증감]. 기록이 없는 날짜·구분은 행이 없다. */
     @Query(
         nativeQuery = true,
         value = """

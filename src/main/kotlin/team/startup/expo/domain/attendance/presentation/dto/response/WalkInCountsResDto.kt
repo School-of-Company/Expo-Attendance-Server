@@ -6,6 +6,7 @@ import java.time.LocalDate
 
 @Schema(description = "간편입장 구분별 합계")
 data class WalkInCountsResDto(
+    @field:Schema(description = "박람회 ID")
     val expoId: String,
     @field:Schema(description = "집계한 날짜. 박람회 전체 기간을 집계하면 비어 있다", nullable = true)
     val date: LocalDate?,
@@ -20,7 +21,8 @@ data class WalkInCountsResDto(
 )
 
 data class WalkInCountResDto(
+    @field:Schema(description = "간편입장 구분")
     val category: WalkInCategory,
-    @field:Schema(description = "이 구분의 오늘까지 합계(취소 반영)", example = "48")
+    @field:Schema(description = "집계한 날짜(`date`)의 이 구분 합계(취소 반영). 전체 기간 집계면 전체 기간 합계", example = "48")
     val count: Long,
 )

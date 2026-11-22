@@ -28,6 +28,7 @@ class InternalFieldVisitController(
     @ApiError(404, "삭제된 박람회다.")
     @ApiError(409, "등록 ID 또는 작업 내용이 일치하지 않는다.")
     @ApiError(503, "잠금을 얻을 수 없다.")
+    // FIELD_REGISTRATION은 검사하지 않는다: Application이 이미 받은 현장등록(취소 포함)의 투영이라, 신규 등록은 Application 진입에서 막는다
     @PutMapping
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun project(

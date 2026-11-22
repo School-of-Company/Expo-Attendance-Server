@@ -23,6 +23,8 @@ import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.client.user.UserClient
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.stubAllFeaturesOn
+import team.startup.expo.support.withExpoAdmin
 import tools.jackson.databind.ObjectMapper
 import java.time.Clock
 import java.time.LocalDate
@@ -59,6 +61,7 @@ class AdminDataChangeApiTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
+        expoClient.stubAllFeaturesOn()
         jdbcTemplate.execute("TRUNCATE TABLE tb_walk_in_log, tb_entry_log, tb_entry_event RESTART IDENTITY CASCADE")
         doReturn(ExpoPeriodResDto(today.minusDays(1).toString(), today.plusDays(1).toString())).`when`(expoClient).getPeriod(anyString())
         eventually { listener.isListening() }
@@ -110,10 +113,14 @@ class AdminDataChangeApiTests : IntegrationTestSupport() {
     @Test
     fun `연속 스캔은 병합 간격 안에서 한 번으로 모이고 중복 입장과 롤백은 신호를 만들지 않는다`() {
         val result = subscribe()
-        repeat(5) { insertEntry(EXPO, "burst-$it") }
+        insertEntry(EXPO, "burst-0")
+        // 첫 변경은 바로 간다(#269)
         eventually { events(result).size == 1 }
+        // 간격 안의 나머지는 간격 끝에 하나로 모인다
+        repeat(4) { insertEntry(EXPO, "burst-${it + 1}") }
+        eventually { events(result).size == 2 }
         Thread.sleep(700)
-        events(result).size shouldBe 1
+        events(result).size shouldBe 2
 
         // 같은 날 두 번째 스캔은 행이 생기지 않는다
         insertEntry(EXPO, "burst-0")
@@ -122,7 +129,7 @@ class AdminDataChangeApiTests : IntegrationTestSupport() {
             it.setRollbackOnly()
         }
         Thread.sleep(1_500)
-        events(result).size shouldBe 1
+        events(result).size shouldBe 2
         close(result)
     }
 
@@ -177,7 +184,10 @@ class AdminDataChangeApiTests : IntegrationTestSupport() {
     }
 
     private fun admin(path: String): MvcResult =
-        mockMvc.perform(get(path).header("X-User-Id", "1").header("X-User-Role", "ROLE_ADMIN")).andReturn()
+        mockMvc
+            .perform(
+                get(path).withExpoAdmin(),
+            ).andReturn()
 
     private fun subscribe(expoId: String = EXPO): MvcResult = admin("/attendance/summary/$expoId/events")
 
@@ -189,8 +199,7 @@ class AdminDataChangeApiTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 post("/walk-in-counts/$EXPO")
-                    .header("X-User-Id", "1")
-                    .header("X-User-Role", "ROLE_ADMIN")
+                    .withExpoAdmin()
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(body),
             ).andReturn()

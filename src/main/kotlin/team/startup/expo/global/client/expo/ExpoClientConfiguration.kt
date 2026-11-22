@@ -2,6 +2,7 @@ package team.startup.expo.global.client.expo
 
 import feign.RequestInterceptor
 import org.springframework.context.annotation.Bean
+import team.startup.expo.global.client.internalTokenInterceptor
 import team.startup.expo.global.logging.RequestIdFeignInterceptor
 
 /**
@@ -11,13 +12,9 @@ import team.startup.expo.global.logging.RequestIdFeignInterceptor
 class ExpoClientConfiguration {
     @Bean
     fun expoInternalTokenInterceptor(properties: ExpoClientProperties): RequestInterceptor =
-        RequestInterceptor { template -> template.header(TOKEN_HEADER, properties.internalToken) }
+        internalTokenInterceptor(properties.internalToken)
 
     /** 요청 상관 ID를 헤더로 넘긴다. 비밀 값이 없지만 같은 원칙으로 이 클라이언트에만 적용한다. */
     @Bean
     fun requestIdInterceptor(): RequestInterceptor = RequestIdFeignInterceptor()
-
-    private companion object {
-        const val TOKEN_HEADER = "X-Internal-Token"
-    }
 }

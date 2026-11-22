@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component
 import javax.sql.DataSource
 
 /**
- * V18 트리거가 커밋 시점에 보내는 `attendance_admin_changes` NOTIFY를 인스턴스마다 하나의 연결로 받아 구독자에게 전달한다(#141).
+ * V18 트리거가 커밋 시점에 보내는 `attendance_admin_changes` NOTIFY를 인스턴스마다 하나의 연결로 받아 구독자에게 전달한다.
  * 연결이 끊기면 다시 LISTEN 하고, 그 사이 신호를 잃었을 수 있으므로 모든 구독자에게 재조회 신호를 보낸다.
  *
  * 종료할 때는 웹 서버의 graceful shutdown보다 먼저 멈추며(기본 phase가 더 높다) 열린 SSE 연결을 모두 닫는다. 닫지 않으면 진행 중인
@@ -19,6 +19,7 @@ import javax.sql.DataSource
 class AdminDataChangeListener(
     private val dataSource: DataSource,
     private val stream: AdminDataChangeStream,
+    private val statsCache: AdminStatsCache,
 ) : SmartLifecycle {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -54,16 +55,23 @@ class AdminDataChangeListener(
                     connection.createStatement().use { it.execute("LISTEN $CHANNEL") }
                     val notifications = connection.unwrap(PGConnection::class.java)
                     listening = true
-                    if (interrupted) stream.resyncAll()
+                    if (interrupted) {
+                        statsCache.invalidateAll()
+                        stream.resyncAll()
+                    }
                     backoff = INITIAL_BACKOFF_MS
                     while (running) {
                         notifications
                             .getNotifications(POLL_MS)
                             .orEmpty()
                             .map { it.parameter }
-                            .filter { EXPO_ID_PATTERN.matches(it) }
+                            .filter { ExpoIdFormat.isValid(it) }
                             .distinct()
-                            .forEach(stream::changed)
+                            .forEach {
+                                // 재조회가 변경 전 결과를 받지 않게 공유 결과를 먼저 버리고 신호를 보낸다
+                                statsCache.invalidate(it)
+                                stream.changed(it)
+                            }
                     }
                 }
             } catch (exception: Exception) {
@@ -87,6 +95,5 @@ class AdminDataChangeListener(
         const val POLL_MS = 1_000
         const val INITIAL_BACKOFF_MS = 1_000L
         const val MAX_BACKOFF_MS = 30_000L
-        val EXPO_ID_PATTERN = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     }
 }

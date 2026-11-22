@@ -5,16 +5,13 @@ import org.springframework.http.HttpStatus
 import team.startup.expo.domain.attendance.entity.ProgramType
 import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResDto
 import team.startup.expo.domain.attendance.presentation.dto.response.ProgramScanResult
-import team.startup.expo.domain.attendance.support.CancellationGuardGate
-import team.startup.expo.domain.attendance.support.ExpoPeriodValidator
-import team.startup.expo.domain.attendance.support.ProgramAttendanceResult
-import team.startup.expo.domain.attendance.support.RecordProgramAttendanceService
 import team.startup.expo.global.client.callService
+import team.startup.expo.global.client.expo.ExpoFeature
+import team.startup.expo.global.client.expo.ExpoFeaturePolicy
 import team.startup.expo.global.exception.ExpectedException
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 /**
@@ -29,9 +26,18 @@ abstract class AbstractProgramScanService<P>(
     private val expoPeriodValidator: ExpoPeriodValidator,
     private val recordProgramAttendanceService: RecordProgramAttendanceService,
     private val cancellationGuardGate: CancellationGuardGate,
+    private val expoFeaturePolicy: ExpoFeaturePolicy,
     protected val clock: Clock,
 ) {
+    /** 대상 확인 응답에서 이미 읽은 이름. [value]가 `null`이어도 "읽었지만 없음"이라 다시 읽지 않는다. */
+    protected class KnownName(
+        val value: String?,
+    )
+
     protected abstract val programType: ProgramType
+
+    /** 신규 입실을 허용하는 박람회 기능. */
+    protected abstract val attendanceFeature: ExpoFeature
 
     /** 프로그램이 없거나 삭제됐을 때의 404 문구. */
     protected abstract val programNotFoundMessage: String
@@ -39,7 +45,7 @@ abstract class AbstractProgramScanService<P>(
     /** 신청하지 않은 사람의 404 문구. */
     protected abstract val notAppliedMessage: String
 
-    /** 박람회 프로젝션에서 프로그램을 찾는다(#240). 꺼져 있거나 없으면 `null`이고, 그러면 [findProgram]으로 박람회 서비스를 부른다. */
+    /** 박람회 프로젝션에서 프로그램을 찾는다. 꺼져 있거나 없으면 `null`이고, 그러면 [findProgram]으로 박람회 서비스를 부른다. */
     protected abstract fun findProjectedProgram(
         expoId: String,
         programId: Long,
@@ -70,6 +76,7 @@ abstract class AbstractProgramScanService<P>(
      * @param personId 출석을 기록할 대상(일반은 참가자 ID, 연수는 연수자 ID)
      * @param participantId 취소 보호 락을 잡을 참가자 ID
      * @param traineeId 취소 보호 락을 잡을 연수자 ID
+     * @param knownName 대상 확인 중 이미 이름을 읽었으면 그 값. 있으면 응답용 이름을 유저 서비스에서 다시 읽지 않는다.
      */
     protected fun scanProgram(
         expoId: String,
@@ -77,6 +84,7 @@ abstract class AbstractProgramScanService<P>(
         personId: Long,
         participantId: Long? = null,
         traineeId: Long? = null,
+        knownName: KnownName? = null,
     ): ProgramScanResDto {
         val notFound = ExpectedException(HttpStatus.NOT_FOUND, programNotFoundMessage)
         val program =
@@ -84,12 +92,14 @@ abstract class AbstractProgramScanService<P>(
                 ?: expoCircuitBreaker.callService("박람회", notFound) { findProgram(expoId, programId) }
         expoPeriodValidator.checkInProgress(expoId)
 
-        val entryAllowed = allowsEntry(program)
+        // 기능이 꺼졌거나 설정을 읽지 못하면 신규 입실만 막고, 이미 입실한 사람의 퇴실은 그대로 받는다. 취소 보호 락 밖에서 조회한다
+        val entryBlocked = entryBlockedByFeature(expoId)
+        val entryAllowed = entryBlocked == null && allowsEntry(program)
         // 분 단위로 기록한다(v1과 같음)
         val now = LocalTime.now(clock).truncatedTo(ChronoUnit.MINUTES)
         val attendanceDate = LocalDate.now(clock)
         // 신청 확인과 기록을 같은 취소 보호 락 안에서 한다. 이미 락 안에 있는 스캔은 신청 취소(acquire)가 기다리고, 취소가 끝난 뒤 들어온
-        // 스캔은 최신 신청 상태를 읽는다(#88).
+        // 스캔은 최신 신청 상태를 읽는다.
         val result =
             cancellationGuardGate.scanning(
                 expoId,
@@ -104,20 +114,39 @@ abstract class AbstractProgramScanService<P>(
             }
         val scanResult =
             when (result) {
-                ProgramAttendanceResult.ENTERED -> ProgramScanResult.ENTERED
-                ProgramAttendanceResult.LEFT -> ProgramScanResult.LEFT
-                ProgramAttendanceResult.ALREADY_ENTERED -> ProgramScanResult.UNCHANGED
-                ProgramAttendanceResult.PROGRAM_DELETED -> throw ExpectedException(HttpStatus.NOT_FOUND, programNotFoundMessage)
-                ProgramAttendanceResult.ENTRY_NOT_ALLOWED -> throw ExpectedException(HttpStatus.BAD_REQUEST, "출석 가능한 시간이 아닙니다.")
+                ProgramAttendanceResult.ENTERED -> {
+                    ProgramScanResult.ENTERED
+                }
+
+                ProgramAttendanceResult.LEFT -> {
+                    ProgramScanResult.LEFT
+                }
+
+                ProgramAttendanceResult.ALREADY_ENTERED -> {
+                    ProgramScanResult.UNCHANGED
+                }
+
+                ProgramAttendanceResult.PROGRAM_DELETED -> {
+                    throw ExpectedException(HttpStatus.NOT_FOUND, programNotFoundMessage)
+                }
+
+                ProgramAttendanceResult.ENTRY_NOT_ALLOWED -> {
+                    throw entryBlocked ?: ExpectedException(HttpStatus.BAD_REQUEST, "출석 가능한 시간이 아닙니다.")
+                }
             }
         return ProgramScanResDto(
             result = scanResult,
-            name = resolveName(expoId, personId),
-            time = if (scanResult == ProgramScanResult.UNCHANGED) null else now.format(TIME),
+            name = if (knownName != null) knownName.value else resolveName(expoId, personId),
+            time = if (scanResult == ProgramScanResult.UNCHANGED) null else now.format(TimeFormat.HOUR_MINUTE),
         )
     }
 
-    private companion object {
-        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-    }
+    /** 신규 입실을 막아야 하면 그 오류(기능 OFF 409, 설정 조회 장애 503), 아니면 `null`. 없는 박람회(404)는 그대로 던진다. */
+    private fun entryBlockedByFeature(expoId: String): ExpectedException? =
+        try {
+            if (expoFeaturePolicy.isEnabled(expoId, attendanceFeature)) null else ExpoFeaturePolicy.disabled(attendanceFeature)
+        } catch (e: ExpectedException) {
+            if (e.status != HttpStatus.SERVICE_UNAVAILABLE) throw e
+            e
+        }
 }

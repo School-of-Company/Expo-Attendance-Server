@@ -23,6 +23,7 @@ import team.startup.expo.global.client.expo.ExpoClient
 import team.startup.expo.global.client.expo.ExpoPeriodResDto
 import team.startup.expo.global.lock.AdvisoryJobLock
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.stubAllFeaturesOn
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -59,6 +60,7 @@ class QrEntryPeriodReviewLockTests : IntegrationTestSupport() {
 
     @BeforeEach
     fun setUp() {
+        expoClient.stubAllFeaturesOn()
         expoCircuitBreaker.reset()
         qrEntryRepository.deleteAll()
         qrTokenRepository.deleteAll()

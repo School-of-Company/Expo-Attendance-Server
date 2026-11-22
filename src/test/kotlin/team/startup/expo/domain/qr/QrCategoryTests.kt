@@ -10,9 +10,14 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.startup.expo.domain.qr.entity.QrCategory
 import team.startup.expo.domain.qr.repository.QrTokenRepository
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.stubAllFeaturesOn
+import team.startup.expo.support.withExpoAdmin
 
 /** 종이 QR 구분은 폼 서비스의 직업(`Occupation`) 9개 값에 현장용 어른·아이를 더한 값이다. */
 class QrCategoryTests : IntegrationTestSupport() {
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    lateinit var expoClient: team.startup.expo.global.client.expo.ExpoClient
+
     @Autowired
     lateinit var mockMvc: MockMvc
 
@@ -39,13 +44,13 @@ class QrCategoryTests : IntegrationTestSupport() {
 
     @Test
     fun `현장용 어른과 아이 구분으로 종이 QR을 발급하고 저장한다`() {
+        expoClient.stubAllFeaturesOn()
         listOf("ADULT" to QrCategory.ADULT, "CHILD" to QrCategory.CHILD).forEachIndexed { index, (name, category) ->
             val response =
                 mockMvc
                     .perform(
                         post("/qr-tokens/6666666$index-6666-4666-8666-666666666666")
-                            .header("X-User-Id", "1")
-                            .header("X-User-Role", "ROLE_ADMIN")
+                            .withExpoAdmin()
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""{"count": 3, "category": "$name"}"""),
                     ).andExpect(status().isCreated)
@@ -60,12 +65,12 @@ class QrCategoryTests : IntegrationTestSupport() {
 
     @Test
     fun `유치원생 구분으로 종이 QR을 발급하고 저장한다`() {
+        expoClient.stubAllFeaturesOn()
         val response =
             mockMvc
                 .perform(
                     post("/qr-tokens/55555555-5555-4555-8555-555555555555")
-                        .header("X-User-Id", "1")
-                        .header("X-User-Role", "ROLE_ADMIN")
+                        .withExpoAdmin()
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"count": 2, "category": "KINDERGARTEN_STUDENT"}"""),
                 ).andExpect(status().isCreated)

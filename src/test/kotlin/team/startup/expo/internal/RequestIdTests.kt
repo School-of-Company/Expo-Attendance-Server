@@ -9,6 +9,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.startup.expo.support.IntegrationTestSupport
+import team.startup.expo.support.withExpoAdmin
 
 class RequestIdTests : IntegrationTestSupport() {
     @Autowired
@@ -47,6 +48,7 @@ class RequestIdTests : IntegrationTestSupport() {
         mockMvc
             .perform(
                 patch("/attendance/standard/1")
+                    .withExpoAdmin()
                     .header("X-Request-Id", "scan-1")
                     .contentType("application/json")
                     .content("{}"),

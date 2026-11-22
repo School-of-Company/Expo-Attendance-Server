@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController
 import team.startup.expo.domain.attendance.presentation.dto.request.GetCancellationStatusReqDto
 import team.startup.expo.domain.attendance.presentation.dto.response.CancellationStatusResDto
 import team.startup.expo.domain.attendance.service.GetCancellationStatusService
+import team.startup.expo.global.swagger.ApiError
 
 /** 신청 서비스 전용이다. `X-Internal-Token`이 필요하며 gateway에 라우팅하지 않는다. 전화번호는 URL이 아니라 본문으로 받는다. */
 @RestController
@@ -24,6 +25,8 @@ class InternalCancellationStatusController(
                 "입장 여부(유저 서비스), 일반·연결된 연수자의 프로그램 출석 여부, 취소 보호 상태를 돌려줍니다. " +
                 "유저 서비스가 모르는 참가자·번호 조합은 구분 없이 404입니다. 최종 취소는 취소 보호 acquire로 다시 확인합니다.",
     )
+    @ApiError(404, "유저 서비스가 모르는 참가자·번호 조합이다.")
+    @ApiError(503, "유저 서비스를 사용할 수 없다.")
     @PostMapping
     fun get(
         @PathVariable expoId: String,
