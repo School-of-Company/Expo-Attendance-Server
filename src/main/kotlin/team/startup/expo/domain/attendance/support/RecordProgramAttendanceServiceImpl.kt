@@ -26,7 +26,7 @@ class RecordProgramAttendanceServiceImpl(
         entryAllowed: Boolean,
     ): ProgramAttendanceResult {
         val programKey = type.keyOf(programId)
-        deletedProgramRepository.lockProgram(programKey)
+        deletedProgramRepository.lockProgramShared(programKey)
         if (deletedProgramRepository.existsById(programKey)) return ProgramAttendanceResult.PROGRAM_DELETED
 
         val entered =
